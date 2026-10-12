@@ -118,4 +118,29 @@ export type ProfileView = {
 	stats: { [string]: number },
 }
 
+-- Groupe duo (Terminus), envoyé à ses membres.
+export type PartyMemberView = {
+	userId: number,
+	name: string,
+	platform: string?,
+}
+
+export type PartyView = {
+	leaderUserId: number,
+	members: { PartyMemberView },
+}
+
+-- État de la file d'attente, envoyé au joueur (et à son coéquipier).
+export type QueueView = {
+	status: "idle" | "queued" | "teleporting",
+	modeId: string?,
+	format: string?,
+	group: string?,
+	forcedCrossplay: boolean?,
+	players: number?,
+	needed: number?,
+	since: number?, -- os.time() de l'entrée dans la file
+	suggestCrossplay: boolean?,
+}
+
 return {}

@@ -243,6 +243,32 @@ local function kill(fighter: Fighter, killer: Fighter?)
 	end)
 end
 
+-- Mouvement d'un mercenaire IA (décidé par le serveur, sans horodatage client).
+function CombatService.setBotMovement(fighter: Fighter, sprinting: boolean)
+	if fighter.kind ~= "bot" or not Fighter.isAlive(fighter) then
+		return
+	end
+	local time = now()
+	Fighter.refresh(fighter, time)
+	local move = fighter.move
+	local wantsSprint = sprinting and Movement.canSprint(move)
+	if wantsSprint == move.sprinting then
+		return
+	end
+	if move.sprinting then
+		fighter.sprintEndedAt = time
+	end
+	move.sprinting = wantsSprint
+	applyMovement(fighter)
+end
+
+-- Filtre des dégâts (zones sans combat) : false = dégâts annulés.
+local damageFilter: ((attacker: Fighter?, target: Fighter) -> boolean)? = nil
+
+function CombatService.setDamageFilter(filter: ((attacker: Fighter?, target: Fighter) -> boolean)?)
+	damageFilter = filter
+end
+
 export type DamageOptions = {
 	shieldIgnore: number?,
 	sourcePosition: Vector3?,
@@ -264,6 +290,11 @@ function CombatService.applyDamage(
 	end
 	-- Pas de tir ami entre coéquipiers.
 	if attacker and attacker ~= target and Fighter.sameTeam(attacker, target) then
+		return 0, false
+	end
+	-- Zones sans combat (Terminus).
+	local filter = damageFilter
+	if filter and not filter(attacker, target) then
 		return 0, false
 	end
 	local opts: DamageOptions = options or {}
@@ -864,6 +895,11 @@ local function onSetMovement(player: Player, stance: Movement.Stance, sprinting:
 	end
 	move.sprinting = wantsSprint
 	applyMovement(fighter)
+end
+
+-- Fin de recharge due (mercenaires IA : pas de minuterie côté client).
+function CombatService.finishReload(fighter: Fighter)
+	finishReloadIfDue(fighter, now())
 end
 
 function CombatService.init()

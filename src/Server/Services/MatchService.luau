@@ -45,6 +45,7 @@ local GadgetService = require(script.Parent.GadgetService)
 local ExtractionService = require(script.Parent.ExtractionService)
 local LootService = require(script.Parent.LootService)
 local MapService = require(script.Parent.MapService)
+local MercenaryService = require(script.Parent.MercenaryService)
 local MovementGuardService = require(script.Parent.MovementGuardService)
 local ReviveService = require(script.Parent.ReviveService)
 local RobotService = require(script.Parent.RobotService)
@@ -71,6 +72,7 @@ export type StartConfig = {
 	format: "solo" | "duo",
 	players: { Player },
 	teams: { { Player } }?, -- duo : paires imposées (sinon formées dans l'ordre)
+	mercenaries: number?, -- places complétées par des mercenaires IA
 }
 
 local MatchService = {}
@@ -90,6 +92,9 @@ local purged = false
 local random = Random.new()
 local participants: { [Player]: Participant } = {}
 local teams: { [string]: { Player } } = {}
+
+-- Retour d'un joueur après la partie (par défaut : réapparition sur ce serveur).
+local returnHandler: ((player: Player) -> ())? = nil
 
 local state = Instance.new("Folder")
 state.Name = "MatchState"
@@ -468,6 +473,7 @@ local function tick()
 		alerted = true
 		ExtractionService.openAll()
 		RobotService.alertWave()
+		MercenaryService.alert()
 		announce("axiom.alert")
 		MatchService.AlertTriggered:Fire()
 	end
@@ -644,6 +650,20 @@ function MatchService.begin(config: StartConfig): boolean
 	end
 
 	startTime = now()
+	-- Mercenaires IA : sur les points de départ restants.
+	local mercenaries = config.mercenaries or 0
+	if ArenaService.isArena() then
+		-- Petite arène de test : effectif réduit (comme les robots).
+		mercenaries = math.min(mercenaries, Config.Dev.arenaMercenaries)
+	end
+	if mercenaries > 0 then
+		local free = {}
+		for index = 1, #spawns do
+			local marker = spawns[(teamIndex + index - 1) % #spawns + 1]
+			table.insert(free, marker.cframe)
+		end
+		MercenaryService.deploy(modeId, format, mercenaries, free, startTime)
+	end
 	state:SetAttribute("Running", true)
 	state:SetAttribute("StartTime", startTime)
 	state:SetAttribute("Mode", modeId)
@@ -668,6 +688,7 @@ function MatchService.finish()
 	ExtractionService.clear()
 	ReviveService.clearAll()
 	RobotService.clear()
+	MercenaryService.clear()
 	CombatService.setDeathHandler(nil)
 	CharacterService.setLoadoutProvider(nil)
 	MatchService.Ended:Fire()
@@ -683,9 +704,14 @@ function MatchService.finish()
 			player:SetAttribute("TeamId", nil)
 			if player.Parent == Players then
 				ServerNet.fire("MatchStatus", player, "none")
-				task.spawn(function()
-					player:LoadCharacter()
-				end)
+				local handler = returnHandler
+				if handler then
+					task.spawn(handler, player)
+				else
+					task.spawn(function()
+						player:LoadCharacter()
+					end)
+				end
 			end
 		end
 		table.clear(participants)
@@ -693,6 +719,11 @@ function MatchService.finish()
 		ArenaService.setSandbox(true)
 		ArenaService.spawnSandboxCrates()
 	end)
+end
+
+-- Retour des joueurs après la partie (serveur de partie : téléportation au Terminus).
+function MatchService.setReturnHandler(handler: ((player: Player) -> ())?)
+	returnHandler = handler
 end
 
 -- Avance le chrono (outil de test Studio : vérifier l'alerte et la Purge).

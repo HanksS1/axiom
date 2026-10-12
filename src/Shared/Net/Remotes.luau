@@ -77,6 +77,18 @@ local Remotes: { [string]: RemoteDef } = {
 	SetInsurance = { kind = "event", toServer = true },
 	OpenFreeCrate = { kind = "event", toServer = true },
 	FreeCrateResult = { kind = "event", toServer = false },
+
+	-- Matchmaking (P6) : plateforme, groupe duo, file d'attente, retour au hub
+	SetPlatform = { kind = "event", toServer = true },
+	PartyInvite = { kind = "event", toServer = true },
+	PartyRespond = { kind = "event", toServer = true },
+	PartyLeave = { kind = "event", toServer = true },
+	PartyInviteReceived = { kind = "event", toServer = false },
+	PartyState = { kind = "event", toServer = false },
+	QueueJoin = { kind = "event", toServer = true },
+	QueueLeave = { kind = "event", toServer = true },
+	QueueState = { kind = "event", toServer = false },
+	ReturnToHub = { kind = "event", toServer = true },
 }
 
 return table.freeze(Remotes)

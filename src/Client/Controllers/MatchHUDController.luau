@@ -351,12 +351,14 @@ local function showResult(result: { [string]: any })
 		Font = Theme.fontTitle,
 		TextSize = 18,
 		TextColor3 = Theme.cyan,
-		Text = t("result.continue"),
+		Text = t("result.returnHub"),
 		Parent = resultPanel,
 	}, { Stroke = Create("UIStroke", { Color = Theme.cyan, Transparency = 0.4 }) })
 	continue.Activated:Connect(function()
 		resultPanel.Visible = false
 		PanelState.set("result", false)
+		-- Retour au Terminus sans attendre la fin de la partie.
+		ClientNet.fire("ReturnToHub")
 	end)
 	resultPanel.Visible = true
 	PanelState.set("result", true)

@@ -403,6 +403,14 @@ function DataService.releaseForTeleport(player: Player): boolean
 	return releaseSession(player)
 end
 
+-- Recharge le profil d'un joueur resté sur ce serveur après une
+-- libération (téléportation échouée).
+function DataService.reload(player: Player)
+	if sessions[player] == nil and player.Parent == Players and not shuttingDown then
+		task.spawn(onPlayerAdded, player)
+	end
+end
+
 -- Enregistre une fonction appelée (de façon synchrone, sans céder la main)
 -- juste avant la libération d'un profil : dernier moment pour le finaliser.
 -- La fonction peut modifier directement le profil reçu.

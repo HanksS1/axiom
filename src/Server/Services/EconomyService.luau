@@ -4,7 +4,8 @@
 
 	Coffre et équipement, écran de tri, Marchand, Armurier, Assureur, caisse
 	gratuite. Chaque action :
-	- est refusée pendant une partie (le joueur doit être au Terminus) ;
+	- est refusée pendant une partie (le joueur doit être au Terminus) et
+	  en file d'attente (équipement verrouillé) ;
 	- est atomique (DataService.update : tout ou rien) ;
 	- exige une confirmation explicite au-delà de 1 000 crédits (Marchand) ;
 	- est inscrite au journal des transactions (enquêtes).
@@ -26,17 +27,27 @@ local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
 local DataService = require(script.Parent.DataService)
 local MatchService = require(script.Parent.MatchService)
+local QueueService = require(script.Parent.QueueService)
 
 local EconomyService = {}
 
 local random = Random.new()
 local SLOTS = { "ranged", "melee", "gadget1", "gadget2", "helmet", "vest", "backpack" }
+local INSURANCE_CHOICES = { "none" }
+for tierId in Config.Economy.insurance.tiers :: { [string]: any } do
+	table.insert(INSURANCE_CHOICES, tierId)
+end
 
 -- Le joueur est-il disponible pour une action de Terminus (pas en partie) ?
 local function available(player: Player): boolean
 	local participant = MatchService.participant(player)
 	if participant and not participant.finished then
 		ServerNet.notify(player, "economy.failure.in_match")
+		return false
+	end
+	-- En file d'attente : SE et équipement verrouillés (16.3).
+	if QueueService.isLocked(player) then
+		ServerNet.notify(player, "economy.failure.queued")
 		return false
 	end
 	return true
@@ -167,16 +178,12 @@ function EconomyService.init()
 	end)
 
 	-- Assureur : niveau choisi pour la prochaine partie (payé au départ).
-	ServerNet.onEvent(
-		"SetInsurance",
-		Guard.tuple(Guard.enum({ "none", "basic", "standard", "premium" })),
-		function(player, tier: string)
-			transact(player, "insurance.select", function(profile)
-				profile.insuranceTier = if tier == "none" then nil else tier
-				return true, nil, { tier = tier }
-			end)
-		end
-	)
+	ServerNet.onEvent("SetInsurance", Guard.tuple(Guard.enum(INSURANCE_CHOICES)), function(player, tier: string)
+		transact(player, "insurance.select", function(profile)
+			profile.insuranceTier = if tier == "none" then nil else tier
+			return true, nil, { tier = tier }
+		end)
+	end)
 
 	-- Caisse gratuite.
 	ServerNet.onEvent("OpenFreeCrate", Guard.tuple(), function(player)
@@ -210,7 +217,7 @@ function EconomyService.start()
 	end)
 	task.spawn(function()
 		while true do
-			task.wait(30)
+			task.wait(Config.Economy.freeCrate.checkInterval)
 			for _, player in Players:GetPlayers() do
 				accrue(player)
 			end

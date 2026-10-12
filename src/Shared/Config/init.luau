@@ -16,6 +16,7 @@ local Config = {
 	Modes = require(script.Modes),
 	Match = require(script.Match),
 	Robots = require(script.Robots),
+	Mercenaries = require(script.Mercenaries),
 	Loot = require(script.Loot),
 	Economy = require(script.Economy),
 	Monetization = require(script.Monetization),

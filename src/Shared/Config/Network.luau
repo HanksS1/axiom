@@ -44,5 +44,13 @@ return Freeze.deep({
 		Repair = { rate = 2, burst = 4 },
 		SetInsurance = { rate = 2, burst = 4 },
 		OpenFreeCrate = { rate = 1, burst = 2 },
+		-- Matchmaking
+		SetPlatform = { rate = 1, burst = 4 },
+		PartyInvite = { rate = 0.5, burst = 3 },
+		PartyRespond = { rate = 1, burst = 3 },
+		PartyLeave = { rate = 1, burst = 2 },
+		QueueJoin = { rate = 0.5, burst = 3 },
+		QueueLeave = { rate = 1, burst = 3 },
+		ReturnToHub = { rate = 0.5, burst = 2 },
 	} :: { [string]: Limit },
 })

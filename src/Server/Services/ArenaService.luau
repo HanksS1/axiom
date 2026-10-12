@@ -19,6 +19,7 @@ local Config = require(Shared.Config)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
+local PlaceRole = require(script.Parent.Parent.Matchmaking.PlaceRole)
 local CombatService = require(script.Parent.CombatService)
 local LootService = require(script.Parent.LootService)
 local MapService = require(script.Parent.MapService)
@@ -273,10 +274,20 @@ function ArenaService.isArena(): boolean
 	return Workspace:FindFirstChild("Arena") ~= nil
 end
 
+-- Position dans l'arène greybox (zone de combat hors partie : entraînement).
+function ArenaService.contains(position: Vector3): boolean
+	local half = Dev.arenaSize / 2
+	return Workspace:FindFirstChild("Arena") ~= nil
+		and math.abs(position.X) <= half
+		and math.abs(position.Z) <= half
+		and position.Y < 80
+end
+
 function ArenaService.init() end
 
 function ArenaService.start()
-	if not (RunService:IsStudio() and Dev.testArenaInStudio) then
+	-- Arène greybox : en Studio, et en ligne tant que les cartes (P7) n'existent pas.
+	if not (if RunService:IsStudio() then Dev.testArenaInStudio else Dev.greyboxOnline) then
 		return
 	end
 	if Workspace:FindFirstChild("Map") or Workspace:FindFirstChild("Arena") then
@@ -287,6 +298,12 @@ function ArenaService.start()
 		baseplate:Destroy()
 	end
 	local arena = buildArena()
+	-- Serveur de partie : ni mannequins, ni bac à sable.
+	if PlaceRole.isMatchServer() then
+		sandbox = false
+		placeMarkers(arena)
+		return
+	end
 	for _, spec in Dev.dummies do
 		task.spawn(spawnDummy, arena, spec)
 	end

@@ -2,10 +2,13 @@
 --[[
 	HubService : le Terminus, hub social (sections 2.3, 16.4).
 
-	En Studio (place de test unique), un Terminus greybox est construit à côté
-	de l'arène s'il n'en existe pas déjà un (dossier « Terminus » dans
-	Workspace). Sur la vraie place du hub (P6), le Terminus est modélisé dans
-	Studio et ses stations portent l'attribut `Station`.
+	Un Terminus greybox est construit à côté de l'arène s'il n'en existe pas
+	déjà un (dossier « Terminus » dans Workspace) : en Studio, et en ligne
+	tant que le vrai Terminus n'est pas modélisé (Config.Dev.greyboxOnline).
+	Le vrai Terminus portera les mêmes attributs `Station`.
+
+	Zone sans combat : hors partie, les joueurs ne peuvent se blesser que
+	dans l'arène d'entraînement.
 
 	Stations (ProximityPrompt, attribut Station → panneau côté client) :
 	merchant, armorer, insurer, vault, bazaar, deploy, range, legends.
@@ -13,9 +16,16 @@
 ]]
 
 local ProximityPromptService = game:GetService("ProximityPromptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
+local Config = require(ReplicatedStorage:WaitForChild("Shared").Config)
+
+local Fighter = require(script.Parent.Parent.Combat.Fighter)
+local PlaceRole = require(script.Parent.Parent.Matchmaking.PlaceRole)
+local ArenaService = require(script.Parent.ArenaService)
+local CombatService = require(script.Parent.CombatService)
 local MapService = require(script.Parent.MapService)
 local MatchService = require(script.Parent.MatchService)
 local MovementGuardService = require(script.Parent.MovementGuardService)
@@ -172,10 +182,34 @@ end
 
 function HubService.init() end
 
+-- Un combattant peut-il se battre ici ? (en partie, ou dans l'arène d'entraînement)
+local function inCombatArea(fighter: Fighter.Fighter): boolean
+	local player = fighter.player
+	if player == nil then
+		return true -- robots, mercenaires, mannequins, objets
+	end
+	local participant = MatchService.participant(player)
+	if participant and not participant.finished then
+		return true
+	end
+	return ArenaService.contains(fighter.root.Position)
+end
+
 function HubService.start()
-	if RunService:IsStudio() and Workspace:FindFirstChild("Terminus") == nil then
+	if PlaceRole.isMatchServer() then
+		return
+	end
+	local greybox = if RunService:IsStudio() then Config.Dev.testArenaInStudio else Config.Dev.greyboxOnline
+	if greybox and Workspace:FindFirstChild("Terminus") == nil then
 		build()
 	end
+
+	CombatService.setDamageFilter(function(attacker, target)
+		if not inCombatArea(target) then
+			return false
+		end
+		return attacker == nil or inCombatArea(attacker)
+	end)
 
 	-- Pavés « arène d'entraînement » ↔ « retour au Terminus » (bac à sable de Studio).
 	ProximityPromptService.PromptTriggered:Connect(function(prompt, player)

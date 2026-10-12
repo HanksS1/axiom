@@ -25,6 +25,7 @@ local Config = require(Shared.Config)
 local Guard = require(Shared.Util.Guard)
 local InventoryLogic = require(Shared.Items.InventoryLogic)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
+local ItemRules = require(Shared.Items.ItemRules)
 local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
 
@@ -252,6 +253,22 @@ local function newContainer(
 end
 
 -- Interaction validée par le serveur (durée de maintien, distance, vie).
+-- Première ouverture d'une caisse : son contenu est généré à ce moment.
+local function openCrate(container: Container)
+	container.opened = true
+	container.items = LootGenerator.crate(container.crateType :: string, LootService.modeId, random, ItemFactory.create)
+	-- Caisse ouverte : on peut la refouiller instantanément.
+	container.prompt.HoldDuration = Pickup.holdTime
+	container.prompt:SetAttribute("ActionKey", "prompt.search")
+	container.prompt.ActionText = "prompt.search"
+	container.model:SetAttribute("Opened", true)
+	local lid = container.model:FindFirstChild("Accent")
+	if lid and lid:IsA("BasePart") then
+		lid.Transparency = 0.7
+	end
+	LootService.CrateOpened:Fire(container)
+end
+
 function LootService.interact(player: Player, container: Container)
 	if containers[container.id] ~= container then
 		return
@@ -275,19 +292,7 @@ function LootService.interact(player: Player, container: Container)
 	end
 
 	if container.kind == "crate" and not container.opened then
-		container.opened = true
-		container.items =
-			LootGenerator.crate(container.crateType :: string, LootService.modeId, random, ItemFactory.create)
-		-- Caisse ouverte : on peut la refouiller instantanément.
-		container.prompt.HoldDuration = Pickup.holdTime
-		container.prompt:SetAttribute("ActionKey", "prompt.search")
-		container.prompt.ActionText = "prompt.search"
-		container.model:SetAttribute("Opened", true)
-		local lid = container.model:FindFirstChild("Accent")
-		if lid and lid:IsA("BasePart") then
-			lid.Transparency = 0.7
-		end
-		LootService.CrateOpened:Fire(container)
+		openCrate(container)
 	end
 
 	-- Un seul objet au sol : ramassage direct.
@@ -485,6 +490,53 @@ function LootService.spawnCrate(cframe: CFrame, crateType: string): Container
 	model:SetAttribute("CrateType", crateType)
 	register(container)
 	return container
+end
+
+-- Conteneurs intéressants pour un mercenaire IA : caisses fermées, sacs et objets au sol.
+function LootService.lootables(): { Container }
+	local list = {}
+	for _, container in containers do
+		if
+			(container.kind == "crate" and not container.opened) or (container.kind ~= "crate" and #container.items > 0)
+		then
+			table.insert(list, container)
+		end
+	end
+	return list
+end
+
+function LootService.positionOf(container: Container): Vector3
+	return containerPosition(container)
+end
+
+--[[
+	Fouille par un mercenaire IA : ouvre la caisse si besoin et prend ce qui
+	tient dans son sac, le plus précieux d'abord. Retourne le nombre d'objets pris.
+]]
+function LootService.botLoot(container: Container, bag: InventoryLogic.Inventory): number
+	if containers[container.id] ~= container then
+		return 0
+	end
+	if container.kind == "crate" and not container.opened then
+		openCrate(container)
+	end
+	local sorted = table.clone(container.items)
+	table.sort(sorted, function(a, b)
+		return ItemRules.value(a) > ItemRules.value(b)
+	end)
+	local taken = 0
+	for _, item in sorted do
+		local stored, leftover = InventoryLogic.store(bag, item)
+		if stored and leftover == nil then
+			local index = table.find(container.items, item)
+			if index then
+				table.remove(container.items, index)
+			end
+			taken += 1
+		end
+	end
+	afterChange(container)
+	return taken
 end
 
 function LootService.remove(container: Container)

@@ -199,6 +199,19 @@ local function setupCharacter(player: Player, character: Model)
 	end)
 end
 
+-- Visuels d'un combattant non joueur (mercenaire IA) : arme en main et posture.
+function CharacterService.attachVisuals(fighter: Fighter)
+	local character = fighter.character
+	updateWeaponVisual(character)
+	applyStance(fighter)
+	character:GetAttributeChangedSignal("WeaponId"):Connect(function()
+		updateWeaponVisual(character)
+	end)
+	character.Destroying:Connect(function()
+		rootJointC0[character] = nil
+	end)
+end
+
 function CharacterService.init()
 	CombatService.MovementChanged:Connect(function(fighter)
 		if fighter.character.Parent ~= nil then
