@@ -9,6 +9,7 @@
 ]]
 
 local ProfileController = require(script.Parent.ProfileController)
+local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local Create = require(script.Parent.Parent.UI.Create)
 local Sounds = require(script.Parent.Parent.UI.Sounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -68,6 +69,10 @@ function SettingsController.start()
 		editTouchLayout = function()
 			screen.panel:close()
 			TouchControlsController.edit(t, SettingsController.open)
+		end,
+		restartTutorial = function()
+			screen.panel:close()
+			ClientNet.fire("TutorialAction", "restart")
 		end,
 	})
 	TerminusController.register("settings", screen)

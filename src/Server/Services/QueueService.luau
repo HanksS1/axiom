@@ -38,6 +38,7 @@ local Uid = require(script.Parent.Parent.Util.Uid)
 local DataService = require(script.Parent.DataService)
 local MatchService = require(script.Parent.MatchService)
 local PartyService = require(script.Parent.PartyService)
+local TutorialService = require(script.Parent.TutorialService)
 
 local MM = Config.Matchmaking
 
@@ -150,6 +151,10 @@ local function join(player: Player, modeId: string, format: Matchmaking.Format, 
 		end
 		if MatchService.participant(member) then
 			notifyAll(members, "queue.refused.in_match", { name = member.DisplayName })
+			return
+		end
+		if TutorialService.isInTutorial(member) then
+			notifyAll(members, "queue.refused.tutorial", { name = member.DisplayName })
 			return
 		end
 		local profile = DataService.getProfile(member)

@@ -37,6 +37,7 @@ export type Hooks = {
 	keyLabel: (name: string?) -> string,
 	notify: (text: string) -> (),
 	editTouchLayout: () -> (),
+	restartTutorial: () -> (),
 }
 
 export type Screen = {
@@ -334,13 +335,10 @@ function SettingsScreen.create(parent: Instance, t: Translate, hooks: Hooks): Sc
 			note.LayoutOrder = 100
 			note.Parent = list
 		elseif tab == "display" then
-			local tutorial = Panel.button(t("settings.tutorial"), Theme.textDim, 300)
+			local tutorial = Panel.button(t("settings.tutorial"), Theme.cyan, 300)
 			tutorial.LayoutOrder = 100
-			tutorial.AutoButtonColor = false
 			tutorial.Parent = list
-			tutorial.Activated:Connect(function()
-				hooks.notify(t("settings.tutorial.soon"))
-			end)
+			tutorial.Activated:Connect(hooks.restartTutorial)
 		end
 	end
 

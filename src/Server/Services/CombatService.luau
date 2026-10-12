@@ -47,6 +47,10 @@ CombatService.NoiseMade = Signal.new() :: Signal.Signal<Vector3, number>
 CombatService.PlayerLeaving = Signal.new() :: Signal.Signal<Fighter>
 -- (combattant) : posture / vitesse modifiée (pour le contrôle de mouvement).
 CombatService.MovementChanged = Signal.new() :: Signal.Signal<Fighter>
+-- (défenseur, attaquant, résultat) : une parade a joué (« reduced », « perfect » ou « broken »).
+CombatService.ParryResolved = Signal.new() :: Signal.Signal<Fighter, Fighter, string>
+-- (combattant, objet) : un consommable a fait effet.
+CombatService.ConsumableUsed = Signal.new() :: Signal.Signal<Fighter, string>
 
 local fighters: { [Model]: Fighter } = {}
 local byPlayer: { [Player]: Fighter } = {}
@@ -386,6 +390,7 @@ function CombatService.useConsumable(fighter: Fighter, itemId: string): (boolean
 		end
 		applyMovement(fighter)
 		queueOwnerState(fighter)
+		CombatService.ConsumableUsed:Fire(fighter, itemId)
 	end
 
 	if def.useTime <= 0 then
@@ -439,6 +444,9 @@ function CombatService.meleeHit(
 		frontal = Damage.isFrontal(target.root.CFrame.LookVector, target.root.Position, attacker.root.Position),
 		breaksParry = opts.breaksParry == true,
 	})
+	if outcome ~= "none" then
+		CombatService.ParryResolved:Fire(target, attacker, outcome)
+	end
 	if outcome == "perfect" then
 		target.parryPerfected = true
 		stun(attacker, Combat.parry.perfectStun)

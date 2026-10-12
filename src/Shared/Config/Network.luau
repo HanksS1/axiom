@@ -59,5 +59,6 @@ return Freeze.deep({
 		-- Progression (P10)
 		LeaderboardRequest = { rate = 0.5, burst = 4 },
 		RangeAction = { rate = 1, burst = 3 },
+		TutorialAction = { rate = 0.2, burst = 2 },
 	} :: { [string]: Limit },
 })

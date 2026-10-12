@@ -33,6 +33,7 @@ local MapService = require(script.Parent.MapService)
 local MatchService = require(script.Parent.MatchService)
 local MovementGuardService = require(script.Parent.MovementGuardService)
 local RangeService = require(script.Parent.RangeService)
+local TutorialService = require(script.Parent.TutorialService)
 
 local HubService = {}
 
@@ -85,6 +86,11 @@ function HubService.start()
 		local range = RangeService.damageVerdict(attacker, target)
 		if range ~= nil then
 			return range
+		end
+		-- Tutoriel : simulation privée (seuls le joueur et ses entités d'entraînement).
+		local tutorial = TutorialService.damageVerdict(attacker, target)
+		if tutorial ~= nil then
+			return tutorial
 		end
 		if not inCombatArea(target) then
 			return false

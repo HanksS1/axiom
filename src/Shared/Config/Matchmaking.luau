@@ -54,8 +54,7 @@ return Freeze.deep({
 	},
 
 	-- Le niveau minimum (2) est atteint par le tutoriel obligatoire (P10).
-	-- Tant que le tutoriel n'existe pas, la vérification reste désactivée.
-	levelGateEnabled = false,
+	levelGateEnabled = true,
 
 	platformGroups = { "crossplay", "touch", "keyboard", "gamepad" },
 	platforms = { "touch", "keyboard", "gamepad" },

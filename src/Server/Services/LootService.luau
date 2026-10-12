@@ -60,6 +60,8 @@ local LootService = {}
 LootService.NoiseMade = Signal.new() :: Signal.Signal<Vector3, number>
 -- (conteneur) : une caisse vient d'être ouverte.
 LootService.CrateOpened = Signal.new() :: Signal.Signal<Container>
+-- (joueur, objet) : un objet a été pris dans un conteneur.
+LootService.ItemTaken = Signal.new() :: Signal.Signal<Player, ItemInstance>
 
 local containers: { [string]: Container } = {}
 local lastTake: { [Player]: number } = {}
@@ -399,6 +401,7 @@ function LootService.take(player: Player, container: Container, uid: string, mod
 		fighter.onInventoryChanged()
 	end
 	afterChange(container)
+	LootService.ItemTaken:Fire(player, item)
 end
 
 -- Pose des objets au sol, devant le joueur (objet jeté, remplacé…).

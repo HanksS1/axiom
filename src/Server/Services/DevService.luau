@@ -18,6 +18,7 @@
 	                    avec tous les joueurs du serveur, sur la carte courante
 	- endMatch        : termine la partie en cours
 	- skipTime <s>    : avance le chrono de la partie (test de l'alerte et de la Purge)
+	- finishTutorial  : termine le tutoriel en cours (récompense comprise)
 	- nextMap         : carte des prochaines parties (hasard, 4 cartes, arène de test)
 ]]
 
@@ -36,6 +37,7 @@ local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local DataService = require(script.Parent.DataService)
 local MapRuntimeService = require(script.Parent.MapRuntimeService)
 local MatchService = require(script.Parent.MatchService)
+local TutorialService = require(script.Parent.TutorialService)
 local RobotService = require(script.Parent.RobotService)
 local Players = game:GetService("Players")
 
@@ -52,6 +54,7 @@ local COMMANDS = {
 	"equipPistol",
 	"equipArmor",
 	"respawn",
+	"finishTutorial",
 	"startSolo",
 	"startDuo",
 	"endMatch",
@@ -158,6 +161,9 @@ local handlers: { [string]: (player: Player, amount: number?) -> () } = {
 		if not MatchService.isRunning() then
 			player:LoadCharacter()
 		end
+	end,
+	finishTutorial = function(player)
+		TutorialService.finishNow(player)
 	end,
 	startSolo = function(_player, amount)
 		MatchService.begin({
