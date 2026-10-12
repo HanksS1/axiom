@@ -65,6 +65,11 @@ function ProfileController.t(key: string, params: { [string]: any }?): string
 	return Localization.get(ProfileController.language(), key, params)
 end
 
+-- La clé existe-t-elle (sans avertissement) ?
+function ProfileController.has(key: string): boolean
+	return Localization.has(ProfileController.language(), key)
+end
+
 function ProfileController.setSetting(key: string, value: any)
 	ClientNet.fire("UpdateSetting", key, value)
 end

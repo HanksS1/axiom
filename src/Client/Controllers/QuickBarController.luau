@@ -21,7 +21,8 @@ local WeaponController = require(script.Parent.WeaponController)
 local QuickBarController = {}
 
 local t = ProfileController.t
-local KEY_HINTS = { "3", "4", "5" }
+-- Actions des emplacements (icônes de touches selon le périphérique, 17.2).
+local SLOT_ACTIONS: { InputController.Action } = { "heal", "battery", "boost" }
 
 local slots: { { frame: Frame, name: TextLabel, count: TextLabel, key: TextLabel, stroke: UIStroke } } = {}
 local usingBar: Frame
@@ -40,7 +41,9 @@ local function render()
 		slot.count.Text = tostring(count)
 		slot.frame.BackgroundTransparency = if count > 0 then Theme.panelTransparency else 0.7
 		slot.name.TextTransparency = if count > 0 then 0 else 0.5
-		slot.key.Visible = device == "keyboard"
+		local hint = InputController.hint(SLOT_ACTIONS[index])
+		slot.key.Visible = device == "keyboard" and hint ~= nil
+		slot.key.Text = hint or ""
 		slot.stroke.Transparency = if device == "gamepad" and InventoryController.selectedQuick() == index
 			then 0
 			else 0.7
@@ -110,7 +113,7 @@ function QuickBarController.start()
 			Font = Theme.fontNumbers,
 			TextSize = 12,
 			TextColor3 = Theme.textDim,
-			Text = KEY_HINTS[index],
+			Text = "",
 		})
 		local frame = Create("Frame", {
 			LayoutOrder = index,

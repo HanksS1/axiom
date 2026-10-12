@@ -13,7 +13,75 @@ local TweenService = game:GetService("TweenService")
 
 local Create = require(script.Parent.Create)
 local PanelState = require(script.Parent.PanelState)
+local Flicker = require(script.Parent.Flicker)
+local Sounds = require(script.Parent.Sounds)
 local Theme = require(script.Parent.Theme)
+
+local RUST = Color3.fromRGB(150, 84, 40)
+local RIVET = Color3.fromRGB(110, 116, 126)
+local TAPE = Color3.fromRGB(214, 196, 150)
+
+-- Décor « sali » (17.1) : lignes de balayage CRT, rivets, ruban adhésif,
+-- coin fissuré. Purement décoratif : ne capte aucune entrée, toujours
+-- sous le contenu, et très discret (la lisibilité passe avant tout).
+local function decorate(frame: Frame)
+	local scanlines = Create("Frame", {
+		Name = "Scanlines",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		ZIndex = 0,
+		Parent = frame,
+	})
+	for index = 1, 28 do
+		Create("Frame", {
+			Position = UDim2.fromScale(0, (index - 0.5) / 28),
+			Size = UDim2.new(1, 0, 0, 1),
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			BackgroundTransparency = 0.965,
+			BorderSizePixel = 0,
+			ZIndex = 0,
+			Parent = scanlines,
+		})
+	end
+	for index, corner in { Vector2.new(0, 0), Vector2.new(1, 0), Vector2.new(0, 1), Vector2.new(1, 1) } do
+		Create("Frame", {
+			Name = "Rivet" .. index,
+			AnchorPoint = corner,
+			Position = UDim2.new(corner.X, if corner.X == 0 then 6 else -6, corner.Y, if corner.Y == 0 then 6 else -6),
+			Size = UDim2.fromOffset(6, 6),
+			BackgroundColor3 = RIVET,
+			BorderSizePixel = 0,
+			ZIndex = 0,
+			Parent = frame,
+		}, { Corner = Create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+	end
+	Create("Frame", {
+		Name = "Tape",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(6, 4),
+		Size = UDim2.fromOffset(46, 12),
+		Rotation = -32,
+		BackgroundColor3 = TAPE,
+		BackgroundTransparency = 0.45,
+		BorderSizePixel = 0,
+		ZIndex = 0,
+		Parent = frame,
+	})
+	for index, crack in { { 0, 22, 40 }, { 14, 12, -25 }, { -6, 34, 70 } } do
+		Create("Frame", {
+			Name = "Crack" .. index,
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, -8 + crack[1], 1, -8),
+			Size = UDim2.fromOffset(1, crack[2]),
+			Rotation = crack[3],
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			BackgroundTransparency = 0.8,
+			BorderSizePixel = 0,
+			ZIndex = 0,
+			Parent = frame,
+		})
+	end
+end
 
 export type Panel = {
 	name: string,
@@ -83,13 +151,28 @@ function Panel.create(name: string, parent: Instance, accent: Color3?): Panel
 		ZIndex = 8,
 		Parent = parent,
 	}, {
-		Stroke = Create("UIStroke", { Color = color, Transparency = 0.35, Thickness = 2 }),
+		Stroke = Create("UIStroke", { Color = color, Transparency = 0.35, Thickness = 2 }, {
+			-- Bordure usée : la couleur d'accent tire sur la rouille par endroits.
+			Rust = Create("UIGradient", {
+				Rotation = 35,
+				Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, color),
+					ColorSequenceKeypoint.new(0.45, color),
+					ColorSequenceKeypoint.new(0.6, RUST),
+					ColorSequenceKeypoint.new(0.75, color),
+					ColorSequenceKeypoint.new(1, RUST),
+				}),
+			}),
+		}),
 		SizeLimit = Create("UISizeConstraint", { MaxSize = Vector2.new(1100, 760) }),
 		Title = title,
 		Close = close,
 		Body = body,
 		Footer = footer,
 	})
+
+	decorate(frame)
+	Flicker.attach(title)
 
 	local panel = {} :: any
 	panel.name = name
@@ -143,7 +226,7 @@ end
 -- Bouton standard (≥ 44 px), avec couleur d'accent.
 function Panel.button(text: string, color: Color3?, width: number?): TextButton
 	local accent = color or Theme.cyan
-	return Create("TextButton", {
+	local button = Create("TextButton", {
 		Size = UDim2.fromOffset(width or 160, Theme.minButtonSize),
 		BackgroundColor3 = Theme.panel,
 		BackgroundTransparency = 0.05,
@@ -155,6 +238,8 @@ function Panel.button(text: string, color: Color3?, width: number?): TextButton
 	}, {
 		Stroke = Create("UIStroke", { Color = accent, Transparency = 0.4 }),
 	})
+	button.Activated:Connect(Sounds.click)
+	return button
 end
 
 -- Liste défilante verticale.

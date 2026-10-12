@@ -21,6 +21,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Freeze = require(Shared.Util.Freeze)
 local Guard = require(Shared.Util.Guard)
+local SettingRules = require(Shared.Settings.SettingRules)
 local Localization = require(Shared.Localization)
 local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
@@ -116,6 +117,7 @@ function DataService.buildView(profile: Profile): Types.ProfileView
 		rankingScore = MatchRules.rankingScore(profile.season.top10),
 		seasonId = profile.season.id,
 		top10 = profile.season.top10,
+		seasonHistory = profile.seasonHistory,
 		bestScoreByMode = profile.bestScoreByMode,
 		tutorialDone = profile.tutorialDone,
 		settings = profile.settings,
@@ -252,21 +254,6 @@ local function onClose()
 	end
 end
 
-local function settingValid(key: string, value: any): boolean
-	local def = Config.Settings[key]
-	if def == nil then
-		return false
-	end
-	if def.kind == "boolean" then
-		return type(value) == "boolean"
-	elseif def.kind == "number" then
-		return Guard.isFiniteNumber(value) and value >= (def.min :: number) and value <= (def.max :: number)
-	elseif def.kind == "enum" then
-		return type(value) == "string" and table.find(def.values :: { string }, value) ~= nil
-	end
-	return false
-end
-
 -- API ----------------------------------------------------------------------
 
 function DataService.init()
@@ -298,7 +285,7 @@ function DataService.init()
 		"UpdateSetting",
 		Guard.tuple(Guard.keyOf(Config.Settings), Guard.any()),
 		function(player, key: string, value: any)
-			if not settingValid(key, value) then
+			if not SettingRules.isValid(key, value) then
 				return
 			end
 			DataService.update(player, function(profile)

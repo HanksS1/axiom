@@ -128,7 +128,8 @@ local function render()
 					status = t("hud.gadgetUses", { uses = def.usesPerMatch })
 				end
 			end
-			label.Text = t("item." .. item.itemId) .. "\n" .. status
+			local hint = InputController.hint(slot :: InputController.Action)
+			label.Text = (if hint then `[{hint}] ` else "") .. t("item." .. item.itemId) .. "\n" .. status
 		end
 	end
 end

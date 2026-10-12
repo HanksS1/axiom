@@ -127,6 +127,8 @@ return function(T, H)
 					expect(def.default >= def.min and def.default <= def.max).toBe(true)
 				elseif def.kind == "enum" then
 					expect(table.find(def.values, def.default) ~= nil).toBe(true)
+				elseif def.kind == "keybinds" or def.kind == "touchLayout" then
+					expect(type(def.default)).toBe("table")
 				else
 					expect(type(def.default)).toBe("boolean")
 				end

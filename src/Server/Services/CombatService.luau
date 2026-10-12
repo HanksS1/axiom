@@ -474,6 +474,7 @@ function CombatService.register(fighter: Fighter)
 	queueOwnerState(fighter)
 	-- Marque le modèle pour les clients (effets, HUD des cibles).
 	CollectionService:AddTag(fighter.character, "Fighter")
+	fighter.character:SetAttribute("FighterKind", fighter.kind)
 
 	fighter.character.Destroying:Connect(function()
 		CombatService.unregister(fighter)

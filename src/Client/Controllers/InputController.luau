@@ -4,8 +4,8 @@
 
 	Le reste du client ne lit jamais directement le clavier, la manette ou
 	l'écran tactile : il écoute des ACTIONS (fire, aim, parry…). Les
-	touches par défaut suivent la section 5.3 ; elles seront
-	personnalisables (paramètres, phase P8).
+	touches par défaut suivent la section 5.3 et sont personnalisables
+	(paramètre `keybinds`, voir Shared/Input/Bindings), appliquées à chaud.
 
 	Détecte aussi le périphérique principal (dernier utilisé) : "keyboard",
 	"gamepad" ou "touch" — utilisé pour le crossplay, les icônes de touches
@@ -13,11 +13,15 @@
 ]]
 
 local ContextActionService = game:GetService("ContextActionService")
+local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Bindings = require(Shared.Input.Bindings)
 local Signal = require(Shared.Util.Signal)
+
+local ProfileController = require(script.Parent.ProfileController)
 
 export type Action =
 	"fire"
@@ -48,6 +52,8 @@ InputController.DeviceChanged = Signal.new() :: Signal.Signal<Device>
 -- Appui court (relâché avant le seuil d'appui long) / appui long (seuil atteint).
 InputController.Tapped = Signal.new() :: Signal.Signal<Action>
 InputController.HeldLong = Signal.new() :: Signal.Signal<Action>
+-- Les touches ont changé (icônes de touches à rafraîchir).
+InputController.BindingsChanged = Signal.new() :: Signal.Signal<>
 
 local LONG_PRESS = 0.35
 local pressedAt: { [Action]: number } = {}
@@ -55,27 +61,24 @@ local pressedAt: { [Action]: number } = {}
 local held: { [Action]: boolean } = {}
 local device: Device = "keyboard"
 
--- Touches par défaut (section 5.3).
-local BINDINGS: { [Action]: { EnumItem } } = {
-	fire = { Enum.UserInputType.MouseButton1, Enum.KeyCode.ButtonR2 },
-	aim = { Enum.UserInputType.MouseButton2, Enum.KeyCode.ButtonL2 },
-	parry = { Enum.KeyCode.F, Enum.KeyCode.ButtonR1 },
-	sprint = { Enum.KeyCode.LeftShift, Enum.KeyCode.ButtonL3 },
-	crouch = { Enum.KeyCode.C, Enum.KeyCode.ButtonB },
-	switch = { Enum.KeyCode.ButtonY },
-	reload = { Enum.KeyCode.R, Enum.KeyCode.ButtonX },
-	weapon1 = { Enum.KeyCode.One },
-	weapon2 = { Enum.KeyCode.Two },
-	inventory = { Enum.KeyCode.Tab, Enum.KeyCode.ButtonSelect },
-	heal = { Enum.KeyCode.Three },
-	battery = { Enum.KeyCode.Four },
-	boost = { Enum.KeyCode.Five },
-	quickCycle = { Enum.KeyCode.DPadDown },
-	ping = { Enum.KeyCode.T, Enum.UserInputType.MouseButton3, Enum.KeyCode.DPadUp },
-	-- E / A (AZERTY) = E / Q (QWERTY) : Roblox lit la position physique de la touche.
-	gadget1 = { Enum.KeyCode.E, Enum.KeyCode.DPadLeft },
-	gadget2 = { Enum.KeyCode.Q, Enum.KeyCode.DPadRight },
-}
+-- Touches effectives (défauts + paramètre `keybinds`) et actions liées.
+local resolved = Bindings.resolve(nil)
+local boundNames: { string } = {}
+local appliedKey = ""
+
+-- Nom de touche → Enum (KeyCode, ou UserInputType pour la souris).
+local function toEnum(name: string): EnumItem?
+	if string.sub(name, 1, 11) == "MouseButton" then
+		local ok, item = pcall(function()
+			return (Enum.UserInputType :: any)[name]
+		end)
+		return if ok then item else nil
+	end
+	local ok, item = pcall(function()
+		return (Enum.KeyCode :: any)[name]
+	end)
+	return if ok then item else nil
+end
 
 local function classify(inputType: EnumItem): Device?
 	if inputType == Enum.UserInputType.Touch then
@@ -138,6 +141,93 @@ function InputController.device(): Device
 	return device
 end
 
+-- (Re)lie les actions aux touches du profil. Sans effet si rien n'a changé.
+function InputController.applyBindings()
+	local view = ProfileController.get()
+	local overrides = if view and type(view.settings.keybinds) == "table" then view.settings.keybinds else {}
+	local key = HttpService:JSONEncode(overrides)
+	if key == appliedKey and #boundNames > 0 then
+		return
+	end
+	appliedKey = key
+	for _, name in boundNames do
+		ContextActionService:UnbindAction(name)
+	end
+	table.clear(boundNames)
+	InputController.releaseAll()
+	resolved = Bindings.resolve(overrides)
+	for actionName, entry in resolved do
+		local action: Action = actionName :: any
+		local inputs: { EnumItem } = {}
+		local names: { string } = {}
+		if entry.keyboard then
+			table.insert(names, entry.keyboard)
+		end
+		if entry.gamepad then
+			table.insert(names, entry.gamepad)
+		end
+		for _, name in names do
+			local item = toEnum(name)
+			if item then
+				table.insert(inputs, item)
+			end
+		end
+		local extras: { string } = Bindings.extras[actionName] or {}
+		for _, name in extras do
+			local item = toEnum(name)
+			if item then
+				table.insert(inputs, item)
+			end
+		end
+		if #inputs == 0 then
+			continue
+		end
+		local bindName = "Axiom_" .. actionName
+		ContextActionService:BindActionAtPriority(bindName, function(_name, state, _input)
+			if state == Enum.UserInputState.Begin then
+				InputController.press(action)
+			elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+				InputController.release(action)
+			end
+			-- Les clics souris restent disponibles pour l'interface.
+			return Enum.ContextActionResult.Pass
+		end, false, Enum.ContextActionPriority.Default.Value, table.unpack(inputs))
+		table.insert(boundNames, bindName)
+	end
+	InputController.BindingsChanged:Fire()
+end
+
+-- Libellé d'une touche (selon la disposition du clavier : A en AZERTY pour Q).
+function InputController.keyLabel(name: string?): string
+	if name == nil then
+		return "—"
+	end
+	local key = "key." .. name
+	if ProfileController.has(key) then
+		return ProfileController.t(key)
+	end
+	local item = toEnum(name)
+	if item then
+		local ok, label = pcall(function()
+			return UserInputService:GetStringForKeyCode(item :: any)
+		end)
+		if ok and type(label) == "string" and label ~= "" then
+			return string.upper(label)
+		end
+	end
+	return name
+end
+
+-- Touche d'une action pour le périphérique actuel (icônes de touches, 17.2).
+function InputController.hint(action: Action): string?
+	local entry = resolved[action]
+	if entry == nil or device == "touch" then
+		return nil
+	end
+	local name = if device == "gamepad" then entry.gamepad else entry.keyboard
+	return if name then InputController.keyLabel(name) else nil
+end
+
 -- Libère toutes les actions (mort, ouverture d'un menu…).
 function InputController.releaseAll()
 	for action, isHeld in held do
@@ -165,18 +255,10 @@ function InputController.start()
 		end
 	end)
 
-	for key, inputs in BINDINGS do
-		local action: Action = key :: any
-		ContextActionService:BindActionAtPriority("Axiom_" .. action, function(_name, state, _input)
-			if state == Enum.UserInputState.Begin then
-				InputController.press(action)
-			elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
-				InputController.release(action)
-			end
-			-- Les clics souris restent disponibles pour l'interface.
-			return Enum.ContextActionResult.Pass
-		end, false, Enum.ContextActionPriority.Default.Value, table.unpack(inputs))
-	end
+	InputController.applyBindings()
+	ProfileController.Changed:Connect(function()
+		InputController.applyBindings()
+	end)
 
 	-- Molette : changement d'arme.
 	UserInputService.InputChanged:Connect(function(input: InputObject, processed: boolean)

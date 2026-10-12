@@ -19,6 +19,7 @@ local Types = require(Shared.Types)
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local ItemCard = require(script.Parent.Parent.UI.ItemCard)
 local Panel = require(script.Parent.Parent.UI.Panel)
+local Sparks = require(script.Parent.Parent.UI.Sparks)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 type Translate = (key: string, params: { [string]: any }?) -> string
@@ -110,6 +111,7 @@ function ArmorerScreen.create(parent: Instance, t: Translate): Screen
 					callback = function()
 						if not blocked then
 							ClientNet.fire("Repair", item.uid)
+							Sparks.burst(panel.frame)
 						end
 					end,
 				},

@@ -37,10 +37,19 @@ export type Loadout = {
 	backpack: ItemInstance?,
 }
 
+export type TopGameDetail = {
+	kills: number, -- points des kills de joueurs
+	bots: number, -- points des kills de mercenaires IA
+	robots: number, -- points des robots détruits
+	loot: number, -- points de la valeur du loot extrait
+	extracted: boolean,
+}
+
 export type TopGame = {
 	score: number,
 	mode: string,
 	date: number,
+	detail: TopGameDetail?, -- détail du score (écran Profil)
 }
 
 -- Partie en cours : l'équipement emporté est retiré du profil au départ et
@@ -112,6 +121,7 @@ export type ProfileView = {
 	rankingScore: number,
 	seasonId: number,
 	top10: { TopGame },
+	seasonHistory: { { id: number, rank: string } },
 	bestScoreByMode: { [string]: number },
 	tutorialDone: boolean,
 	settings: { [string]: any },

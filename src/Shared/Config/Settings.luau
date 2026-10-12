@@ -7,7 +7,7 @@
 local Freeze = require(script.Parent.Parent.Util.Freeze)
 
 export type SettingDef = {
-	kind: "number" | "boolean" | "enum",
+	kind: "number" | "boolean" | "enum" | "keybinds" | "touchLayout",
 	default: any,
 	min: number?,
 	max: number?,
@@ -31,6 +31,10 @@ local settings: { [string]: SettingDef } = {
 	graphicsQuality = { kind = "enum", default = "auto", values = { "auto", "low", "medium", "high" } },
 	mobileButtonOpacity = { kind = "number", default = 0.8, min = 0.2, max = 1 },
 	skipCrateAnimation = { kind = "boolean", default = false },
+	-- Touches personnalisées (différences avec les touches par défaut, voir Input/Bindings).
+	keybinds = { kind = "keybinds", default = {} },
+	-- Disposition personnalisée des boutons tactiles (voir Input/TouchLayout).
+	touchLayout = { kind = "touchLayout", default = {} },
 }
 
 return Freeze.deep(settings)

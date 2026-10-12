@@ -267,6 +267,13 @@ local function applyOutcome(
 		score = breakdown.total,
 		mode = modeId,
 		date = unix,
+		detail = {
+			kills = breakdown.playerKills,
+			bots = breakdown.botKills,
+			robots = breakdown.robots,
+			loot = breakdown.loot,
+			extracted = not breakdown.deathPenalty,
+		},
 	})
 	profile.season.top10 = top
 	if breakdown.total > (profile.bestScoreByMode[modeId] or 0) then
@@ -697,6 +704,8 @@ function MatchService.begin(config: StartConfig): boolean
 	state:SetAttribute("Format", format)
 	announce("axiom.start")
 	MatchService.Started:Fire(matchId)
+	-- Aucun participant retenu (loot non trié, profils indisponibles) : fin immédiate.
+	task.defer(checkEnd)
 	return true
 end
 
