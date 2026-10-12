@@ -78,6 +78,12 @@ local Remotes: { [string]: RemoteDef } = {
 	OpenFreeCrate = { kind = "event", toServer = true },
 	FreeCrateResult = { kind = "event", toServer = false },
 
+	-- Holo-Bazar (P9) : achat direct, caisses cosmétiques, équipement des cosmétiques
+	BazaarBuy = { kind = "event", toServer = true },
+	CosmeticCrateOpen = { kind = "event", toServer = true },
+	CosmeticCrateResult = { kind = "event", toServer = false },
+	EquipCosmetic = { kind = "event", toServer = true },
+
 	-- Cartes (P7) : grondements, effondrements, Gardien qui surgit… (effets visuels)
 	MapEvent = { kind = "event", toServer = false },
 

@@ -126,6 +126,9 @@ export type ProfileView = {
 	tutorialDone: boolean,
 	settings: { [string]: any },
 	stats: { [string]: number },
+	pity: { [string]: number },
+	cosmeticsOwned: { [string]: boolean },
+	cosmeticsEquipped: { [string]: string },
 }
 
 -- Groupe duo (Terminus), envoyé à ses membres.
