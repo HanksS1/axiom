@@ -119,5 +119,38 @@ return function(T, H)
 			expect(profile.freeCrate.stored).toBe(2)
 			expect(profile.freeCrate.lastGrantUnix).toBe(NOW)
 		end)
+
+		it("v2 : partie en cours conservée, uid déjà présents écartés", function()
+			local data = ProfileTemplate.new(NOW)
+			data.vault = { { uid = "shared", itemId = "vest", condition = 3 } }
+			data.activeMatch = {
+				id = "m1",
+				startedAt = NOW,
+				mode = "easy",
+				snapshot = {
+					loadout = { ranged = { uid = "r1", itemId = "needle", condition = 4 } },
+					bag = {
+						{ uid = "shared", itemId = "vest", condition = 3 },
+						{ uid = "c1", itemId = "cell_light", stack = 30 },
+					},
+				},
+			}
+			local profile = Migrations.run(data, NOW)
+			expect(profile.activeMatch.id).toBe("m1")
+			expect(profile.activeMatch.snapshot.loadout.ranged.uid).toBe("r1")
+			expect(#profile.activeMatch.snapshot.bag).toBe(1)
+			expect(#profile.pendingLoot).toBe(0)
+		end)
+
+		it("v1 → v2 : migration d'un ancien profil", function()
+			local data = ProfileTemplate.new(NOW)
+			data.version = 1
+			data.pendingLoot = nil
+			data.activeMatch = nil
+			local profile, err = Migrations.run(data, NOW)
+			expect(err).toBeNil()
+			expect(profile.version).toBe(2)
+			expect(type(profile.pendingLoot)).toBe("table")
+		end)
 	end)
 end

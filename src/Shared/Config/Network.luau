@@ -34,5 +34,8 @@ return Freeze.deep({
 		UnequipItem = { rate = 4, burst = 8 },
 		DropItem = { rate = 4, burst = 8 },
 		UseConsumable = { rate = 2, burst = 4 },
+		-- Partie
+		Ping = { rate = 2, burst = 4 },
+		UseGadget = { rate = 2, burst = 4 },
 	} :: { [string]: Limit },
 })

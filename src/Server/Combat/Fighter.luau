@@ -39,8 +39,15 @@ export type MeleeWeapon = {
 	lastAttackAt: number,
 }
 
+export type FighterKind = "player" | "bot" | "robot" | "object"
+
 export type Fighter = {
-	kind: "player" | "bot" | "robot",
+	kind: FighterKind,
+	-- Équipe (duo, mercenaires IA, « axiom » pour les robots). Pour un joueur,
+	-- l'attribut TeamId du Player fait foi (voir Fighter.teamOf).
+	teamId: string?,
+	robotId: string?, -- type de robot (score, loot)
+	maxHealth: number,
 	player: Player?,
 	character: Model,
 	humanoid: Humanoid,
@@ -123,7 +130,7 @@ export type Equipment = {
 }
 
 function Fighter.new(
-	kind: "player" | "bot" | "robot",
+	kind: FighterKind,
 	player: Player?,
 	character: Model,
 	humanoid: Humanoid,
@@ -134,6 +141,9 @@ function Fighter.new(
 	local maxShield = ItemRules.maxShield(equipment.vest)
 	local fighter: Fighter = {
 		kind = kind,
+		teamId = nil,
+		robotId = nil,
+		maxHealth = Config.Combat.maxHealth,
 		player = player,
 		character = character,
 		humanoid = humanoid,
@@ -285,6 +295,42 @@ end
 
 function Fighter.isAlive(fighter: Fighter): boolean
 	return not fighter.dead and fighter.health > 0
+end
+
+-- Équipe d'un combattant (nil = sans équipe : tout le monde est ennemi).
+function Fighter.teamOf(fighter: Fighter): string?
+	local player = fighter.player
+	if player then
+		local team = player:GetAttribute("TeamId")
+		if type(team) == "string" and team ~= "" then
+			return team
+		end
+	end
+	return fighter.teamId
+end
+
+function Fighter.sameTeam(a: Fighter, b: Fighter): boolean
+	local teamA = Fighter.teamOf(a)
+	return teamA ~= nil and teamA == Fighter.teamOf(b)
+end
+
+--[[
+	Cible « objet » destructible (orbe, mur déployable, drone) : un modèle
+	avec un humanoïde caché, pour réutiliser toute la chaîne de dégâts.
+]]
+function Fighter.newObject(model: Model, root: BasePart, health: number, teamId: string?): Fighter
+	local humanoid = Instance.new("Humanoid")
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	humanoid.MaxHealth = health
+	humanoid.Health = health
+	humanoid.BreakJointsOnDeath = false
+	humanoid.Parent = model
+	local fighter = Fighter.new("object", nil, model, humanoid, root, {}, Fighter.simpleInventory({}))
+	fighter.maxHealth = health
+	fighter.health = health
+	fighter.teamId = teamId
+	return fighter
 end
 
 return Fighter

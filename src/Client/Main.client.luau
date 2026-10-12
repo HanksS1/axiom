@@ -17,6 +17,10 @@ local order = {
 	"InventoryController",
 	"ContainerController",
 	"QuickBarController",
+	"MatchHUDController",
+	"SpectateController",
+	"PingController",
+	"GadgetController",
 	"TouchControlsController",
 	"DevPanelController",
 }

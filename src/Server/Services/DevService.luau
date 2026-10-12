@@ -14,6 +14,10 @@
 	                    maison (état Bon) avec des cellules, puis fait réapparaître
 	- equipArmor      : équipe gilet et casque (état = amount, 4 par défaut)
 	- respawn         : fait réapparaître le personnage
+	- startSolo / startDuo <mode> : lance une partie (1 Facile, 2 Moyen, 3 Difficile)
+	                    avec tous les joueurs du serveur, sur la carte courante
+	- endMatch        : termine la partie en cours
+	- skipTime <s>    : avance le chrono de la partie (test de l'alerte et de la Purge)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -29,6 +33,8 @@ local Leveling = require(Shared.Progression.Leveling)
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local DataService = require(script.Parent.DataService)
+local MatchService = require(script.Parent.MatchService)
+local Players = game:GetService("Players")
 
 local DevService = {}
 
@@ -43,7 +49,13 @@ local COMMANDS = {
 	"equipPistol",
 	"equipArmor",
 	"respawn",
+	"startSolo",
+	"startDuo",
+	"endMatch",
+	"skipTime",
 }
+
+local MODES = { "easy", "medium", "hard" }
 
 local random = Random.new()
 
@@ -137,7 +149,29 @@ local handlers: { [string]: (player: Player, amount: number?) -> () } = {
 		end
 	end,
 	respawn = function(player)
-		player:LoadCharacter()
+		if not MatchService.isRunning() then
+			player:LoadCharacter()
+		end
+	end,
+	startSolo = function(_player, amount)
+		MatchService.begin({
+			modeId = MODES[math.clamp(amount or 1, 1, #MODES)],
+			format = "solo",
+			players = Players:GetPlayers(),
+		})
+	end,
+	startDuo = function(_player, amount)
+		MatchService.begin({
+			modeId = MODES[math.clamp(amount or 1, 1, #MODES)],
+			format = "duo",
+			players = Players:GetPlayers(),
+		})
+	end,
+	endMatch = function()
+		MatchService.finish()
+	end,
+	skipTime = function(_player, amount)
+		MatchService.skip(math.clamp(amount or 60, 1, 900))
 	end,
 }
 

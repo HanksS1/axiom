@@ -41,6 +41,8 @@ local CombatService = {}
 CombatService.FighterDied = Signal.new() :: Signal.Signal<Fighter, Fighter?>
 -- (victime, attaquant?, dégâts) : un combattant a subi des dégâts.
 CombatService.FighterDamaged = Signal.new() :: Signal.Signal<Fighter, Fighter?, number>
+-- (combattant) : le joueur quitte le serveur (avant la destruction du personnage).
+CombatService.PlayerLeaving = Signal.new() :: Signal.Signal<Fighter>
 -- (combattant) : posture / vitesse modifiée (pour le contrôle de mouvement).
 CombatService.MovementChanged = Signal.new() :: Signal.Signal<Fighter>
 
@@ -62,9 +64,13 @@ end
 
 -- Exclut tous les personnages des rayons « monde » (ligne de vue).
 local function refreshRayFilter()
+	-- Les personnages ne bloquent pas la ligne de vue ; les objets (mur
+	-- déployable, drone, orbe) la bloquent.
 	local excluded = {}
-	for character in fighters do
-		table.insert(excluded, character)
+	for character, fighter in fighters do
+		if fighter.kind ~= "object" then
+			table.insert(excluded, character)
+		end
 	end
 	worldRayParams.FilterDescendantsInstances = excluded
 end
@@ -210,6 +216,16 @@ local function kill(fighter: Fighter, killer: Fighter?)
 	queueOwnerState(fighter)
 	CombatService.FighterDied:Fire(fighter, killer)
 
+	-- Objet détruit (mur, drone, orbe) : il disparaît après l'effet.
+	if fighter.kind == "object" then
+		task.delay(Combat.death.disintegrateDuration, function()
+			if fighter.character.Parent then
+				fighter.character:Destroy()
+			end
+		end)
+		return
+	end
+
 	local handler = deathHandler
 	if handler then
 		handler(fighter, killer)
@@ -243,6 +259,10 @@ function CombatService.applyDamage(
 	if not Fighter.isAlive(target) or amount <= 0 then
 		return 0, false
 	end
+	-- Pas de tir ami entre coéquipiers.
+	if attacker and attacker ~= target and Fighter.sameTeam(attacker, target) then
+		return 0, false
+	end
 	local opts: DamageOptions = options or {}
 	local result = Damage.apply(target.health, target.shield, amount, opts.shieldIgnore)
 	target.health = result.health
@@ -267,7 +287,7 @@ function CombatService.heal(target: Fighter, health: number, shield: number)
 	if not Fighter.isAlive(target) then
 		return
 	end
-	target.health = math.min(Combat.maxHealth, target.health + math.max(0, health))
+	target.health = math.min(target.maxHealth, target.health + math.max(0, health))
 	target.shield = math.min(target.maxShield, target.shield + math.max(0, shield))
 	publishPublic(target)
 end
@@ -293,7 +313,7 @@ function CombatService.useConsumable(fighter: Fighter, itemId: string): (boolean
 		return false, "missing"
 	end
 	local effect = def.effect
-	if effect.heal and fighter.health >= Combat.maxHealth then
+	if effect.heal and fighter.health >= fighter.maxHealth then
 		return false, "useless"
 	end
 	if effect.shield and (fighter.maxShield <= 0 or fighter.shield >= fighter.maxShield) then
@@ -385,6 +405,30 @@ end
 
 function CombatService.getFighter(player: Player): Fighter?
 	return byPlayer[player]
+end
+
+-- Tous les combattants enregistrés (copie : sûre à parcourir).
+function CombatService.allFighters(): { Fighter }
+	local list = {}
+	for _, fighter in fighters do
+		table.insert(list, fighter)
+	end
+	return list
+end
+
+-- Fixe les PV (réanimation à 50 PV…).
+function CombatService.setHealth(fighter: Fighter, health: number)
+	if Fighter.isAlive(fighter) then
+		fighter.health = math.clamp(health, 1, fighter.maxHealth)
+		publishPublic(fighter)
+	end
+end
+
+-- Tue un combattant sans attaquant (Purge, mort instantanée de l'environnement).
+function CombatService.kill(fighter: Fighter)
+	if Fighter.isAlive(fighter) then
+		kill(fighter, nil)
+	end
 end
 
 function CombatService.getFighterByCharacter(character: Model): Fighter?
@@ -797,10 +841,12 @@ function CombatService.init()
 end
 
 function CombatService.start()
+	-- Le combattant d'un joueur qui part reste enregistré jusqu'à la
+	-- destruction de son personnage : la partie peut encore lâcher son sac.
 	Players.PlayerRemoving:Connect(function(player)
 		local fighter = byPlayer[player]
 		if fighter then
-			CombatService.unregister(fighter)
+			CombatService.PlayerLeaving:Fire(fighter)
 		end
 	end)
 end

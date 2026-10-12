@@ -85,6 +85,22 @@ local BUTTONS: { ButtonSpec } = {
 		position = UDim2.new(1, -60, 1, -380),
 		color = Theme.text,
 	},
+	-- Gadgets et ping.
+	{
+		action = "gadget1",
+		label = "touch.gadget1",
+		size = 48,
+		position = UDim2.new(1, -250, 1, -440),
+		color = Theme.magenta,
+	},
+	{
+		action = "gadget2",
+		label = "touch.gadget2",
+		size = 48,
+		position = UDim2.new(1, -190, 1, -440),
+		color = Theme.magenta,
+	},
+	{ action = "ping", label = "touch.ping", size = 48, position = UDim2.new(1, -130, 1, -440), color = Theme.cyan },
 }
 
 local container: Frame

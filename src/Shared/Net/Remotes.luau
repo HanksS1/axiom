@@ -52,6 +52,22 @@ local Remotes: { [string]: RemoteDef } = {
 	UnequipItem = { kind = "event", toServer = true },
 	DropItem = { kind = "event", toServer = true },
 	UseConsumable = { kind = "event", toServer = true },
+
+	-- Partie (P3)
+	MatchStatus = { kind = "event", toServer = false }, -- statut du joueur (vivant, orbe, mort, extrait…)
+	MatchResult = { kind = "event", toServer = false }, -- écran de fin de partie
+	Announce = { kind = "event", toServer = false }, -- annonces d'AXIOM (clé)
+	KillFeed = { kind = "event", toServer = false },
+	Extracted = { kind = "event", toServer = false }, -- effet d'évacuation
+	ExtractionState = { kind = "event", toServer = false },
+	ReviveState = { kind = "event", toServer = false },
+	Ping = { kind = "event", toServer = true },
+	PingShown = { kind = "event", toServer = false },
+	UseGadget = { kind = "event", toServer = true },
+	GadgetState = { kind = "event", toServer = false },
+	GadgetEffect = { kind = "event", toServer = false }, -- saut / grappin validés (propriétaire)
+	GadgetVisual = { kind = "unreliable", toServer = false },
+	Reveal = { kind = "event", toServer = false }, -- cibles révélées par un drone
 }
 
 return table.freeze(Remotes)

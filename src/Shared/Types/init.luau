@@ -43,6 +43,17 @@ export type TopGame = {
 	date: number,
 }
 
+-- Partie en cours : l'équipement emporté est retiré du profil au départ et
+-- conservé ici. Si la partie ne se termine pas normalement (échec de
+-- téléportation, serveur planté), il est restitué au retour au Terminus.
+export type ActiveMatch = {
+	id: string,
+	startedAt: number,
+	mode: string,
+	insurance: string?,
+	snapshot: { loadout: Loadout, bag: { ItemInstance } },
+}
+
 export type Profile = {
 	version: number,
 	createdAt: number,
@@ -60,6 +71,8 @@ export type Profile = {
 	cosmeticsOwned: { [string]: boolean },
 	cosmeticsEquipped: { [string]: string },
 	pendingInsurance: { ItemInstance }?,
+	pendingLoot: { ItemInstance }, -- loot extrait en attente de l'écran de tri
+	activeMatch: ActiveMatch?,
 	season: { id: number, top10: { TopGame } },
 	seasonHistory: { { id: number, rank: string } },
 	bestScoreByMode: { [string]: number },

@@ -18,7 +18,13 @@ local order = {
 	"InventoryService",
 	"CharacterService",
 	"MovementGuardService",
+	"MapService",
 	"ArenaService",
+	"GadgetService",
+	"ExtractionService",
+	"ReviveService",
+	"PingService",
+	"MatchService",
 	"DevService",
 }
 

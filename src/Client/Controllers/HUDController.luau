@@ -481,7 +481,10 @@ local function render()
 	deathOverlay.Visible = dead
 	if dead then
 		deathTitle.Text = t("hud.dead")
-		deathSubtitle.Text = t("hud.respawning")
+		-- En partie, pas de réapparition (orbe en duo, écran de fin en solo).
+		local state = ReplicatedStorage:FindFirstChild("MatchState")
+		local inMatch = state ~= nil and state:GetAttribute("Running") == true
+		deathSubtitle.Text = if inMatch then "" else t("hud.respawning")
 	end
 end
 

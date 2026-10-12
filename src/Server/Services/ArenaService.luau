@@ -21,6 +21,7 @@ local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local CombatService = require(script.Parent.CombatService)
 local LootService = require(script.Parent.LootService)
+local MapService = require(script.Parent.MapService)
 
 local Dev = Config.Dev
 
@@ -196,15 +197,68 @@ local CRATES: { { position: Vector3, crateType: string } } = {
 	{ position = Vector3.new(0, 0, 70), crateType = "axiom_locker" },
 }
 
-local function spawnCrate(spec: { position: Vector3, crateType: string })
-	local container = LootService.spawnCrate(CFrame.new(spec.position), spec.crateType)
-	-- Bac à sable : la caisse ouverte est remplacée par une neuve après un délai.
+-- Bac à sable (hors partie) : caisses qui réapparaissent, réapparition des joueurs.
+local sandbox = true
+
+local function spawnCrate(cframe: CFrame, crateType: string)
+	if not sandbox then
+		return
+	end
+	local container = LootService.spawnCrate(cframe, crateType)
+	-- La caisse ouverte est remplacée par une neuve après un délai.
 	container.model:GetAttributeChangedSignal("Opened"):Once(function()
 		task.delay(Config.Loot.arenaRespawnDelay, function()
+			if not sandbox then
+				return
+			end
 			LootService.remove(container)
-			spawnCrate(spec)
+			spawnCrate(cframe, crateType)
 		end)
 	end)
+end
+
+-- Remplit l'arène de caisses de bac à sable à partir des repères.
+function ArenaService.spawnSandboxCrates()
+	for _, marker in MapService.crateSpawns() do
+		spawnCrate(marker.cframe, marker.attributes.CrateType or "supply")
+	end
+end
+
+-- Active / désactive le bac à sable (désactivé pendant une partie).
+function ArenaService.setSandbox(enabled: boolean)
+	sandbox = enabled
+end
+
+function ArenaService.isSandbox(): boolean
+	return sandbox
+end
+
+-- Repères de partie : points de départ, extractions, accélérateurs, caisses.
+local function placeMarkers(arena: Instance)
+	local half = Dev.arenaSize / 2
+	for index = 1, 8 do
+		local angle = index / 8 * math.pi * 2 + math.pi / 8
+		MapService.placeMarker(
+			arena,
+			"DeploySpawn",
+			CFrame.new(math.cos(angle) * (half - 10), 3, math.sin(angle) * (half - 10))
+		)
+	end
+	local extractions = {
+		{ position = Vector3.new(0, 0.2, -70), name = "extraction.arena.north" },
+		{ position = Vector3.new(65, 0.2, 35), name = "extraction.arena.east" },
+		{ position = Vector3.new(-65, 0.2, 35), name = "extraction.arena.west" },
+	}
+	for _, spec in extractions do
+		MapService.placeMarker(arena, "ExtractionPoint", CFrame.new(spec.position), { NameKey = spec.name })
+	end
+	for index = 1, 6 do
+		local angle = index / 6 * math.pi * 2
+		MapService.placeMarker(arena, "AcceleratorSpot", CFrame.new(math.cos(angle) * 60, 0.2, math.sin(angle) * 60))
+	end
+	for _, spec in CRATES do
+		MapService.placeMarker(arena, "CrateSpawn", CFrame.new(spec.position), { CrateType = spec.crateType })
+	end
 end
 
 function ArenaService.init() end
@@ -224,9 +278,8 @@ function ArenaService.start()
 	for _, spec in Dev.dummies do
 		task.spawn(spawnDummy, arena, spec)
 	end
-	for _, spec in CRATES do
-		spawnCrate(spec)
-	end
+	placeMarkers(arena)
+	ArenaService.spawnSandboxCrates()
 
 	-- Les mannequins détruits réapparaissent.
 	CombatService.FighterDied:Connect(function(fighter)

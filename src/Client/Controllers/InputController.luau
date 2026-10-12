@@ -72,8 +72,9 @@ local BINDINGS: { [Action]: { EnumItem } } = {
 	boost = { Enum.KeyCode.Five },
 	quickCycle = { Enum.KeyCode.DPadDown },
 	ping = { Enum.KeyCode.T, Enum.UserInputType.MouseButton3, Enum.KeyCode.DPadUp },
-	gadget1 = { Enum.KeyCode.DPadLeft },
-	gadget2 = { Enum.KeyCode.DPadRight },
+	-- E / A (AZERTY) = E / Q (QWERTY) : Roblox lit la position physique de la touche.
+	gadget1 = { Enum.KeyCode.E, Enum.KeyCode.DPadLeft },
+	gadget2 = { Enum.KeyCode.Q, Enum.KeyCode.DPadRight },
 }
 
 local function classify(inputType: EnumItem): Device?
