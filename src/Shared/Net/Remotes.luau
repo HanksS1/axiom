@@ -98,6 +98,16 @@ local Remotes: { [string]: RemoteDef } = {
 	QueueLeave = { kind = "event", toServer = true },
 	QueueState = { kind = "event", toServer = false },
 	ReturnToHub = { kind = "event", toServer = true },
+
+	-- Progression (P10) : classements (mondial, amis, par mode, défi du stand de tir)
+	LeaderboardRequest = { kind = "function", toServer = true },
+	-- Stand de tir : essayer une arme, lancer le défi du jour, arrêter
+	RangeAction = { kind = "event", toServer = true },
+	RangeState = { kind = "event", toServer = false },
+	RangeHit = { kind = "unreliable", toServer = false }, -- dégâts affichés sur une cible
+	-- Tutoriel : refaire / quitter (rejeu uniquement), état des étapes
+	TutorialAction = { kind = "event", toServer = true },
+	TutorialState = { kind = "event", toServer = false },
 }
 
 return table.freeze(Remotes)

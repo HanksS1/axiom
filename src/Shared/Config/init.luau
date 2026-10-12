@@ -22,12 +22,14 @@ local Config = {
 	Monetization = require(script.Monetization),
 	Cosmetics = require(script.Cosmetics),
 	Progression = require(script.Progression),
+	Range = require(script.Range),
 	Matchmaking = require(script.Matchmaking),
 	Maps = require(script.Maps),
 	Data = require(script.Data),
 	Network = require(script.Network),
 	Settings = require(script.Settings),
 	Visuals = require(script.Visuals),
+	Audio = require(script.Audio),
 	Dev = require(script.Dev),
 }
 

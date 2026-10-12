@@ -182,7 +182,8 @@ function Migrations.sanitize(data: any, now: number): (Profile, Report)
 	profile.credits = clampInteger(data.credits, 0, Config.Economy.maxCredits, 0, report)
 	profile.noyaux = clampInteger(data.noyaux, 0, Config.Monetization.maxNoyaux, 0, report)
 	profile.hasVaultExtension = data.hasVaultExtension == true
-	profile.tutorialDone = data.tutorialDone == true
+	-- Les profils créés avant le tutoriel (P10) et déjà au niveau 2 en sont dispensés.
+	profile.tutorialDone = data.tutorialDone == true or profile.level >= Config.Progression.minLevelToPlay
 
 	-- Ordre de priorité en cas d'uid dupliqué : le loadout, puis le sac, puis le coffre.
 	local loadout = {}
@@ -264,6 +265,7 @@ function Migrations.sanitize(data: any, now: number): (Profile, Report)
 
 	if type(data.season) == "table" then
 		profile.season.id = clampInteger(data.season.id, 0, math.huge, 0, report)
+		profile.season.legend = if data.season.legend == true then true else nil
 		if type(data.season.top10) == "table" then
 			for _, entry in data.season.top10 do
 				if

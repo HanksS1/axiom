@@ -43,6 +43,8 @@ local DataService = {}
 
 -- (player, profile) : profil chargé et prêt.
 DataService.ProfileLoaded = Signal.new() :: Signal.Signal<Player, Profile>
+-- Le profil a changé (au plus une fois par image, avec la synchronisation client).
+DataService.ProfileChanged = Signal.new() :: Signal.Signal<Player, Profile>
 
 local store: SessionStore.SessionStore
 local sessions: { [Player]: SessionStore.Session } = {}
@@ -113,7 +115,7 @@ function DataService.buildView(profile: Profile): Types.ProfileView
 		pendingLoot = profile.pendingLoot,
 		pendingInsuranceCount = if profile.pendingInsurance then #profile.pendingInsurance else 0,
 		insuranceTier = profile.insuranceTier,
-		rank = MatchRules.rank(MatchRules.rankingScore(profile.season.top10)),
+		rank = MatchRules.seasonRank(profile.season),
 		rankingScore = MatchRules.rankingScore(profile.season.top10),
 		seasonId = profile.season.id,
 		top10 = profile.season.top10,
@@ -138,6 +140,7 @@ local function queueSync(player: Player)
 		local session = sessions[player]
 		if session and session.active and player.Parent == Players then
 			ServerNet.fire("ProfileSync", player, DataService.buildView(session.data))
+			DataService.ProfileChanged:Fire(player, session.data)
 		end
 	end)
 end

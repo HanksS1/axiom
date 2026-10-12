@@ -152,5 +152,17 @@ return function(T, H)
 			expect(profile.version).toBe(3)
 			expect(type(profile.pendingLoot)).toBe("table")
 		end)
+		it("statut de Légende conservé ; anciens joueurs (niveau 2+) dispensés du tutoriel", function()
+			local data = ProfileTemplate.new(NOW)
+			data.level = 7
+			data.tutorialDone = false
+			data.season = { id = 3, top10 = {}, legend = true }
+			local profile = Migrations.run(data, NOW)
+			expect(profile.season.legend).toBe(true)
+			expect(profile.tutorialDone).toBe(true)
+			local fresh = Migrations.run(ProfileTemplate.new(NOW), NOW)
+			expect(fresh.tutorialDone).toBe(false)
+			expect(fresh.season.legend).toBeNil()
+		end)
 	end)
 end

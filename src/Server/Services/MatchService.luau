@@ -83,6 +83,8 @@ MatchService.Started = Signal.new() :: Signal.Signal<string>
 MatchService.AlertTriggered = Signal.new() :: Signal.Signal<>
 MatchService.PlayerFinished = Signal.new() :: Signal.Signal<Player, Outcome>
 MatchService.Ended = Signal.new() :: Signal.Signal<>
+-- (joueur, mode, score) : score de partie enregistré dans le profil (classements).
+MatchService.ScoreRecorded = Signal.new() :: Signal.Signal<Player, string, number>
 
 local running = false
 local matchId = ""
@@ -253,16 +255,7 @@ local function applyOutcome(
 
 	-- Classement saisonnier (top 10).
 	local unix = os.time()
-	local season = MatchRules.seasonAt(unix)
-	if profile.season.id ~= season then
-		if profile.season.id > 0 and #profile.season.top10 > 0 then
-			table.insert(profile.seasonHistory, {
-				id = profile.season.id,
-				rank = MatchRules.rank(MatchRules.rankingScore(profile.season.top10)),
-			})
-		end
-		profile.season = { id = season, top10 = {} }
-	end
+	MatchRules.rollSeason(profile, unix)
 	local top, position = MatchRules.insertTopGame(profile.season.top10, {
 		score = breakdown.total,
 		mode = modeId,
@@ -323,8 +316,11 @@ local function finalize(participant: Participant, outcome: Outcome, carried: Inv
 		result = applyOutcome(profile, participant, outcome, carried)
 	end)
 	task.spawn(DataService.saveNow, player) -- « sauvegardé immédiatement »
-	if result and player.Parent == Players then
-		ServerNet.fire("MatchResult", player, result)
+	if result then
+		MatchService.ScoreRecorded:Fire(player, result.mode, result.score.total)
+		if player.Parent == Players then
+			ServerNet.fire("MatchResult", player, result)
+		end
 	end
 	MatchService.PlayerFinished:Fire(player, outcome)
 	checkEnd()

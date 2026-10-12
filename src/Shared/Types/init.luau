@@ -83,7 +83,8 @@ export type Profile = {
 	pendingLoot: { ItemInstance }, -- loot extrait en attente de l'écran de tri
 	activeMatch: ActiveMatch?,
 	insuranceTier: string?, -- assurance choisie pour la prochaine partie (payée au départ)
-	season: { id: number, top10: { TopGame } },
+	-- legend : le joueur a atteint « Légende d'AXIOM » (top mondial) pendant la saison.
+	season: { id: number, top10: { TopGame }, legend: boolean? },
 	seasonHistory: { { id: number, rank: string } },
 	bestScoreByMode: { [string]: number },
 	stats: {
