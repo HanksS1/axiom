@@ -10,16 +10,29 @@
 	| ExtractionPoint   | 3 points d'extraction                  | NameKey (texte traduit)        |
 	| AcceleratorSpot   | 6 emplacements d'Accélérateur (duo)    |                                |
 	| CrateSpawn        | emplacement de caisse                  | CrateType (supply, military…)  |
-	| RobotSpawn        | apparition de robot (P4)               | RobotId, Garrison (bool)       |
-	| RiskZone          | zone à risque (P4)                     | Main (bool)                    |
+	| RobotSpawn        | patrouille ; robot fixe si RobotId     | RobotId, Garrison, Dormant     |
+	| RiskZone          | zone à risque (P4)                     | Main (bool), Radius            |
 
-	Les repères sont des pièces (souvent invisibles) dans Workspace.
+	Les repères sont des pièces (souvent invisibles). Seuls ceux de la carte
+	active comptent (MapService.setRoot : arène de test ou carte de partie).
+	Les 4 cartes du jeu sont générées par Server/Maps (P7).
 ]]
 
 local CollectionService = game:GetService("CollectionService")
 local Workspace = game:GetService("Workspace")
 
 local MapService = {}
+
+-- Racine de la carte active (arène, carte de partie) : seuls ses repères comptent.
+local activeRoot: Instance? = nil
+
+function MapService.setRoot(root: Instance?)
+	activeRoot = root
+end
+
+function MapService.root(): Instance?
+	return activeRoot
+end
 
 export type Marker = {
 	part: BasePart,
@@ -31,7 +44,7 @@ export type Marker = {
 local function collect(tag: string): { Marker }
 	local markers = {}
 	for _, instance in CollectionService:GetTagged(tag) do
-		if instance:IsA("BasePart") and instance:IsDescendantOf(Workspace) then
+		if instance:IsA("BasePart") and instance:IsDescendantOf(activeRoot or Workspace) then
 			table.insert(markers, {
 				part = instance,
 				cframe = instance.CFrame,

@@ -22,6 +22,7 @@ local Config = {
 	Monetization = require(script.Monetization),
 	Progression = require(script.Progression),
 	Matchmaking = require(script.Matchmaking),
+	Maps = require(script.Maps),
 	Data = require(script.Data),
 	Network = require(script.Network),
 	Settings = require(script.Settings),

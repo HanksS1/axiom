@@ -29,6 +29,8 @@ export type LootCrateDef = {
 	calibrationChanceHard: number?, -- Module de calibration (mode Difficile uniquement)
 	cellStacks: { min: number, max: number }, -- piles de cellules toujours présentes
 	maxItems: number, -- nombre maximal d'objets dans la caisse
+	equipmentPool: string?, -- famille de tirage de l'équipement (« equipment » par défaut)
+	consumablePool: string?, -- famille de tirage des consommables (« consumable » par défaut)
 }
 
 local crates: { [string]: LootCrateDef } = {
@@ -68,6 +70,44 @@ local crates: { [string]: LootCrateDef } = {
 		cellStacks = { min = 0, max = 1 },
 		maxItems = 6,
 	},
+	-- Caisses thématiques des cartes (P7) : même budget qu'une caisse de
+	-- ravitaillement, contenu orienté.
+	-- Hôpital Saint-Circuit (Néo-Lumen) : soins et batteries de bouclier.
+	medical = {
+		id = "medical",
+		openTime = 1.5,
+		kitShare = 0.5,
+		variance = 0.3,
+		equipmentChance = 0.05,
+		equipment = { min = 1, max = 1 },
+		cellStacks = { min = 0, max = 1 },
+		maxItems = 6,
+		consumablePool = "medical",
+	},
+	-- Entrepôt de pièces (Forge-7) : beaucoup de cellules, Module de calibration plus fréquent en Difficile.
+	parts_bin = {
+		id = "parts_bin",
+		openTime = 1.5,
+		kitShare = 0.5,
+		variance = 0.3,
+		equipmentChance = 0.15,
+		equipment = { min = 1, max = 1 },
+		calibrationChanceHard = 0.08,
+		cellStacks = { min = 2, max = 4 },
+		maxItems = 6,
+	},
+	-- Centre de contrôle (Noyau Zéro) : loot technologique, gadgets plus fréquents.
+	tech = {
+		id = "tech",
+		openTime = 2,
+		kitShare = 0.7,
+		variance = 0.3,
+		equipmentChance = 0.6,
+		equipment = { min = 1, max = 1 },
+		cellStacks = { min = 0, max = 1 },
+		maxItems = 6,
+		equipmentPool = "tech",
+	},
 }
 
 -- Familles de tirage utilisées par les caisses et les robots.
@@ -98,6 +138,19 @@ local pools: { [string]: { [string]: number } } = {
 		recon_drone = 3,
 		deployable_wall = 3,
 		smoke_deployer = 4,
+	},
+	medical = {
+		nanite_injector = 5,
+		shield_battery = 5,
+	},
+	tech = {
+		jump_boots = 4,
+		grappling_hook = 4,
+		recon_drone = 4,
+		deployable_wall = 3,
+		smoke_deployer = 4,
+		helmet = 2,
+		vest = 2,
 	},
 	consumable = {
 		nanite_injector = 4,

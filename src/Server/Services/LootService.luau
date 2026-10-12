@@ -77,6 +77,21 @@ local CRATE_STYLE: { [string]: { color: Color3, accent: Color3, size: Vector3 } 
 		accent = Color3.fromRGB(255, 138, 0),
 		size = Vector3.new(4, 2.4, 2.4),
 	},
+	medical = {
+		color = Color3.fromRGB(220, 224, 230),
+		accent = Color3.fromRGB(255, 59, 59),
+		size = Vector3.new(3, 2, 2),
+	},
+	parts_bin = {
+		color = Color3.fromRGB(110, 84, 60),
+		accent = Color3.fromRGB(255, 176, 32),
+		size = Vector3.new(3.2, 2.2, 2.2),
+	},
+	tech = {
+		color = Color3.fromRGB(40, 44, 60),
+		accent = Color3.fromRGB(176, 92, 255),
+		size = Vector3.new(3, 2.2, 2),
+	},
 	axiom_locker = {
 		color = Color3.fromRGB(24, 24, 30),
 		accent = Color3.fromRGB(255, 59, 59),

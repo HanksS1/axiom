@@ -82,7 +82,7 @@ return function(T, H)
 	describe("Config des robots", function()
 		it("toutes les familles ont un comportement cohérent", function()
 			for id, def in Config.Robots.byId do
-				expect(def.speed > 0).toBe(true)
+				expect(def.speed > 0 or def.stationary == true).toBe(true)
 				if def.attack ~= "melee" then
 					expect(def.fireInterval ~= nil).toBe(true)
 				end

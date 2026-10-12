@@ -78,6 +78,9 @@ local Remotes: { [string]: RemoteDef } = {
 	OpenFreeCrate = { kind = "event", toServer = true },
 	FreeCrateResult = { kind = "event", toServer = false },
 
+	-- Cartes (P7) : grondements, effondrements, Gardien qui surgit… (effets visuels)
+	MapEvent = { kind = "event", toServer = false },
+
 	-- Matchmaking (P6) : plateforme, groupe duo, file d'attente, retour au hub
 	SetPlatform = { kind = "event", toServer = true },
 	PartyInvite = { kind = "event", toServer = true },

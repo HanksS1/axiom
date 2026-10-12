@@ -44,6 +44,10 @@ local currentFov = CameraConfig.fieldOfView
 local currentStanceY = 0
 local enabled = true
 local mouseFree = false
+-- Tremblement (effondrements, grondements, Gardien qui surgit).
+local shakeIntensity = 0
+local shakeUntil = 0
+local shakeDuration = 1
 
 local MAX_PITCH = math.rad(75)
 local MOUSE_FACTOR = math.rad(0.25) -- radians par pixel à sensibilité 1
@@ -158,7 +162,18 @@ local function update(dt: number)
 			position = hit.Position - toCamera.Unit * 0.3
 		end
 	end
-	camera.CFrame = CFrame.new(position) * rotation
+	local shake = CFrame.identity
+	local clock = os.clock()
+	if clock < shakeUntil then
+		local fade = (shakeUntil - clock) / shakeDuration
+		local amount = math.rad(shakeIntensity) * fade
+		shake = CFrame.Angles(
+			math.noise(clock * 18, 1.3) * amount,
+			math.noise(clock * 18, 7.1) * amount,
+			math.noise(clock * 18, 4.7) * amount * 0.5
+		)
+	end
+	camera.CFrame = CFrame.new(position) * rotation * shake
 
 	-- Le personnage regarde toujours dans la direction de la caméra.
 	if humanoid.Health > 0 and not root.Anchored then
@@ -171,6 +186,17 @@ local function update(dt: number)
 	if not mouseFree and InputController.device() == "keyboard" then
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 	end
+end
+
+-- Fait trembler la caméra (`intensity` en degrés, décroît sur `duration` secondes).
+function CameraController.shake(intensity: number, duration: number)
+	local clock = os.clock()
+	if clock < shakeUntil and intensity < shakeIntensity then
+		return
+	end
+	shakeIntensity = intensity
+	shakeDuration = math.max(0.1, duration)
+	shakeUntil = clock + shakeDuration
 end
 
 -- Libère / reverrouille la souris (menus, inventaire).

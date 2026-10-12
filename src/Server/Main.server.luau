@@ -26,6 +26,7 @@ local order = {
 	"PingService",
 	"RobotService",
 	"MercenaryService",
+	"MapRuntimeService",
 	"MatchService",
 	"PartyService",
 	"QueueService",
