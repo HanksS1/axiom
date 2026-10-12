@@ -21,6 +21,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Damage = require(Shared.Combat.Damage)
+local InventoryLogic = require(Shared.Items.InventoryLogic)
 local Guard = require(Shared.Util.Guard)
 local Movement = require(Shared.Combat.Movement)
 local Signal = require(Shared.Util.Signal)
@@ -86,6 +87,7 @@ local function publishPublic(fighter: Fighter)
 	character:SetAttribute("Parrying", fighter.move.parrying)
 	character:SetAttribute("Stunned", fighter.move.stunned)
 	character:SetAttribute("Dead", fighter.dead)
+	character:SetAttribute("Using", fighter.usingItemId ~= nil)
 	local weapon = if fighter.activeSlot == "ranged" then fighter.ranged else fighter.melee
 	character:SetAttribute("WeaponId", if weapon then weapon.item.itemId else nil)
 	character:SetAttribute("WeaponCondition", if weapon then weapon.item.condition else nil)
@@ -118,6 +120,12 @@ local function buildOwnerState(fighter: Fighter): { [string]: any }
 	local melee = fighter.melee
 	if melee then
 		state.melee = { itemId = melee.item.itemId, condition = melee.item.condition }
+	end
+	if fighter.usingItemId then
+		state.using = { itemId = fighter.usingItemId, endsAt = fighter.usingUntil }
+	end
+	if fighter.boostUntil > state.serverTime then
+		state.boostUntil = fighter.boostUntil
 	end
 	return state
 end
@@ -190,6 +198,8 @@ local function kill(fighter: Fighter, killer: Fighter?)
 	end
 	fighter.dead = true
 	fighter.health = 0
+	fighter.usingToken += 1
+	fighter.usingItemId = nil
 	fighter.move.parrying = false
 	fighter.move.sprinting = false
 	if fighter.ranged then
@@ -262,6 +272,87 @@ function CombatService.heal(target: Fighter, health: number, shield: number)
 	publishPublic(target)
 end
 
+--[[
+	Utilisation d'un consommable du sac (section 8.6). Pendant le temps
+	d'utilisation, le joueur est ralenti et ne peut ni tirer, ni frapper, ni
+	parer ; l'effet s'applique à la fin (annulé en cas de mort).
+	Retourne (succès, raison) : "dead", "busy", "missing", "useless".
+]]
+function CombatService.useConsumable(fighter: Fighter, itemId: string): (boolean, string?)
+	local bag = fighter.bag
+	if bag == nil or not Fighter.isAlive(fighter) then
+		return false, "dead"
+	end
+	local time = now()
+	Fighter.refresh(fighter, time)
+	if fighter.move.stunned or fighter.usingItemId ~= nil then
+		return false, "busy"
+	end
+	local def = Config.Equipment.consumables[itemId]
+	if def == nil or InventoryLogic.count(bag, itemId) <= 0 then
+		return false, "missing"
+	end
+	local effect = def.effect
+	if effect.heal and fighter.health >= Combat.maxHealth then
+		return false, "useless"
+	end
+	if effect.shield and (fighter.maxShield <= 0 or fighter.shield >= fighter.maxShield) then
+		return false, "useless"
+	end
+	if effect.bonusUp and fighter.exoUsed then
+		return false, "useless"
+	end
+
+	local function apply()
+		if not Fighter.isAlive(fighter) or fighter.bag ~= bag then
+			return
+		end
+		if InventoryLogic.consume(bag, itemId, 1) < 1 then
+			return
+		end
+		if effect.heal or effect.shield then
+			CombatService.heal(fighter, effect.heal or 0, effect.shield or 0)
+		end
+		if effect.speedMultiplier then
+			fighter.boostMultiplier = effect.speedMultiplier
+			fighter.boostUntil = now() + (effect.duration or 0)
+			refreshAt(fighter, fighter.boostUntil)
+		end
+		if effect.bonusUp then
+			fighter.exoUsed = true
+			bag.bonusUp += effect.bonusUp
+		end
+		if fighter.onInventoryChanged then
+			fighter.onInventoryChanged()
+		end
+		applyMovement(fighter)
+		queueOwnerState(fighter)
+	end
+
+	if def.useTime <= 0 then
+		apply()
+		return true, nil
+	end
+	fighter.usingToken += 1
+	local token = fighter.usingToken
+	fighter.usingItemId = itemId
+	fighter.usingUntil = time + def.useTime
+	fighter.move.sprinting = false
+	endParry(fighter, time)
+	applyMovement(fighter)
+	queueOwnerState(fighter)
+	task.delay(def.useTime, function()
+		if fighter.usingToken ~= token then
+			return
+		end
+		fighter.usingItemId = nil
+		apply()
+		applyMovement(fighter)
+		queueOwnerState(fighter)
+	end)
+	return true, nil
+end
+
 -- Registre ------------------------------------------------------------------
 
 function CombatService.register(fighter: Fighter)
@@ -319,6 +410,13 @@ function CombatService.setDeathHandler(handler: ((fighter: Fighter, killer: Figh
 	deathHandler = handler
 end
 
+-- L'équipement du sac a changé (ramassage, échange, objet jeté).
+function CombatService.equipmentChanged(fighter: Fighter)
+	Fighter.syncEquipment(fighter)
+	applyMovement(fighter)
+	queueOwnerState(fighter)
+end
+
 function CombatService.publish(fighter: Fighter)
 	publishPublic(fighter)
 	queueOwnerState(fighter)
@@ -368,7 +466,7 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 	end
 	local time = now()
 	Fighter.refresh(fighter, time)
-	if fighter.move.stunned then
+	if fighter.move.stunned or fighter.usingItemId ~= nil then
 		return
 	end
 	if shot.t < fighter.lastShotTime then
@@ -528,7 +626,7 @@ local function onMeleeAttack(player: Player, targetPart: BasePart?)
 	end
 	local time = now()
 	Fighter.refresh(fighter, time)
-	if fighter.move.stunned or fighter.move.parrying then
+	if fighter.move.stunned or fighter.move.parrying or fighter.usingItemId ~= nil then
 		return
 	end
 	local def = melee.def
@@ -620,7 +718,12 @@ local function onSetParry(player: Player, active: boolean)
 		applyMovement(fighter)
 		return
 	end
-	if fighter.move.parrying or fighter.move.stunned or time < fighter.parryCooldownUntil then
+	if
+		fighter.move.parrying
+		or fighter.move.stunned
+		or fighter.usingItemId ~= nil
+		or time < fighter.parryCooldownUntil
+	then
 		return
 	end
 	if fighter.melee == nil then

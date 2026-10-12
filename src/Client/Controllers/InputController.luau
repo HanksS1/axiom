@@ -19,7 +19,25 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Signal = require(Shared.Util.Signal)
 
-export type Action = "fire" | "aim" | "parry" | "sprint" | "crouch" | "switch" | "reload" | "weapon1" | "weapon2"
+export type Action =
+	"fire"
+	| "aim"
+	| "parry"
+	| "sprint"
+	| "crouch"
+	| "switch"
+	| "reload"
+	| "weapon1"
+	| "weapon2"
+	| "inventory"
+	| "heal"
+	| "battery"
+	| "boost"
+	| "quickCycle"
+	| "interact"
+	| "ping"
+	| "gadget1"
+	| "gadget2"
 export type Device = "keyboard" | "gamepad" | "touch"
 
 local InputController = {}
@@ -27,6 +45,12 @@ local InputController = {}
 InputController.ActionBegan = Signal.new() :: Signal.Signal<Action>
 InputController.ActionEnded = Signal.new() :: Signal.Signal<Action>
 InputController.DeviceChanged = Signal.new() :: Signal.Signal<Device>
+-- Appui court (relâché avant le seuil d'appui long) / appui long (seuil atteint).
+InputController.Tapped = Signal.new() :: Signal.Signal<Action>
+InputController.HeldLong = Signal.new() :: Signal.Signal<Action>
+
+local LONG_PRESS = 0.35
+local pressedAt: { [Action]: number } = {}
 
 local held: { [Action]: boolean } = {}
 local device: Device = "keyboard"
@@ -42,6 +66,14 @@ local BINDINGS: { [Action]: { EnumItem } } = {
 	reload = { Enum.KeyCode.R, Enum.KeyCode.ButtonX },
 	weapon1 = { Enum.KeyCode.One },
 	weapon2 = { Enum.KeyCode.Two },
+	inventory = { Enum.KeyCode.Tab, Enum.KeyCode.ButtonSelect },
+	heal = { Enum.KeyCode.Three },
+	battery = { Enum.KeyCode.Four },
+	boost = { Enum.KeyCode.Five },
+	quickCycle = { Enum.KeyCode.DPadDown },
+	ping = { Enum.KeyCode.T, Enum.UserInputType.MouseButton3, Enum.KeyCode.DPadUp },
+	gadget1 = { Enum.KeyCode.DPadLeft },
+	gadget2 = { Enum.KeyCode.DPadRight },
 }
 
 local function classify(inputType: EnumItem): Device?
@@ -74,7 +106,15 @@ function InputController.press(action: Action)
 		return
 	end
 	held[action] = true
+	local stamp = os.clock()
+	pressedAt[action] = stamp
 	InputController.ActionBegan:Fire(action)
+	task.delay(LONG_PRESS, function()
+		if held[action] and pressedAt[action] == stamp then
+			pressedAt[action] = nil
+			InputController.HeldLong:Fire(action)
+		end
+	end)
 end
 
 function InputController.release(action: Action)
@@ -82,6 +122,10 @@ function InputController.release(action: Action)
 		return
 	end
 	held[action] = false
+	if pressedAt[action] ~= nil then
+		pressedAt[action] = nil
+		InputController.Tapped:Fire(action)
+	end
 	InputController.ActionEnded:Fire(action)
 end
 

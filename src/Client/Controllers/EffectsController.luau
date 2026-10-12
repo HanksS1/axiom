@@ -249,6 +249,28 @@ function EffectsController.start()
 		EffectsController.playShot(itemId, muzzle, endpoints, false)
 	end)
 
+	-- Alarme de casier d'AXIOM : onde rouge visible dans son rayon.
+	ClientNet.on("LootAlarm", function(position: Vector3, radius: number)
+		if typeof(position) ~= "Vector3" or type(radius) ~= "number" then
+			return
+		end
+		local ring = Instance.new("Part")
+		ring.Name = "Alarm"
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Size = Vector3.new(0.2, 2, 2)
+		ring.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
+		ring.Color = Color3.fromRGB(255, 59, 59)
+		ring.Material = Enum.Material.Neon
+		ring.Transparency = 0.3
+		decorative(ring)
+		ring.Parent = effectsFolder
+		TweenService:Create(ring, TweenInfo.new(1.2), {
+			Size = Vector3.new(0.2, radius * 2, radius * 2),
+			Transparency = 1,
+		}):Play()
+		Debris:AddItem(ring, 1.3)
+	end)
+
 	ClientNet.on("MeleeSwing", function(attacker: Player?)
 		if attacker and attacker ~= player and attacker.Character then
 			EffectsController.playSwing(attacker.Character)

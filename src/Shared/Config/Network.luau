@@ -27,5 +27,12 @@ return Freeze.deep({
 		MeleeAttack = { rate = 4, burst = 6 },
 		SetParry = { rate = 6, burst = 10 },
 		SetMovement = { rate = 10, burst = 15 },
+		-- Loot et inventaire
+		TakeItem = { rate = 5, burst = 8 },
+		CloseContainer = { rate = 4, burst = 8 },
+		EquipItem = { rate = 4, burst = 8 },
+		UnequipItem = { rate = 4, burst = 8 },
+		DropItem = { rate = 4, burst = 8 },
+		UseConsumable = { rate = 2, burst = 4 },
 	} :: { [string]: Limit },
 })

@@ -89,7 +89,8 @@ tests/
 |---|---|
 | P0 : Fondations | ✅ terminée |
 | P1 : Combat de base | ✅ terminée (à valider dans Studio) |
-| P2 → P10 | à venir |
+| P2 : Loot et inventaire | ✅ terminée (à valider dans Studio) |
+| P3 → P10 | à venir |
 
 Le détail de chaque phase (fichiers, comment tester, limites, questions) est
 dans [`docs/phases/`](docs/phases).

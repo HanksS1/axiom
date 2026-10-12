@@ -13,6 +13,10 @@ local order = {
 	"EffectsController",
 	"WeaponController",
 	"HUDController",
+	"NotificationController",
+	"InventoryController",
+	"ContainerController",
+	"QuickBarController",
 	"TouchControlsController",
 	"DevPanelController",
 }

@@ -62,6 +62,29 @@ local BUTTONS: { ButtonSpec } = {
 		position = UDim2.new(1, -330, 1, -110),
 		color = Theme.orange,
 	},
+	-- Rangée compacte : soins, batterie, Surcharge, sac.
+	{ action = "heal", label = "touch.heal", size = 48, position = UDim2.new(1, -250, 1, -380), color = Theme.green },
+	{
+		action = "battery",
+		label = "touch.battery",
+		size = 48,
+		position = UDim2.new(1, -190, 1, -380),
+		color = Theme.cyan,
+	},
+	{
+		action = "boost",
+		label = "touch.boost",
+		size = 48,
+		position = UDim2.new(1, -130, 1, -380),
+		color = Theme.orange,
+	},
+	{
+		action = "inventory",
+		label = "touch.inventory",
+		size = 48,
+		position = UDim2.new(1, -60, 1, -380),
+		color = Theme.text,
+	},
 }
 
 local container: Frame

@@ -41,6 +41,17 @@ local Remotes: { [string]: RemoteDef } = {
 	ParryResult = { kind = "event", toServer = false }, -- parade réussie / garde brisée
 	ShotFired = { kind = "unreliable", toServer = false }, -- tracés des tirs (autres joueurs)
 	MeleeSwing = { kind = "unreliable", toServer = false }, -- animation de coup (autres joueurs)
+
+	-- Loot et inventaire
+	ContainerSync = { kind = "event", toServer = false }, -- contenu d'un conteneur consulté
+	LootAlarm = { kind = "unreliable", toServer = false }, -- alarme de casier d'AXIOM
+	InventorySync = { kind = "event", toServer = false }, -- sac porté (propriétaire)
+	TakeItem = { kind = "event", toServer = true },
+	CloseContainer = { kind = "event", toServer = true },
+	EquipItem = { kind = "event", toServer = true },
+	UnequipItem = { kind = "event", toServer = true },
+	DropItem = { kind = "event", toServer = true },
+	UseConsumable = { kind = "event", toServer = true },
 }
 
 return table.freeze(Remotes)

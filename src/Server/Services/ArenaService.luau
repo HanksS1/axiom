@@ -20,6 +20,7 @@ local Config = require(Shared.Config)
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local CombatService = require(script.Parent.CombatService)
+local LootService = require(script.Parent.LootService)
 
 local Dev = Config.Dev
 
@@ -181,6 +182,31 @@ local function spawnDummy(arena: Instance, spec: any)
 	CombatService.register(fighter)
 end
 
+-- Caisses de test : 6 de ravitaillement, 3 coffres militaires, 1 casier d'AXIOM.
+local CRATES: { { position: Vector3, crateType: string } } = {
+	{ position = Vector3.new(25, 0, 10), crateType = "supply" },
+	{ position = Vector3.new(-25, 0, 10), crateType = "supply" },
+	{ position = Vector3.new(0, 0, 30), crateType = "supply" },
+	{ position = Vector3.new(60, 0, -20), crateType = "supply" },
+	{ position = Vector3.new(-60, 0, -20), crateType = "supply" },
+	{ position = Vector3.new(-40, 0, 55), crateType = "supply" },
+	{ position = Vector3.new(45, 8.5, 50), crateType = "military" },
+	{ position = Vector3.new(-65, 0, 60), crateType = "military" },
+	{ position = Vector3.new(65, 0, -60), crateType = "military" },
+	{ position = Vector3.new(0, 0, 70), crateType = "axiom_locker" },
+}
+
+local function spawnCrate(spec: { position: Vector3, crateType: string })
+	local container = LootService.spawnCrate(CFrame.new(spec.position), spec.crateType)
+	-- Bac à sable : la caisse ouverte est remplacée par une neuve après un délai.
+	container.model:GetAttributeChangedSignal("Opened"):Once(function()
+		task.delay(Config.Loot.arenaRespawnDelay, function()
+			LootService.remove(container)
+			spawnCrate(spec)
+		end)
+	end)
+end
+
 function ArenaService.init() end
 
 function ArenaService.start()
@@ -197,6 +223,9 @@ function ArenaService.start()
 	local arena = buildArena()
 	for _, spec in Dev.dummies do
 		task.spawn(spawnDummy, arena, spec)
+	end
+	for _, spec in CRATES do
+		spawnCrate(spec)
 	end
 
 	-- Les mannequins détruits réapparaissent.

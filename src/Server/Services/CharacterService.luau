@@ -17,12 +17,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
-local Types = require(Shared.Types)
+local Freeze = require(Shared.Util.Freeze)
+local InventoryLogic = require(Shared.Items.InventoryLogic)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local CombatService = require(script.Parent.CombatService)
 local DataService = require(script.Parent.DataService)
+local InventoryService = require(script.Parent.InventoryService)
 
 type Fighter = Fighter.Fighter
 
@@ -119,24 +121,25 @@ local function applyStance(fighter: Fighter)
 	end
 end
 
--- Équipement de combat : profil du joueur, sinon kit de base.
-local function equipmentFor(player: Player): (Fighter.Equipment, { [string]: number })
+--[[
+	Sac de partie de départ. Par défaut (arène de test, stand de tir) : une
+	COPIE de l'équipement du profil (bac à sable : rien n'est perdu), ou le
+	kit de base si le joueur n'a pas d'arme. Le déroulé de partie (P3)
+	remplace ce fournisseur par le vrai sac de la partie.
+]]
+local function defaultLoadout(player: Player): InventoryLogic.Inventory?
 	local profile = DataService.waitForProfile(player, 10)
 	if profile and (profile.loadout.ranged or profile.loadout.melee) then
-		local loadout = profile.loadout
-		return {
-			ranged = loadout.ranged,
-			melee = loadout.melee,
-			helmet = loadout.helmet,
-			vest = loadout.vest,
-		},
-			Fighter.cellsFromBag(profile.bag)
+		return InventoryLogic.new(Freeze.copy(profile.loadout), Freeze.copy(profile.bag))
 	end
-	local kitLoadout: Types.Loadout, kitBag = ItemFactory.createBaseKit()
-	return {
-		ranged = kitLoadout.ranged,
-		melee = kitLoadout.melee,
-	}, Fighter.cellsFromBag(kitBag)
+	local kitLoadout, kitBag = ItemFactory.createBaseKit()
+	return InventoryLogic.new(kitLoadout, kitBag)
+end
+
+local loadoutProvider: (player: Player) -> InventoryLogic.Inventory? = defaultLoadout
+
+function CharacterService.setLoadoutProvider(provider: ((player: Player) -> InventoryLogic.Inventory?)?)
+	loadoutProvider = provider or defaultLoadout
 end
 
 local function setupCharacter(player: Player, character: Model)
@@ -172,12 +175,19 @@ local function setupCharacter(player: Player, character: Model)
 		end
 	end)
 
-	local equipment, cells = equipmentFor(player)
-	if character.Parent == nil or player.Character ~= character then
+	local bag = loadoutProvider(player)
+	if bag == nil or character.Parent == nil or player.Character ~= character then
 		return
 	end
-	local fighter = Fighter.new("player", player, character, humanoid, root, equipment, Fighter.simpleInventory(cells))
+	local equipped = bag.equipped
+	local fighter = Fighter.new("player", player, character, humanoid, root, {
+		ranged = equipped.ranged,
+		melee = equipped.melee,
+		helmet = equipped.helmet,
+		vest = equipped.vest,
+	}, Fighter.simpleInventory({}))
 	CombatService.register(fighter)
+	InventoryService.attach(fighter, bag)
 	updateWeaponVisual(character)
 	applyStance(fighter)
 

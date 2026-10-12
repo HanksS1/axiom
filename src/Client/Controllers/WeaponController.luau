@@ -27,6 +27,7 @@ local CameraController = require(script.Parent.CameraController)
 local EffectsController = require(script.Parent.EffectsController)
 local InputController = require(script.Parent.InputController)
 local MovementController = require(script.Parent.MovementController)
+local PanelState = require(script.Parent.Parent.UI.PanelState)
 
 local Combat = Config.Combat
 
@@ -49,6 +50,9 @@ export type Snapshot = {
 	meleeCondition: number?,
 	parrying: boolean,
 	spread: number, -- degrés (réticule dynamique)
+	usingItemId: string?, -- consommable en cours d'utilisation
+	usingProgress: number?, -- 0..1
+	boostRemaining: number?, -- secondes de Surcharge restantes
 }
 
 local player = Players.LocalPlayer
@@ -63,6 +67,8 @@ local reserve = 0
 local meleeId: string? = nil
 local meleeCondition: number? = nil
 local meleeDef: any = nil
+local using: { itemId: string, endsAt: number, startedAt: number }? = nil
+local boostUntil = 0
 local lastMeleeAt = -math.huge
 local parrying = false
 local triggerPending = false -- un appui de détente non encore consommé (semi-auto, rafale, mêlée)
@@ -123,6 +129,13 @@ local function onCombatState(state: { [string]: any })
 	else
 		rangedId, rangedDef, rangedState, rangedCondition = nil, nil, nil, nil
 	end
+	if type(state.using) == "table" and type(state.using.itemId) == "string" then
+		local startedAt = if using and using.itemId == state.using.itemId then using.startedAt else serverNow()
+		using = { itemId = state.using.itemId, endsAt = state.using.endsAt, startedAt = startedAt }
+	else
+		using = nil
+	end
+	boostUntil = if type(state.boostUntil) == "number" then state.boostUntil else 0
 	local melee = state.melee
 	if type(melee) == "table" and type(melee.itemId) == "string" then
 		local info = ItemCatalog.get(melee.itemId)
@@ -289,7 +302,11 @@ local function update()
 		WeaponLogic.updateHeat(state, now)
 	end
 
-	if not alive() or stunned() then
+	if not alive() or stunned() or PanelState.anyOpen() then
+		return
+	end
+	local character = player.Character
+	if character and character:GetAttribute("Using") == true then
 		return
 	end
 	local wantsFire = InputController.isHeld("fire") or triggerPending
@@ -375,6 +392,11 @@ function WeaponController.snapshot(): Snapshot
 		meleeCondition = meleeCondition,
 		parrying = parrying,
 		spread = currentSpread(),
+		usingItemId = if using and now < using.endsAt then using.itemId else nil,
+		usingProgress = if using and now < using.endsAt
+			then math.clamp((now - using.startedAt) / math.max(0.01, using.endsAt - using.startedAt), 0, 1)
+			else nil,
+		boostRemaining = if boostUntil > now then boostUntil - now else nil,
 	}
 end
 
@@ -386,8 +408,6 @@ function WeaponController.start()
 	InputController.ActionBegan:Connect(function(action)
 		if action == "fire" then
 			triggerPending = true
-		elseif action == "reload" then
-			WeaponController.reload()
 		elseif action == "switch" then
 			WeaponController.switchTo(if activeSlot == "ranged" then "melee" else "ranged")
 		elseif action == "weapon1" then
@@ -402,6 +422,13 @@ function WeaponController.start()
 			else
 				CameraController.setAiming(true)
 			end
+		end
+	end)
+
+	-- Recharge sur appui court : à la manette, X maintenu sert à interagir (5.3).
+	InputController.Tapped:Connect(function(action)
+		if action == "reload" then
+			WeaponController.reload()
 		end
 	end)
 
