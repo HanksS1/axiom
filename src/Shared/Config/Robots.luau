@@ -40,6 +40,8 @@ export type RobotDef = {
 	guaranteedItems: { min: number, max: number }?,
 	size: Vector3, -- encombrement du modèle provisoire
 	loot: { LootEntry },
+	stationary: boolean?, -- fixe (tourelle) : ne se déplace jamais
+	color: Color3?, -- couleur du modèle provisoire (Gardiens propres à une carte)
 }
 
 local robots: { [string]: RobotDef } = {
@@ -145,6 +147,27 @@ local robots: { [string]: RobotDef } = {
 		size = Vector3.new(2.4, 6, 1.4),
 		loot = {
 			{ itemId = "vibro_blade", chance = 0.10 },
+		},
+	},
+	-- Tourelle d'AXIOM (Terres Brûlées, base Kestrel) : fixe, destructible.
+	turret = {
+		id = "turret",
+		health = 250,
+		damage = 8,
+		attack = "ranged",
+		scorePoints = 30,
+		visionRange = 90,
+		flying = false,
+		speed = 0,
+		stationary = true,
+		fireInterval = 0.4,
+		attackRange = 85,
+		preferredDistance = 0,
+		conditionShift = 0,
+		size = Vector3.new(3, 4, 3),
+		loot = {
+			{ itemId = "cell_heavy", chance = 0.6, quantity = 15 },
+			{ pool = "consumable", chance = 0.25 },
 		},
 	},
 	warden = {

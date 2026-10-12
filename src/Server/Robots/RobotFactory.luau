@@ -54,8 +54,9 @@ export type Built = {
 	eye: BasePart,
 }
 
-function RobotFactory.build(robotId: string, cframe: CFrame): Built
-	local def = Config.Robots.byId[robotId]
+-- `override` : définition modifiée (Gardien propre à une carte).
+function RobotFactory.build(robotId: string, cframe: CFrame, override: any?): Built
+	local def = override or Config.Robots.byId[robotId]
 	assert(def ~= nil, `robot inconnu : {robotId}`)
 	local size = def.size
 	local model = Instance.new("Model")
@@ -72,7 +73,7 @@ function RobotFactory.build(robotId: string, cframe: CFrame): Built
 	model.PrimaryPart = root
 
 	-- Corps (touchable par les tirs).
-	local body = part(model, "Body", size, CFrame.new(), root, METAL, Enum.Material.Metal)
+	local body = part(model, "Body", size, CFrame.new(), root, def.color or METAL, Enum.Material.Metal)
 	body.CanQuery = true
 	-- Tête et yeux.
 	local headSize = Vector3.new(size.X * 0.6, math.min(1.2, size.Y * 0.25), size.Z * 0.7)

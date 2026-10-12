@@ -28,6 +28,7 @@ local Config = require(Shared.Config)
 local Guard = require(Shared.Util.Guard)
 local Matchmaking = require(Shared.Match.Matchmaking)
 local Types = require(Shared.Types)
+local try = require(Shared.Util.Try)
 
 local MatchStore = require(script.Parent.Parent.Matchmaking.MatchStore)
 local PlaceRole = require(script.Parent.Parent.Matchmaking.PlaceRole)
@@ -283,6 +284,10 @@ local function startLocal(composition: Matchmaking.Composition)
 	})
 end
 
+-- Files en cours de traitement sur CE serveur : le verrou MemoryStore est au nom
+-- du serveur, il ne protège pas contre deux passes qui se chevauchent ici.
+local busyKeys: { [string]: boolean } = {}
+
 -- Matchmaker en ligne : compose, réserve un serveur, publie les affectations.
 local function matchmakeRemote(key: string)
 	if not MatchStore.tryLock(key, jobId) then
@@ -324,6 +329,7 @@ local function matchmakeRemote(key: string)
 		teams = teams,
 		bots = composition.bots,
 		createdAt = os.time(),
+		mapId = Config.Maps.list[math.random(1, #Config.Maps.list)],
 	})
 	if not written then
 		return
@@ -368,8 +374,15 @@ local function matchmakerLoop()
 						startLocal(composition)
 					end
 				end
-			else
-				task.spawn(matchmakeRemote, key)
+			elseif not busyKeys[key] then
+				busyKeys[key] = true
+				task.spawn(function()
+					local ok, err = try(matchmakeRemote, key)
+					busyKeys[key] = nil
+					if not ok then
+						warn(`[QueueService] matchmaking de {key} : {err}`)
+					end
+				end)
 			end
 		end
 	end

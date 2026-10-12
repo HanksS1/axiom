@@ -270,8 +270,10 @@ local function placeMarkers(arena: Instance)
 end
 
 -- L'arène de test est-elle la carte courante ?
+-- La carte active est-elle l'arène de test (et non une vraie carte) ?
 function ArenaService.isArena(): boolean
-	return Workspace:FindFirstChild("Arena") ~= nil
+	local root = MapService.root()
+	return root ~= nil and root.Name == "Arena"
 end
 
 -- Position dans l'arène greybox (zone de combat hors partie : entraînement).
@@ -286,7 +288,11 @@ end
 function ArenaService.init() end
 
 function ArenaService.start()
-	-- Arène greybox : en Studio, et en ligne tant que les cartes (P7) n'existent pas.
+	-- Arène d'entraînement greybox : en Studio, et sur le hub en ligne tant que le vrai
+	-- Terminus n'est pas modélisé. Jamais sur un serveur de partie (les cartes suffisent).
+	if PlaceRole.isMatchServer() then
+		return
+	end
 	if not (if RunService:IsStudio() then Dev.testArenaInStudio else Dev.greyboxOnline) then
 		return
 	end
@@ -298,16 +304,11 @@ function ArenaService.start()
 		baseplate:Destroy()
 	end
 	local arena = buildArena()
-	-- Serveur de partie : ni mannequins, ni bac à sable.
-	if PlaceRole.isMatchServer() then
-		sandbox = false
-		placeMarkers(arena)
-		return
-	end
+	placeMarkers(arena)
+	MapService.setRoot(arena)
 	for _, spec in Dev.dummies do
 		task.spawn(spawnDummy, arena, spec)
 	end
-	placeMarkers(arena)
 	ArenaService.spawnSandboxCrates()
 
 	-- Les mannequins détruits réapparaissent.

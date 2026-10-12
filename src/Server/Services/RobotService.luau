@@ -61,12 +61,25 @@ type Robot = {
 	alertedAt: Vector3?,
 	wave: Vector3?, -- vague d'alerte : extraction visée
 	eye: BasePart,
+	stationary: boolean, -- tourelle, bras fixé au plafond : ne se déplace jamais
+	behavior: string?, -- Gardiens : "burrow" (s'enfouit), "phase" (devient intangible)
+	dormantRadius: number?, -- Exécuteur de la chaîne : inactif tant que personne n'approche
+	nextSpecialAt: number,
+	hiddenUntil: number,
+	partState: { [BasePart]: { transparency: number, query: boolean } }?,
+}
+
+export type SpawnOptions = {
+	override: { [string]: any }?, -- valeurs remplaçant celles de la config (Gardien d'une carte)
+	behavior: string?,
+	dormantRadius: number?,
 }
 
 local robots: { [Fighter]: Robot } = {}
 local folder: Folder?
 local random = Random.new()
 local modeId = "easy"
+local visionMultiplier = 1 -- coupures de courant (Noyau Zéro)
 
 local visionParams = RaycastParams.new()
 visionParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -95,7 +108,8 @@ local function groundAt(position: Vector3): Vector3
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { robotFolder() }
-	local hit = Workspace:Raycast(position + Vector3.new(0, 20, 0), Vector3.new(0, -80, 0), params)
+	-- Depuis juste au-dessus du point : un étage supérieur ne doit pas être pris pour le sol.
+	local hit = Workspace:Raycast(position + Vector3.new(0, 4, 0), Vector3.new(0, -80, 0), params)
 	return if hit then hit.Position else position
 end
 
@@ -149,7 +163,7 @@ local function perceive(robot: Robot): { RobotBrain.VisibleTarget }
 		if (other.kind == "player" or other.kind == "bot") and Fighter.isAlive(other) then
 			local offset = other.root.Position - eyePosition
 			local distance = offset.Magnitude
-			if distance <= robot.def.visionRange then
+			if distance <= robot.def.visionRange * visionMultiplier then
 				-- Très près : perçu même hors du cône (bruit de pas, contact).
 				if distance < 8 or RobotBrain.inCone(forward, offset, AI.visionAngle) then
 					visionParams.FilterDescendantsInstances = { robotFolder(), other.character }
@@ -195,6 +209,9 @@ end
 
 -- Déplacement : direct si la voie est libre, sinon chemin calculé (limité dans le temps).
 local function moveTo(robot: Robot, point: Vector3)
+	if robot.stationary then
+		return
+	end
 	local root = robot.fighter.root
 	if robot.def.flying then
 		local hover = root:FindFirstChild("Hover")
@@ -251,6 +268,9 @@ local function moveTo(robot: Robot, point: Vector3)
 end
 
 local function stop(robot: Robot)
+	if robot.stationary then
+		return
+	end
 	if robot.def.flying then
 		local hover = robot.fighter.root:FindFirstChild("Hover")
 		if hover and hover:IsA("AlignPosition") then
@@ -314,6 +334,93 @@ local function patrolPoint(robot: Robot): Vector3
 	return robot.home + Vector3.new(math.cos(angle) * distance, 0, math.sin(angle) * distance)
 end
 
+-- Gardiens : rend le robot invisible / intangible (enfoui, projection instable).
+local function setHidden(robot: Robot, hidden: boolean, transparency: number)
+	local state = robot.partState
+	if state == nil then
+		local created = {}
+		for _, descendant in robot.fighter.character:GetDescendants() do
+			if descendant:IsA("BasePart") and descendant ~= robot.fighter.root then
+				created[descendant] = { transparency = descendant.Transparency, query = descendant.CanQuery }
+			end
+		end
+		robot.partState = created
+		state = created
+	end
+	robot.fighter.character:SetAttribute("Hidden", hidden)
+	for part, original in state :: { [BasePart]: { transparency: number, query: boolean } } do
+		if part.Parent then
+			part.Transparency = if hidden then math.max(original.transparency, transparency) else original.transparency
+			part.CanQuery = if hidden then false else original.query
+		end
+	end
+end
+
+local function nearestTargetDistance(position: Vector3): number
+	local best = math.huge
+	for _, other in CombatService.allFighters() do
+		if (other.kind == "player" or other.kind == "bot") and Fighter.isAlive(other) then
+			best = math.min(best, (other.root.Position - position).Magnitude)
+		end
+	end
+	return best
+end
+
+--[[
+	Comportement spécial des Gardiens, à intervalles réguliers face à une cible :
+	- burrow : s'enfouit, puis surgit sous la cible (dégâts de zone) ;
+	- phase : devient intangible et se déplace par à-coups.
+	Retourne true si le robot est caché (la suite de sa logique est sautée).
+]]
+local function special(robot: Robot, target: Fighter?, time: number): boolean
+	local behavior = robot.behavior
+	if behavior ~= "burrow" and behavior ~= "phase" then
+		return false
+	end
+	local params = (Config.Maps.guardianBehaviors :: any)[behavior]
+	if robot.hiddenUntil > 0 then
+		if time < robot.hiddenUntil then
+			return true
+		end
+		-- Réapparition.
+		robot.hiddenUntil = 0
+		local fighter = robot.fighter
+		local anchor = if target then target.root.Position else fighter.root.Position
+		local angle = random:NextNumber(0, math.pi * 2)
+		local distance = if behavior == "burrow" then 4 else params.jump
+		local spot = groundAt(anchor + Vector3.new(math.cos(angle), 0, math.sin(angle)) * distance)
+		fighter.character:PivotTo(CFrame.new(spot + Vector3.new(0, robot.def.size.Y / 2 + 0.2, 0)))
+		setHidden(robot, false, 0)
+		if behavior == "burrow" then
+			for _, other in CombatService.allFighters() do
+				if
+					other ~= fighter
+					and other.kind ~= "robot"
+					and Fighter.isAlive(other)
+					and (other.root.Position - spot).Magnitude <= params.surfaceRadius
+				then
+					CombatService.applyDamage(other, params.surfaceDamage * mode().robots.damage, fighter, {
+						sourcePosition = spot,
+					})
+				end
+			end
+			ServerNet.fireAll("MapEvent", "surface", spot)
+		end
+		return false
+	end
+	if target and time >= robot.nextSpecialAt then
+		local distance = (target.root.Position - robot.fighter.root.Position).Magnitude
+		if behavior == "phase" or distance >= params.minDistance then
+			robot.nextSpecialAt = time + params.every
+			robot.hiddenUntil = time + params.hidden
+			setHidden(robot, true, if behavior == "burrow" then 1 else 0.75)
+			stop(robot)
+			return true
+		end
+	end
+	return false
+end
+
 local function update(robot: Robot, dt: number)
 	local fighter = robot.fighter
 	if not Fighter.isAlive(fighter) then
@@ -329,6 +436,14 @@ local function update(robot: Robot, dt: number)
 		stop(robot)
 		return
 	end
+	-- Exécuteur en cours de fabrication : s'active à l'approche ou s'il est touché.
+	local dormant = robot.dormantRadius
+	if dormant then
+		if nearestTargetDistance(fighter.root.Position) > dormant and robot.brain.state == "patrol" then
+			return
+		end
+		robot.dormantRadius = nil
+	end
 
 	local target = RobotBrain.step(robot.brain, {
 		now = time,
@@ -340,6 +455,9 @@ local function update(robot: Robot, dt: number)
 	robot.noise = nil
 	robot.alertedAt = nil
 	local state = robot.brain.state
+	if special(robot, if target then target.id :: Fighter else nil, time) then
+		return
+	end
 
 	if target then
 		local targetFighter = target.id :: Fighter
@@ -396,13 +514,26 @@ end
 	Fait apparaître un robot. `garrison` : posté dans une zone à risque.
 	Les PV sont multipliés selon le mode.
 ]]
-function RobotService.spawn(robotId: string, position: Vector3, garrison: boolean): Fighter
+function RobotService.spawn(robotId: string, position: Vector3, garrison: boolean, options: SpawnOptions?): Fighter
 	local def = Config.Robots.byId[robotId]
+	local opts: SpawnOptions = options or {}
+	local override = opts.override
+	if override then
+		local merged = table.clone(def) :: any
+		for key, value in override do
+			merged[key] = value
+		end
+		def = merged
+	end
 	local ground = groundAt(position)
 	local height = if def.flying then 8 else def.size.Y / 2 + 0.2
 	local cframe = CFrame.new(ground + Vector3.new(0, height, 0))
 		* CFrame.Angles(0, random:NextNumber(0, math.pi * 2), 0)
-	local built = RobotFactory.build(robotId, cframe)
+	local built = RobotFactory.build(robotId, cframe, if override then def else nil)
+	local stationary = def.stationary == true or opts.behavior == "anchored"
+	if stationary then
+		built.root.Anchored = true
+	end
 	built.model.Parent = robotFolder()
 	pcall(function()
 		built.root:SetNetworkOwner(nil)
@@ -435,6 +566,12 @@ function RobotService.spawn(robotId: string, position: Vector3, garrison: boolea
 		alertedAt = nil,
 		wave = nil,
 		eye = built.eye,
+		stationary = stationary,
+		behavior = opts.behavior,
+		dormantRadius = opts.dormantRadius,
+		nextSpecialAt = now() + 4,
+		hiddenUntil = 0,
+		partState = nil,
 	}
 	return fighter
 end
@@ -467,21 +604,78 @@ local function patrolSpawn(): Vector3
 	return marker.position + Vector3.new(random:NextNumber(-12, 12), 0, random:NextNumber(-12, 12))
 end
 
+-- Emplacement libre (pas dans un mur ni une étagère) autour d'un point, sinon le point lui-même.
+local overlapParams = OverlapParams.new()
+overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+local function openSpot(center: Vector3, radius: number, size: Vector3): Vector3
+	overlapParams.FilterDescendantsInstances = { robotFolder() }
+	for attempt = 1, 8 do
+		local offset = if attempt == 1 and radius <= 0
+			then Vector3.zero
+			else Vector3.new(random:NextNumber(-radius, radius), 0, random:NextNumber(-radius, radius))
+		local ground = groundAt(center + offset)
+		local box = CFrame.new(ground + Vector3.new(0, size.Y / 2 + 0.6, 0))
+		local blocking = Workspace:GetPartBoundsInBox(box, size, overlapParams)
+		local solid = false
+		for _, part in blocking do
+			if part.CanCollide then
+				solid = true
+				break
+			end
+		end
+		if not solid then
+			return ground
+		end
+	end
+	return groundAt(center)
+end
+
+export type PopulateOptions = {
+	total: number?, -- effectif réduit (arène de test)
+	guardian: { robotId: string, behavior: string?, overrides: { [string]: any } }?,
+	wakeRadius: number?, -- Exécuteurs dormants (Forge-7)
+}
+
 --[[
-	Population initiale de la carte (section 10.3). `total` peut être réduit
-	pour une petite carte (arène de test).
+	Population initiale de la carte (section 10.3) :
+	- robots fixes posés sur la carte (repères RobotSpawn avec RobotId :
+	  tourelles, Exécuteurs dormants) ;
+	- Gardien de la carte dans la zone à risque principale ;
+	- 60 % en garnison dans les zones à risque, 40 % en patrouilles.
 ]]
-function RobotService.populate(newModeId: string, total: number?)
+function RobotService.populate(newModeId: string, options: PopulateOptions?)
 	RobotService.clear()
 	modeId = newModeId
-	local count = total or random:NextInteger(Density.minActive, Density.maxActive)
+	visionMultiplier = 1
+	local opts: PopulateOptions = options or {}
+	local count = opts.total or random:NextInteger(Density.minActive, Density.maxActive)
+
+	-- Robots fixes de la carte.
+	for _, marker in MapService.robotSpawns() do
+		local robotId = marker.attributes.RobotId
+		if type(robotId) == "string" and Config.Robots.byId[robotId] and count > 0 then
+			RobotService.spawn(robotId, marker.position, true, {
+				dormantRadius = if marker.attributes.Dormant == true then opts.wakeRadius or 18 else nil,
+			})
+			count -= 1
+		end
+	end
+
 	local zones = MapService.riskZones()
 	local garrisonCount = if #zones > 0 then math.floor(count * Density.garrisonShare + 0.5) else 0
 
 	-- Gardien dans la zone à risque principale.
 	for _, zone in zones do
 		if zone.attributes.Main == true then
-			RobotService.spawn("warden", zone.position, true)
+			local guardian = opts.guardian
+			if guardian then
+				RobotService.spawn(guardian.robotId, zone.position, true, {
+					override = guardian.overrides,
+					behavior = guardian.behavior,
+				})
+			else
+				RobotService.spawn("warden", zone.position, true)
+			end
 			garrisonCount -= 1
 			break
 		end
@@ -490,9 +684,9 @@ function RobotService.populate(newModeId: string, total: number?)
 	while placed < garrisonCount and #zones > 0 do
 		local zone = zones[(placed % #zones) + 1]
 		local radius = zone.attributes.Radius or AI.garrisonRadius
-		local offset = Vector3.new(random:NextNumber(-radius, radius), 0, random:NextNumber(-radius, radius))
 		local robotId = weightedPick(Density.garrison)
-		RobotService.spawn(robotId, zone.position + offset, true)
+		local spot = openSpot(zone.position, radius, Config.Robots.byId[robotId].size)
+		RobotService.spawn(robotId, spot + Vector3.new(0, 1, 0), true)
 		placed += 1
 	end
 	local patrols = count - math.max(0, garrisonCount) - (if #zones > 0 then 1 else 0)
@@ -508,6 +702,11 @@ function RobotService.populate(newModeId: string, total: number?)
 			spawned += 1
 		end
 	end
+end
+
+-- Coupures de courant : la vision des robots est réduite.
+function RobotService.setVisionMultiplier(multiplier: number)
+	visionMultiplier = math.clamp(multiplier, 0.1, 1)
 end
 
 -- Vague d'alerte (12:00) : 6 à 10 robots convergent vers les extractions.

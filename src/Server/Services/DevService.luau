@@ -18,6 +18,7 @@
 	                    avec tous les joueurs du serveur, sur la carte courante
 	- endMatch        : termine la partie en cours
 	- skipTime <s>    : avance le chrono de la partie (test de l'alerte et de la Purge)
+	- nextMap         : carte des prochaines parties (hasard, 4 cartes, arène de test)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -33,6 +34,7 @@ local Leveling = require(Shared.Progression.Leveling)
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local DataService = require(script.Parent.DataService)
+local MapRuntimeService = require(script.Parent.MapRuntimeService)
 local MatchService = require(script.Parent.MatchService)
 local RobotService = require(script.Parent.RobotService)
 local Players = game:GetService("Players")
@@ -56,6 +58,7 @@ local COMMANDS = {
 	"skipTime",
 	"spawnRobots",
 	"clearRobots",
+	"nextMap",
 }
 
 local MODES = { "easy", "medium", "hard" }
@@ -175,13 +178,25 @@ local handlers: { [string]: (player: Player, amount: number?) -> () } = {
 	end,
 	spawnRobots = function()
 		if not MatchService.isRunning() then
-			RobotService.populate("easy", Config.Dev.arenaRobots)
+			RobotService.populate("easy", { total = Config.Dev.arenaRobots })
 		end
 	end,
 	clearRobots = function()
 		if not MatchService.isRunning() then
 			RobotService.clear()
 		end
+	end,
+	-- Carte des prochaines parties : au hasard → chacune des 4 cartes → arène de test.
+	nextMap = function(player)
+		local choices = { "random" }
+		for _, mapId in Config.Maps.list do
+			table.insert(choices, mapId)
+		end
+		table.insert(choices, "arena")
+		local index = table.find(choices, MapRuntimeService.devChoice) or 1
+		local choice = choices[index % #choices + 1]
+		MapRuntimeService.devChoice = choice
+		ServerNet.notify(player, if Config.Maps.byId[choice] then "map." .. choice else "dev.map." .. choice)
 	end,
 	skipTime = function(_player, amount)
 		MatchService.skip(math.clamp(amount or 60, 1, 900))

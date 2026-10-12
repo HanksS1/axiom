@@ -42,6 +42,7 @@ export type MatchConfig = {
 	teams: { { number } },
 	bots: number,
 	createdAt: number,
+	mapId: string?, -- carte tirée par le matchmaker
 }
 
 export type QueueStats = {
@@ -179,6 +180,9 @@ function MatchStore.readMatch(serverId: string): MatchConfig?
 	end
 	if config.format ~= "solo" and config.format ~= "duo" then
 		return nil
+	end
+	if config.mapId ~= nil and Config.Maps.byId[config.mapId] == nil then
+		config.mapId = nil -- carte inconnue : tirage au hasard sur le serveur de partie
 	end
 	return config
 end

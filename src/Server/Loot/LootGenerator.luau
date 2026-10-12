@@ -120,7 +120,7 @@ function LootGenerator.crate(crateId: string, modeId: string, rng: Rng, create: 
 		local count = rng:NextInteger(def.equipment.min, def.equipment.max)
 		for index = 1, count do
 			local minimum = if index == 1 then def.minCondition else nil
-			local itemId = LootGenerator.pick("equipment", rng)
+			local itemId = LootGenerator.pick(def.equipmentPool or "equipment", rng)
 			add(create(itemId, { condition = LootGenerator.rollCondition(modeId, rng, 0, minimum) }))
 		end
 	end
@@ -140,7 +140,7 @@ function LootGenerator.crate(crateId: string, modeId: string, rng: Rng, create: 
 	while budget - spent > Config.Loot.fillThreshold and #items < def.maxItems do
 		local before = spent
 		-- Quantité maximale cohérente avec le budget restant (au moins 1).
-		local consumableId = LootGenerator.pick("consumable", rng)
+		local consumableId = LootGenerator.pick(def.consumablePool or "consumable", rng)
 		local info = ItemCatalog.get(consumableId) :: ItemCatalog.ItemInfo
 		local unitValue = info.baseValue / (info.stackSize :: number)
 		local maxQuantity = math.max(1, math.ceil((budget - spent) / unitValue))

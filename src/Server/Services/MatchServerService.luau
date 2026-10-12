@@ -159,6 +159,7 @@ local function run()
 		players = players,
 		teams = teams,
 		mercenaries = MM.matchSize - #players,
+		mapId = config.mapId,
 	})
 end
 

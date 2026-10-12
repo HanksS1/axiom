@@ -44,6 +44,7 @@ local EconomyRules = require(script.Parent.Parent.Economy.EconomyRules)
 local GadgetService = require(script.Parent.GadgetService)
 local ExtractionService = require(script.Parent.ExtractionService)
 local LootService = require(script.Parent.LootService)
+local MapRuntimeService = require(script.Parent.MapRuntimeService)
 local MapService = require(script.Parent.MapService)
 local MercenaryService = require(script.Parent.MercenaryService)
 local MovementGuardService = require(script.Parent.MovementGuardService)
@@ -73,6 +74,7 @@ export type StartConfig = {
 	players: { Player },
 	teams: { { Player } }?, -- duo : paires imposées (sinon formées dans l'ordre)
 	mercenaries: number?, -- places complétées par des mercenaires IA
+	mapId: string?, -- carte imposée (sinon tirée au hasard ; "arena" = arène de test)
 }
 
 local MatchService = {}
@@ -500,6 +502,14 @@ function MatchService.begin(config: StartConfig): boolean
 	table.clear(participants)
 	table.clear(teams)
 
+	-- Carte : une des 4 cartes (au hasard ou imposée), ou l'arène de test.
+	local mapId = config.mapId or MapRuntimeService.pick()
+	if mapId == "arena" or not MapRuntimeService.load(mapId) then
+		MapRuntimeService.unload()
+		mapId = "arena"
+	end
+	state:SetAttribute("MapId", mapId)
+
 	-- Équipes : solo = une équipe par joueur ; duo = paires.
 	local groups: { { Player } } = config.teams or {}
 	if config.teams == nil then
@@ -609,7 +619,12 @@ function MatchService.begin(config: StartConfig): boolean
 	end
 	ExtractionService.setup(random, aliveMembers)
 	-- Robots : population réduite dans l'arène de test (petite carte).
-	RobotService.populate(modeId, if ArenaService.isArena() then Config.Dev.arenaRobots else nil)
+	local mapDef = (Config.Maps.byId :: any)[mapId]
+	RobotService.populate(modeId, {
+		total = if ArenaService.isArena() then Config.Dev.arenaRobots else nil,
+		guardian = MapRuntimeService.guardian(),
+		wakeRadius = if mapDef then mapDef.dormantWakeRadius else nil,
+	})
 
 	CharacterService.setLoadoutProvider(function(player)
 		local participant = participants[player]
@@ -658,6 +673,7 @@ function MatchService.begin(config: StartConfig): boolean
 	end
 
 	startTime = now()
+	MapRuntimeService.startMechanics(startTime)
 	-- Mercenaires IA : sur les points de départ restants.
 	local mercenaries = math.max(0, (config.mercenaries or 0) - #partners)
 	if ArenaService.isArena() then
@@ -700,6 +716,7 @@ function MatchService.finish()
 	ReviveService.clearAll()
 	RobotService.clear()
 	MercenaryService.clear()
+	MapRuntimeService.stop()
 	CombatService.setDeathHandler(nil)
 	CharacterService.setLoadoutProvider(nil)
 	MatchService.Ended:Fire()
@@ -710,6 +727,10 @@ function MatchService.finish()
 		end
 		LootService.clearAll()
 		GadgetService.reset()
+		-- Serveur qui accueille aussi le Terminus : la carte disparaît, l'arène redevient active.
+		if returnHandler == nil then
+			MapRuntimeService.unload()
+		end
 		Players.CharacterAutoLoads = true
 		for player in participants do
 			player:SetAttribute("TeamId", nil)

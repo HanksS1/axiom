@@ -84,6 +84,7 @@ local claimed: { [LootService.Container]: Mercenary } = {}
 local folder: Folder? = nil
 local random = Random.new()
 local modeId = "easy"
+local visionMultiplier = 1 -- coupures de courant (Noyau Zéro)
 local startTime = 0
 local alerted = false
 
@@ -210,7 +211,11 @@ local function perceive(merc: Mercenary): Fighter?
 		end
 		local offset = other.root.Position - position
 		local distance = offset.Magnitude
-		if distance > AI.visionRange then
+		if distance > AI.visionRange * visionMultiplier then
+			continue
+		end
+		-- Gardien enfoui / intangible : invisible.
+		if other.character:GetAttribute("Hidden") == true then
 			continue
 		end
 		if distance > AI.closeAwareness and not RobotBrain.inCone(forward, offset, AI.visionAngle) then
@@ -735,6 +740,10 @@ function MercenaryService.count(): number
 		end
 	end
 	return count
+end
+
+function MercenaryService.setVisionMultiplier(multiplier: number)
+	visionMultiplier = math.clamp(multiplier, 0.1, 1)
 end
 
 function MercenaryService.isMercenary(fighter: Fighter): boolean

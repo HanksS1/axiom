@@ -94,7 +94,8 @@ tests/
 | P4 : Robots | ✅ terminée (à valider dans Studio) |
 | P5 : Hub et économie | ✅ terminée (à valider dans Studio) |
 | P6 : Matchmaking | ✅ terminée (à valider dans Studio et en ligne) |
-| P7 → P10 | à venir |
+| P7 : Cartes | ✅ terminée en greybox (à valider dans Studio) |
+| P8 → P10 | à venir |
 
 Le détail de chaque phase (fichiers, comment tester, limites, questions) est
 dans [`docs/phases/`](docs/phases).
