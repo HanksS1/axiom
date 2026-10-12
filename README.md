@@ -97,7 +97,7 @@ tests/
 | P7 : Cartes | ✅ terminée en greybox (à valider dans Studio) |
 | P8 : Interface | ✅ terminée (à valider dans Studio) |
 | P9 : Monétisation | ✅ terminée (identifiants de produits à renseigner) |
-| P10 | à venir |
+| P10 : Progression et finitions | ✅ terminée (sons à renseigner, à valider dans Studio) |
 
 Le détail de chaque phase (fichiers, comment tester, limites, questions) est
 dans [`docs/phases/`](docs/phases).
