@@ -104,6 +104,7 @@ function Boards.new(store: StoreLike, options: Options): Board
 	local topCache: { at: number, count: number, entries: { Entry } }? = nil
 	local topLoading = false
 	local scores: { [number]: { at: number, score: number } } = {}
+	local scoreLoading: { [number]: boolean } = {}
 	local board = {} :: any
 
 	local function fresh(at: number, ttl: number): boolean
@@ -192,14 +193,22 @@ function Boards.new(store: StoreLike, options: Options): Board
 	end
 
 	function board:get(userId: number): number?
+		-- Une lecture du même joueur déjà en cours : on attend son résultat.
+		local waited = 0
+		while scoreLoading[userId] and options.wait and waited < WAIT_LIMIT do
+			options.wait(WAIT_STEP)
+			waited += 1
+		end
 		local known = scores[userId]
 		if known and fresh(known.at, options.scoreCacheSeconds) then
 			return known.score
 		end
 		local value: any = nil
+		scoreLoading[userId] = true
 		local ok = pcall(function()
 			value = store:GetAsync(tostring(userId))
 		end)
+		scoreLoading[userId] = nil
 		if not ok then
 			return if known then known.score else nil
 		end

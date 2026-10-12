@@ -70,6 +70,7 @@ type Session = {
 	crate: LootService.Container?,
 	extractProgress: number,
 	lastSentProgress: number,
+	kitUids: { string }, -- armes du kit du tutoriel (état oublié à la fin)
 }
 
 local sessions: { [Player]: Session } = {}
@@ -324,6 +325,9 @@ local function placeCharacter(session: Session)
 	character:PivotTo(start)
 	MovementGuardService.reset(player)
 	local loadout, bag = ItemFactory.createBaseKit()
+	if loadout.ranged then
+		table.insert(session.kitUids, loadout.ranged.uid)
+	end
 	InventoryService.attach(fighter, InventoryLogic.new(loadout, bag))
 	CombatService.setHealth(fighter, fighter.maxHealth)
 	if session.step == "heal" then
@@ -347,6 +351,9 @@ local function close(session: Session)
 	slots[session.slot] = nil
 	clearEntities(session)
 	session.built.folder:Destroy()
+	for _, uid in session.kitUids do
+		Fighter.forgetWeaponState(uid)
+	end
 end
 
 function finish(session: Session, reason: string)
@@ -417,6 +424,7 @@ local function begin(player: Player, replay: boolean)
 		crate = nil,
 		extractProgress = 0,
 		lastSentProgress = -1,
+		kitUids = {},
 	}
 	slots[slot] = player
 	sessions[player] = session

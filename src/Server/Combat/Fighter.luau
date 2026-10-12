@@ -288,6 +288,11 @@ function Fighter.syncEquipment(fighter: Fighter)
 	fighter.shield = math.min(fighter.shield, fighter.maxShield)
 end
 
+-- Oublie l'état d'une arme prêtée (stand de tir, tutoriel) : rien ne s'accumule sur le hub.
+function Fighter.forgetWeaponState(uid: string)
+	weaponStates[uid] = nil
+end
+
 -- Oublie l'état des armes (fin de partie).
 function Fighter.clearWeaponStates()
 	table.clear(weaponStates)

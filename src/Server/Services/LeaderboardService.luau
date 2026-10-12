@@ -43,6 +43,8 @@ local L = Config.Progression.leaderboards
 local LeaderboardService = {}
 
 local KINDS = { "season", "friends", "mode", "range" }
+local READ_RESERVE = 60
+local FRIENDS_RESULT_SECONDS = 30
 local DAY = 24 * 60 * 60
 local HOLO_COLOR = Color3.fromRGB(0, 229, 255)
 local CHAMPION_COLOR = Color3.fromRGB(255, 196, 64)
@@ -51,6 +53,10 @@ local useMemory = false
 local boards: { [string]: Boards.Board } = {}
 local names: { [number]: { name: string, at: number } } = {}
 local friendsCache: { [Player]: { at: number, ids: { number } } } = {}
+-- Classement « amis » : une seule demande en cours par joueur, résultat gardé 30 s.
+local friendsResults: { [Player]: { at: number, result: { [string]: any }? } } = {}
+local friendsPending: { [Player]: boolean } = {}
+local legendFetchedAt = -math.huge
 local legendThreshold: number? = nil
 
 local function currentSeason(): number
@@ -72,6 +78,16 @@ local function board(name: string): Boards.Board
 	else
 		store = DataStoreService:GetOrderedDataStore(L.storeName, name) :: any
 	end
+	-- Les classements d'autres saisons ou d'autres jours ne servent plus : on les oublie.
+	local season = currentSeason()
+	local today = LeaderboardService.today()
+	for key in boards do
+		local day = tonumber(string.match(key, "^range_(%d+)$"))
+		local boardSeason = tonumber(string.match(key, "^s(%d+)"))
+		if (day and day < today - 1) or (boardSeason and boardSeason ~= season) then
+			boards[key] = nil
+		end
+	end
 	local created = Boards.new(store, {
 		clock = os.clock,
 		topCacheSeconds = L.cacheSeconds,
@@ -82,11 +98,12 @@ local function board(name: string): Boards.Board
 	return created
 end
 
+-- Pour « range », `season` est le numéro du jour (UTC).
 local function boardName(kind: string, season: number, modeId: string?): string
 	if kind == "mode" and modeId then
 		return `s{season}_{modeId}`
 	elseif kind == "range" then
-		return `range_{LeaderboardService.today()}`
+		return `range_{season}`
 	end
 	return `s{season}`
 end
@@ -99,7 +116,8 @@ local function canRead(): boolean
 	local ok, budget = pcall(function()
 		return DataStoreService:GetRequestBudgetForRequestType(Enum.DataStoreRequestType.GetAsync)
 	end)
-	return ok and budget > 20
+	-- Réserve généreuse : les sauvegardes de profils puisent dans le même budget.
+	return ok and budget > READ_RESERVE
 end
 
 -- Noms affichés (mis en cache ; les joueurs présents sont lus directement).
@@ -161,7 +179,9 @@ local function friendIds(player: Player): { number }
 			end
 		end)
 	end
-	friendsCache[player] = { at = os.clock(), ids = ids }
+	if player.Parent == Players then
+		friendsCache[player] = { at = os.clock(), ids = ids }
+	end
 	return ids
 end
 
@@ -177,6 +197,7 @@ local function refreshLegendThreshold()
 	if entries == nil then
 		return
 	end
+	legendFetchedAt = os.clock()
 	-- Moins de 500 classés : tout joueur classé (au-dessus du minimum) est dans le top 500.
 	legendThreshold = if #entries >= Season.legendTopCount then entries[Season.legendTopCount].score else 0
 end
@@ -231,12 +252,21 @@ local function onScoreRecorded(player: Player, modeId: string, score: number)
 	end
 	board(boardName("mode", profile.season.id, modeId)):submit(player.UserId, score)
 	submitSeason(player, profile)
+	-- Serveur de partie : seuil de Légende relu seulement quand un score arrive (et au plus toutes les 10 min).
+	if os.clock() - legendFetchedAt > L.legendRefreshSeconds then
+		refreshLegendThreshold()
+	end
+	local current = DataService.getProfile(player)
+	if current then
+		refreshPlayer(player, current)
+	end
 end
 
 -- Score du défi quotidien du stand de tir (appelé par le stand).
-function LeaderboardService.submitRange(player: Player, score: number)
+-- Le défi compte pour le jour où il a commencé (même arme, mêmes cibles).
+function LeaderboardService.submitRange(player: Player, day: number, score: number)
 	task.spawn(function()
-		board(boardName("range", 0)):submit(player.UserId, score)
+		board(boardName("range", day)):submit(player.UserId, score)
 	end)
 end
 
@@ -244,12 +274,12 @@ end
 
 type Row = { position: number, userId: number, name: string, score: number }
 
-local function request(player: Player, kind: string, modeId: string?): { [string]: any }?
+local function requestBoard(player: Player, kind: string, modeId: string?): { [string]: any }?
 	if kind == "mode" and modeId == nil then
 		return nil
 	end
 	local season = currentSeason()
-	local target = board(boardName(kind, season, modeId))
+	local target = board(boardName(kind, if kind == "range" then LeaderboardService.today() else season, modeId))
 	local ranked: { { position: number, userId: number, score: number } }
 	if kind == "friends" then
 		-- Les amis sont lus sur le classement mondial de la saison.
@@ -298,6 +328,23 @@ local function request(player: Player, kind: string, modeId: string?): { [string
 		entries = rows,
 		me = mine or { score = if canRead() then target:get(player.UserId) or 0 else 0 },
 	}
+end
+
+local function request(player: Player, kind: string, modeId: string?): { [string]: any }?
+	if kind ~= "friends" then
+		return requestBoard(player, kind, modeId)
+	end
+	local cached = friendsResults[player]
+	if friendsPending[player] or (cached and os.clock() - cached.at < FRIENDS_RESULT_SECONDS) then
+		return if cached then cached.result else nil
+	end
+	friendsPending[player] = true
+	local ok, result = pcall(requestBoard, player, kind, modeId)
+	friendsPending[player] = nil
+	if player.Parent == Players then
+		friendsResults[player] = { at = os.clock(), result = if ok then result else nil }
+	end
+	return if ok then result else nil
 end
 
 -- Mur des Légendes ----------------------------------------------------------------
@@ -505,22 +552,39 @@ function LeaderboardService.start()
 	end)
 	Players.PlayerRemoving:Connect(function(player)
 		friendsCache[player] = nil
+		friendsResults[player] = nil
+		friendsPending[player] = nil
 	end)
 
-	-- Seuil de Légende (et Mur des Légendes sur le hub), relus périodiquement.
+	if PlaceRole.isMatchServer() then
+		return
+	end
+	-- Hub : seuil de Légende relu périodiquement ; changement de saison pour les joueurs connectés.
 	task.spawn(function()
 		while true do
 			refreshLegendThreshold()
 			for _, player in Players:GetPlayers() do
-				local profile = DataService.getProfile(player)
-				if profile then
-					refreshPlayer(player, profile)
+				if DataService.getProfile(player) then
+					DataService.update(player, function(profile)
+						return MatchRules.rollSeason(profile, os.time())
+					end)
+					local profile = DataService.getProfile(player)
+					if profile then
+						refreshPlayer(player, profile)
+					end
+				end
+			end
+			-- Noms : on oublie ceux qui ont expiré.
+			local now = os.clock()
+			for userId, entry in names do
+				if now - entry.at > L.nameCacheSeconds then
+					names[userId] = nil
 				end
 			end
 			task.wait(L.legendRefreshSeconds)
 		end
 	end)
-	if not PlaceRole.isMatchServer() then
+	do
 		task.spawn(function()
 			-- Laisse le temps au Terminus d'être construit.
 			task.wait(3)

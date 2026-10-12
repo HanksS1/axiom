@@ -97,7 +97,10 @@ Un ancien hall de gare où les survivants ont installé un marché :
 - Le serveur ne fait aucun travail par image pour le décor : tout est animé côté client, et
   seulement près du Terminus.
 - Stand de tir : une seule boucle à 20 Hz, déplacements groupés (`BulkMoveTo`), cibles du défi
-  réutilisées (pas de création / destruction à chaque cible).
+  réutilisées (pas de création / destruction à chaque cible) ; cibles d'entraînement immobiles
+  quand personne n'est près du stand ; état des armes prêtées oublié en fin de séance.
+- Classements des jours ou saisons passés et noms expirés retirés des caches ; sur les serveurs
+  de partie, le seuil de Légende n'est relu que lorsqu'un score arrive.
 - Classements : lectures regroupées et mises en cache ; hologrammes du Mur des Légendes
   reconstruits seulement quand le top 10 change.
 - Recommandation pour la mise en ligne : activer **StreamingEnabled** (le tutoriel demande déjà
@@ -129,6 +132,17 @@ Un ancien hall de gare où les survivants ont installé un marché :
 ## Revue de P9
 
 - Holo-Bazar, reçus et PolicyService relus : rien à corriger.
+
+## Relecture de P10 (corrections appliquées)
+
+- Statut de Légende effacé à chaque chargement (assainissement du profil) : conservé.
+- Défi du jour : l'arme imposée n'était pas garantie (changer d'arme depuis le sac). Seule la copie
+  prêtée compte désormais (pas de mêlée), et la séance s'arrête si l'arme change.
+- Défi commencé avant minuit : compté pour le jour de son arme.
+- Classement « amis » : une seule demande à la fois par joueur (résultat gardé 30 s), lectures
+  d'un même joueur regroupées, réserve de budget DataStore relevée (les sauvegardes passent avant).
+- Changement de saison appliqué aussi aux joueurs restés connectés (rang au-dessus de la tête).
+- Anciens profils déjà niveau 2 ou plus : dispensés du tutoriel (ils jouaient avant qu'il existe).
 
 ## Choix mineurs (à valider)
 

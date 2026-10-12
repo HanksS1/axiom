@@ -73,6 +73,7 @@ type Session = {
 	fighter: Fighter,
 	mode: "test" | "challenge",
 	itemId: string,
+	kitUid: string, -- copie prêtée : la seule arme qui compte pendant la séance
 	savedInventory: Fighter.FighterInventory,
 	-- Défi
 	day: number,
@@ -266,6 +267,7 @@ local function endSession(player: Player, reason: string)
 	for _, target in session.targets do
 		destroyTarget(target)
 	end
+	Fighter.forgetWeaponState(session.kitUid)
 	local fighter = session.fighter
 	if CombatService.getFighter(player) == fighter and Fighter.isAlive(fighter) then
 		fighter.inventory = session.savedInventory
@@ -277,7 +279,7 @@ local function endSession(player: Player, reason: string)
 		return
 	end
 	if session.mode == "challenge" and reason == "finished" then
-		LeaderboardService.submitRange(player, session.score)
+		LeaderboardService.submitRange(player, session.day, session.score)
 		sendState(nil, player, {
 			finished = true,
 			score = session.score,
@@ -351,6 +353,7 @@ local function newSession(player: Player, fighter: Fighter, mode: "test" | "chal
 		fighter = fighter,
 		mode = mode,
 		itemId = item.itemId,
+		kitUid = item.uid,
 		savedInventory = fighter.inventory,
 		day = 0,
 		startsAt = 0,
@@ -446,8 +449,15 @@ function RangeService.damageVerdict(attacker: Fighter?, target: Fighter): boolea
 		return false
 	end
 	if entry.owner then
+		-- Défi : seule l'arme imposée (la copie prêtée) compte ; pas de mêlée.
 		local session = sessions[entry.owner]
-		return attacker.player == entry.owner and session ~= nil and os.clock() >= session.startsAt
+		local ranged = attacker.ranged
+		return attacker.player == entry.owner
+			and session ~= nil
+			and os.clock() >= session.startsAt
+			and attacker.activeSlot == "ranged"
+			and ranged ~= nil
+			and ranged.item.uid == session.kitUid
 	end
 	return atRange(attacker)
 end
@@ -485,9 +495,24 @@ local function step()
 	local time = os.clock()
 	local parts: { BasePart } = {}
 	local cframes: { CFrame } = {}
-	for _, target in practice do
-		if time >= target.bornAt then
-			placeAt(target, movingPosition(target, time), parts, cframes)
+	-- Cibles d'entraînement immobiles quand personne n'est près du stand (aucune réplication inutile).
+	local c = counter :: BasePart
+	local anyoneNear = next(sessions) ~= nil
+	if not anyoneNear then
+		for _, player in Players:GetPlayers() do
+			local character = player.Character
+			local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+			if root and root:IsA("BasePart") and (root.Position - c.Position).Magnitude < R.maxDistance * 4 then
+				anyoneNear = true
+				break
+			end
+		end
+	end
+	if anyoneNear then
+		for _, target in practice do
+			if time >= target.bornAt then
+				placeAt(target, movingPosition(target, time), parts, cframes)
+			end
 		end
 	end
 	for player, session in sessions do
@@ -497,6 +522,9 @@ local function step()
 			or CombatService.getFighter(player) ~= fighter
 			or not Fighter.isAlive(fighter)
 			or not atRange(fighter)
+			-- L'arme prêtée a été remplacée (équipement modifié) : séance terminée.
+			or fighter.ranged == nil
+			or fighter.ranged.item.uid ~= session.kitUid
 		then
 			task.defer(endSession, player, "left")
 			continue
