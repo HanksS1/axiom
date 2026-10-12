@@ -29,6 +29,7 @@ local Config = {
 	Network = require(script.Network),
 	Settings = require(script.Settings),
 	Visuals = require(script.Visuals),
+	Audio = require(script.Audio),
 	Dev = require(script.Dev),
 }
 

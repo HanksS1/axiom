@@ -25,6 +25,7 @@ local order = {
 	"BazaarController",
 	"RangeController",
 	"TutorialController",
+	"AudioController",
 	"HubAmbienceController",
 	"NameplateController",
 	"DeployController",
