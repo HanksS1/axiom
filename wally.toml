@@ -1,0 +1,10 @@
+[package]
+name = "antoine-serange/axiom-war-extraction"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+private = true
+
+[dependencies]
+# Aucune dépendance externe pour l'instant. Après ajout d'une dépendance :
+# `wally install`, puis ajouter "Packages": { "$path": "Packages" } sous ReplicatedStorage dans default.project.json.
