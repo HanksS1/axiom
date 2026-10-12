@@ -32,8 +32,8 @@ sur les 3 types d'appareils (PC, manette, mobile).
    « Fusil de Sentinelle », « Pistolet maison », « Gilet + casque », « Réapparaître ».
 4. **À deux joueurs** : onglet *Test* → *Clients and Servers* → 2 joueurs → *Start*.
 5. Points à vérifier :
-   - tir sur les mannequins : marqueur blanc, rouge à la tête ; le bouclier (barre cyan
-     au-dessus de leur tête n'existe pas encore : voir les dégâts côté tireur) ;
+   - tir sur les mannequins : marqueur de touche blanc, rouge à la tête (les mannequins
+     n'ont pas encore de barre de vie : celui en gilet Neuf demande plus de tirs) ;
    - mort : désintégration en voxels néon, écran « DÉSINTÉGRÉ », réapparition ;
    - parade : maintenir F face à un joueur qui frappe → « PARADE PARFAITE » si le coup
      arrive dans les 0,25 s, l'attaquant est étourdi ;
