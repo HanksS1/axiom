@@ -23,6 +23,7 @@ local order = {
 	"GadgetController",
 	"TerminusController",
 	"BazaarController",
+	"HubAmbienceController",
 	"DeployController",
 	"MapEffectsController",
 	"TouchControlsController",
