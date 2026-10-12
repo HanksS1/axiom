@@ -7,6 +7,13 @@ local Controllers = script.Parent.Controllers
 
 local order = {
 	"ProfileController",
+	"InputController",
+	"CameraController",
+	"MovementController",
+	"EffectsController",
+	"WeaponController",
+	"HUDController",
+	"TouchControlsController",
 	"DevPanelController",
 }
 

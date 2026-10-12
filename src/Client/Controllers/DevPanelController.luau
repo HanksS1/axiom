@@ -8,12 +8,14 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ItemRules = require(Shared.Items.ItemRules)
 local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
+local CameraController = require(script.Parent.CameraController)
 local ProfileController = require(script.Parent.ProfileController)
 
 local DevPanelController = {}
@@ -69,6 +71,7 @@ local function render(view: Types.ProfileView)
 		capacity = view.vaultCapacity,
 		count = #view.vault,
 	})
+	labels.Hint.Text = t("dev.mouseHint")
 	labels.Loadout.Text = t("dev.loadoutState", {
 		score = ItemRules.equipmentScore(view.loadout, view.bag),
 	})
@@ -120,6 +123,7 @@ function DevPanelController.start()
 	makeLabel(frame, "Profile", 2)
 	makeLabel(frame, "Vault", 3)
 	makeLabel(frame, "Loadout", 4)
+	makeLabel(frame, "Hint", 6).TextColor3 = Color3.fromRGB(150, 158, 170)
 
 	local buttons = Instance.new("Frame")
 	buttons.LayoutOrder = 5
@@ -151,12 +155,33 @@ function DevPanelController.start()
 	makeButton(buttons, "dev.saveNow", 6, function()
 		ClientNet.fire("DevCommand", "saveNow")
 	end)
+	makeButton(buttons, "dev.equipRifle", 8, function()
+		ClientNet.fire("DevCommand", "equipRifle")
+	end)
+	makeButton(buttons, "dev.equipPistol", 9, function()
+		ClientNet.fire("DevCommand", "equipPistol")
+	end)
+	makeButton(buttons, "dev.equipArmor", 10, function()
+		ClientNet.fire("DevCommand", "equipArmor", 4)
+	end)
+	makeButton(buttons, "dev.respawn", 11, function()
+		ClientNet.fire("DevCommand", "respawn")
+	end)
 	makeButton(buttons, "dev.toggleLanguage", 7, function()
 		local nextLanguage = if ProfileController.language() == "fr" then "en" else "fr"
 		ProfileController.setSetting("language", nextLanguage)
 	end)
 
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+
+	-- [M] libère / reverrouille la souris pour cliquer sur le panneau.
+	local mouseFree = false
+	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
+		if not processed and input.KeyCode == Enum.KeyCode.M then
+			mouseFree = not mouseFree
+			CameraController.setMouseFree(mouseFree)
+		end
+	end)
 
 	ProfileController.Changed:Connect(render)
 	local view = ProfileController.get()

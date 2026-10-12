@@ -30,10 +30,10 @@ end
 
 function ClientNet.on(name: string, callback: (...any) -> ()): RBXScriptConnection
 	assert(
-		Remotes[name].kind == "event" and not Remotes[name].toServer,
+		Remotes[name].kind ~= "function" and not Remotes[name].toServer,
 		`{name} n'est pas un événement serveur → client`
 	)
-	return (getInstance(name) :: RemoteEvent).OnClientEvent:Connect(callback)
+	return (getInstance(name) :: any).OnClientEvent:Connect(callback)
 end
 
 return ClientNet

@@ -13,6 +13,10 @@ local Services = script.Parent.Services
 
 local order = {
 	"DataService",
+	"CombatService",
+	"CharacterService",
+	"MovementGuardService",
+	"ArenaService",
 	"DevService",
 }
 

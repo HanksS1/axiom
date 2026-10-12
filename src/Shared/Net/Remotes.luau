@@ -2,7 +2,9 @@
 --[[
 	Déclaration de toutes les remotes du jeu.
 
-	- "event"    : RemoteEvent (fire-and-forget)
+	- "event"      : RemoteEvent (fiable, ordonné)
+	- "unreliable" : UnreliableRemoteEvent (effets visuels fréquents : peut
+	  être perdu, jamais utilisé pour une information de jeu importante)
 	- "function" : RemoteFunction (client → serveur uniquement : le serveur
 	  n'appelle JAMAIS InvokeClient, qui peut bloquer indéfiniment).
 
@@ -11,7 +13,7 @@
 ]]
 
 export type RemoteDef = {
-	kind: "event" | "function",
+	kind: "event" | "unreliable" | "function",
 	toServer: boolean,
 }
 
@@ -24,6 +26,21 @@ local Remotes: { [string]: RemoteDef } = {
 	Notify = { kind = "event", toServer = false },
 	-- Outils de développement (Studio uniquement, ignorés en production)
 	DevCommand = { kind = "event", toServer = true },
+
+	-- Combat (intentions du client)
+	FireWeapon = { kind = "event", toServer = true },
+	ReloadWeapon = { kind = "event", toServer = true },
+	SwitchWeapon = { kind = "event", toServer = true },
+	MeleeAttack = { kind = "event", toServer = true },
+	SetParry = { kind = "event", toServer = true },
+	SetMovement = { kind = "event", toServer = true },
+	-- Combat (serveur → client)
+	CombatState = { kind = "event", toServer = false }, -- état des armes (propriétaire)
+	HitConfirm = { kind = "event", toServer = false }, -- marqueur de touche (tireur)
+	DamageTaken = { kind = "event", toServer = false }, -- direction des dégâts (victime)
+	ParryResult = { kind = "event", toServer = false }, -- parade réussie / garde brisée
+	ShotFired = { kind = "unreliable", toServer = false }, -- tracés des tirs (autres joueurs)
+	MeleeSwing = { kind = "unreliable", toServer = false }, -- animation de coup (autres joueurs)
 }
 
 return table.freeze(Remotes)

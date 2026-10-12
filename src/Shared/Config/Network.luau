@@ -20,5 +20,12 @@ return Freeze.deep({
 		UpdateSetting = { rate = 4, burst = 10 },
 		-- Outils de développement (Studio uniquement)
 		DevCommand = { rate = 2, burst = 5 },
+		-- Combat
+		FireWeapon = { rate = 16, burst = 20 }, -- cadence max : 14 tirs/s
+		ReloadWeapon = { rate = 2, burst = 4 },
+		SwitchWeapon = { rate = 4, burst = 6 },
+		MeleeAttack = { rate = 4, burst = 6 },
+		SetParry = { rate = 6, burst = 10 },
+		SetMovement = { rate = 10, burst = 15 },
 	} :: { [string]: Limit },
 })

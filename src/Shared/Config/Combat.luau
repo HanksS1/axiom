@@ -23,7 +23,30 @@ return Freeze.deep({
 		aimAccuracyBonus = 0.5,
 		-- Appui long sur la touche accroupi/couché (secondes).
 		proneHoldThreshold = 0.35,
+		-- Dispersion supplémentaire en mouvement (× la dispersion de base).
+		movingSpreadMultiplier = 1.5,
+		-- Vitesse pendant un étourdissement (× la vitesse de marche).
+		stunMoveMultiplier = 0.2,
+		-- Hauteur des hanches (HipHeight) selon la posture, en studs.
+		-- Valeurs pour un avatar R15 standard (à ajuster avec les animations).
+		standHipHeight = 2,
+		crouchHipOffset = -1.1,
 	},
+
+	camera = {
+		fieldOfView = 70,
+		aimFieldOfView = 55,
+		distance = 10,
+		aimDistance = 6,
+		shoulderOffset = Vector3.new(1.75, 0.6, 0),
+		aimShoulderOffset = Vector3.new(1.4, 0.5, 0),
+		crouchOffsetY = -1.1,
+		proneOffsetY = -2.2,
+		transitionTime = 0.15,
+	},
+
+	-- Hors partie (stand de tir, arène de test) : délai avant réapparition.
+	respawnTime = 3,
 
 	-- Au-delà de la portée efficace : dégâts dégressifs.
 	-- QUESTION OUVERTE : le document ne précise pas ce qui se passe au-delà
@@ -65,6 +88,22 @@ return Freeze.deep({
 		reviveHealth = 50,
 	},
 
+	-- Mêlée : tolérance de portée (latence) et angle d'attaque (cône frontal).
+	melee = {
+		rangeTolerance = 2.5,
+		maxAngle = 75, -- demi-angle du cône devant l'attaquant (degrés)
+	},
+
+	-- Contrôle de mouvement côté serveur (section 19.4).
+	movementGuard = {
+		interval = 0.25, -- secondes entre deux contrôles
+		speedTolerance = 1.3, -- × vitesse autorisée
+		flatTolerance = 2, -- studs ajoutés par contrôle (latence, glissades)
+		maxVerticalRise = 12, -- studs de montée par contrôle (saut, escaliers)
+		strikesBeforeCorrection = 2, -- infractions consécutives avant recalage
+		speedGraceTime = 0.6, -- délai pendant lequel l'ancienne vitesse reste tolérée
+	},
+
 	-- Validation serveur des tirs (section 6.11).
 	validation = {
 		-- Tolérance sur la cadence (le réseau regroupe parfois les paquets).
@@ -77,5 +116,7 @@ return Freeze.deep({
 		maxHitPositionError = 8,
 		-- Âge maximal d'un tir déclaré (secondes).
 		maxShotAge = 1.0,
+		-- Tolérance sur le délai sprint → tir (latence).
+		sprintToFireTolerance = 0.05,
 	},
 })

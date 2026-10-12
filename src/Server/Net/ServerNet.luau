@@ -89,6 +89,9 @@ function ServerNet.init()
 		local instance: any
 		if def.kind == "event" then
 			instance = Instance.new("RemoteEvent")
+		elseif def.kind == "unreliable" then
+			assert(not def.toServer, `UnreliableRemoteEvent {name} : réservé au serveur → client`)
+			instance = Instance.new("UnreliableRemoteEvent")
 		else
 			assert(def.toServer, `RemoteFunction {name} : le serveur n'invoque jamais le client`)
 			instance = Instance.new("RemoteFunction")
@@ -171,6 +174,25 @@ end
 function ServerNet.fireAll(name: string, ...: any)
 	local remote = getInstance(name) :: RemoteEvent
 	remote:FireAllClients(...)
+end
+
+-- Envoie à tous les joueurs sauf un (ex. : le tireur a déjà affiché son tir).
+function ServerNet.fireAllExcept(name: string, except: Player?, ...: any)
+	local remote = getInstance(name) :: RemoteEvent
+	for _, player in Players:GetPlayers() do
+		if player ~= except then
+			remote:FireClient(player, ...)
+		end
+	end
+end
+
+--[[
+	Signale une incohérence détectée par un service (tir impossible, coup
+	hors de portée…). Compte comme un rejet : journalisé, et au-delà du
+	seuil par minute, le joueur est expulsé.
+]]
+function ServerNet.flag(player: Player, remoteName: string, reason: string)
+	reject(player, remoteName, reason)
 end
 
 -- Notification localisée : le client traduit la clé dans sa langue.

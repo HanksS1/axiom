@@ -24,6 +24,8 @@ local Config = {
 	Data = require(script.Data),
 	Network = require(script.Network),
 	Settings = require(script.Settings),
+	Visuals = require(script.Visuals),
+	Dev = require(script.Dev),
 }
 
 return table.freeze(Config)

@@ -47,18 +47,23 @@ src/
     Localization/             textes FR / EN (Strings/fr.luau, Strings/en.luau)
     Items/                    ItemCatalog (registre), ItemRules (valeur, UP, SE…)
     Progression/              niveaux et XP
+    Combat/                   Damage, WeaponLogic, Movement (logique pure, testée)
     Net/Remotes.luau          déclaration de toutes les remotes
     Util/                     Guard (validation), RateLimiter, Signal, Freeze, Try
   Server/                     (ServerScriptService.Server)
     Main.server.luau          démarrage : init() puis start() de chaque service
     Net/ServerNet.luau        remotes : limite de fréquence + validation + pcall
     Data/                     SessionStore (verrou de session), Migrations, ProfileTemplate
+    Combat/                   Fighter (état de combat), HitValidator (validation des tirs)
     Inventory/ItemFactory     seul endroit où naissent les objets (uid serveur)
-    Services/                 DataService, DevService (Studio), …
+    Services/                 DataService, CombatService, CharacterService,
+                              MovementGuardService, ArenaService (Studio), DevService (Studio)
   Client/                     (StarterPlayerScripts.Client)
     Main.client.luau          démarrage des contrôleurs
     Net/ClientNet.luau        envoi d'intentions au serveur
-    Controllers/              ProfileController, DevPanelController (Studio), …
+    Controllers/              Input, Camera, Movement, Weapon, Effects, HUD, TouchControls,
+                              Profile, DevPanel (Studio)
+    UI/                       Create (construction déclarative), Theme (charte)
 tests/
   run.luau                    lanceur de tests (Lune)
   lib/                        Harness (arborescence Rojo virtuelle), Test (describe/it/expect)
@@ -83,7 +88,7 @@ tests/
 | Phase | État |
 |---|---|
 | P0 : Fondations | ✅ terminée |
-| P1 : Combat de base | à venir |
+| P1 : Combat de base | ✅ terminée (à valider dans Studio) |
 | P2 → P10 | à venir |
 
 Le détail de chaque phase (fichiers, comment tester, limites, questions) est
