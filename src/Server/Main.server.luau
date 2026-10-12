@@ -31,6 +31,7 @@ local order = {
 	"PartyService",
 	"QueueService",
 	"EconomyService",
+	"MonetizationService",
 	"HubService",
 	"MatchServerService",
 	"DevService",

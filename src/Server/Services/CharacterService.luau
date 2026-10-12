@@ -9,7 +9,9 @@
 	  réellement la silhouette.
 	- Création du combattant à partir de l'équipement du profil (ou du kit
 	  de base s'il est vide).
-	- Visuels provisoires : arme tenue en main, postures accroupi / couché.
+	- Visuels provisoires : arme tenue en main, casque, gilet et sac portés,
+	  postures accroupi / couché. Les skins cosmétiques équipés (P9) en
+	  changent les couleurs et la matière (aucun effet sur le jeu).
 ]]
 
 local Players = game:GetService("Players")
@@ -34,6 +36,8 @@ local MovementConfig = Config.Combat.movement
 local CharacterService = {}
 
 local rootJointC0: { [Model]: CFrame } = {}
+local skinOf: (character: Model, attribute: string) -> any?
+local materialOf: (name: string) -> EnumItem
 
 -- Rend une pièce « décorative » : ni collision, ni rayons, ni masse.
 local function makeDecorative(part: BasePart)
@@ -41,6 +45,19 @@ local function makeDecorative(part: BasePart)
 	part.CanQuery = false
 	part.CanTouch = false
 	part.Massless = true
+end
+
+-- Skin cosmétique porté (attribut du personnage = identifiant du cosmétique).
+skinOf = function(character: Model, attribute: string): any?
+	local id = character:GetAttribute(attribute)
+	return if type(id) == "string" then Config.Cosmetics.byId[id] else nil
+end
+
+materialOf = function(name: string): EnumItem
+	local ok, material = pcall(function()
+		return (Enum.Material :: any)[name]
+	end)
+	return if ok and material then material else Enum.Material.Metal
 end
 
 -- Arme tenue en main (greybox), mise à jour quand l'arme active change.
@@ -60,12 +77,13 @@ local function updateWeaponVisual(character: Model)
 	end
 	local model = Instance.new("Model")
 	model.Name = "WeaponVisual"
+	local skin = skinOf(character, "WeaponSkin")
 
 	local body = Instance.new("Part")
 	body.Name = "Body"
 	body.Size = shape.size
-	body.Color = Visuals.bodyColor
-	body.Material = Enum.Material.Metal
+	body.Color = if skin then skin.color else Visuals.bodyColor
+	body.Material = if skin then materialOf(skin.material) else Enum.Material.Metal
 	makeDecorative(body)
 	body.CFrame = hand.CFrame * shape.gripOffset
 	body.Parent = model
@@ -73,7 +91,7 @@ local function updateWeaponVisual(character: Model)
 	local accent = Instance.new("Part")
 	accent.Name = "Accent"
 	accent.Size = Vector3.new(shape.size.X + 0.02, shape.size.Y * 0.2, shape.size.Z * 0.8)
-	accent.Color = shape.accent
+	accent.Color = if skin then skin.accent else shape.accent
 	accent.Material = Enum.Material.Neon
 	makeDecorative(accent)
 	accent.CFrame = body.CFrame * CFrame.new(0, shape.size.Y * 0.25, 0)
@@ -87,6 +105,124 @@ local function updateWeaponVisual(character: Model)
 	end
 	model.PrimaryPart = body
 	model.Parent = character
+end
+
+-- Casque, gilet et sac portés (greybox) : couleur par défaut ou skin équipé.
+local ARMOR_DEFAULT = Color3.fromRGB(58, 62, 70)
+local ARMOR_PIECES = {
+	{ attribute = "HelmetId", skin = "HelmetSkin", name = "HelmetVisual", parts = { "Head" } },
+	{ attribute = "VestId", skin = "VestSkin", name = "VestVisual", parts = { "UpperTorso", "Torso" } },
+	{ attribute = "BackpackId", skin = "BackpackSkin", name = "BackpackVisual", parts = { "UpperTorso", "Torso" } },
+}
+local BACKPACK_SIZES: { [string]: Vector3 } = {
+	backpack_small = Vector3.new(1.2, 1.3, 0.6),
+	backpack_medium = Vector3.new(1.5, 1.6, 0.75),
+	backpack_large = Vector3.new(1.8, 2.0, 0.9),
+}
+
+local function updateArmorVisual(character: Model)
+	for _, piece in ARMOR_PIECES do
+		local existing = character:FindFirstChild(piece.name)
+		if existing then
+			existing:Destroy()
+		end
+		local itemId = character:GetAttribute(piece.attribute)
+		if type(itemId) ~= "string" then
+			continue
+		end
+		local anchor: BasePart? = nil
+		for _, partName in piece.parts do
+			local candidate = character:FindFirstChild(partName)
+			if candidate and candidate:IsA("BasePart") then
+				anchor = candidate
+				break
+			end
+		end
+		if anchor == nil then
+			continue
+		end
+		local base = anchor :: BasePart
+		local size, offset
+		if piece.name == "HelmetVisual" then
+			size = Vector3.new(base.Size.X * 1.12, base.Size.Y * 0.55, base.Size.Z * 1.12)
+			offset = CFrame.new(0, base.Size.Y * 0.3, 0)
+		elseif piece.name == "VestVisual" then
+			size = Vector3.new(base.Size.X * 1.06, base.Size.Y * 0.85, base.Size.Z * 1.2)
+			offset = CFrame.new(0, -base.Size.Y * 0.05, 0)
+		else
+			size = BACKPACK_SIZES[itemId] or BACKPACK_SIZES.backpack_small
+			offset = CFrame.new(0, 0, base.Size.Z / 2 + size.Z / 2)
+		end
+		local skin = skinOf(character, piece.skin)
+		local model = Instance.new("Model")
+		model.Name = piece.name
+		local body = Instance.new("Part")
+		body.Name = "Body"
+		body.Size = size
+		body.CFrame = base.CFrame * offset
+		body.Color = if skin then skin.color else ARMOR_DEFAULT
+		body.Material = if skin then materialOf(skin.material) else Enum.Material.Fabric
+		makeDecorative(body)
+		body.Parent = model
+		local stripe = Instance.new("Part")
+		stripe.Name = "Accent"
+		stripe.Size = Vector3.new(size.X + 0.02, math.min(0.15, size.Y * 0.15), size.Z + 0.02)
+		stripe.CFrame = body.CFrame
+		stripe.Color = if skin then skin.accent else Color3.fromRGB(90, 96, 106)
+		stripe.Material = if skin then Enum.Material.Neon else Enum.Material.Metal
+		makeDecorative(stripe)
+		stripe.Parent = model
+		for _, part in { body, stripe } do
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = base
+			weld.Part1 = part
+			weld.Parent = part
+		end
+		model.PrimaryPart = body
+		model.Parent = character
+	end
+end
+
+-- Reliage des visuels aux attributs publiés par CombatService.
+local function watchVisuals(character: Model, onWeaponChanged: (() -> ())?)
+	updateWeaponVisual(character)
+	updateArmorVisual(character)
+	character:GetAttributeChangedSignal("WeaponId"):Connect(function()
+		if onWeaponChanged then
+			onWeaponChanged()
+		end
+		updateWeaponVisual(character)
+	end)
+	character:GetAttributeChangedSignal("WeaponSkin"):Connect(function()
+		updateWeaponVisual(character)
+	end)
+	for _, piece in ARMOR_PIECES do
+		character:GetAttributeChangedSignal(piece.attribute):Connect(function()
+			updateArmorVisual(character)
+		end)
+		character:GetAttributeChangedSignal(piece.skin):Connect(function()
+			updateArmorVisual(character)
+		end)
+	end
+end
+
+--[[
+	Skins cosmétiques équipés par le joueur → attributs de son personnage
+	(arme active, casque, gilet, sac). Appelé à l'apparition, au changement
+	d'arme et quand le joueur équipe un cosmétique.
+]]
+function CharacterService.applySkins(player: Player)
+	local character = player.Character
+	local profile = DataService.getProfile(player)
+	if character == nil or profile == nil then
+		return
+	end
+	local equipped = profile.cosmeticsEquipped
+	local weaponId = character:GetAttribute("WeaponId")
+	character:SetAttribute("WeaponSkin", if type(weaponId) == "string" then equipped["weapon:" .. weaponId] else nil)
+	character:SetAttribute("HelmetSkin", equipped.helmet)
+	character:SetAttribute("VestSkin", equipped.vest)
+	character:SetAttribute("BackpackSkin", equipped.backpack)
 end
 
 -- Postures (provisoire, sans animation) : on abaisse les hanches, et en
@@ -188,12 +324,11 @@ local function setupCharacter(player: Player, character: Model)
 	}, Fighter.simpleInventory({}))
 	CombatService.register(fighter)
 	InventoryService.attach(fighter, bag)
-	updateWeaponVisual(character)
-	applyStance(fighter)
-
-	character:GetAttributeChangedSignal("WeaponId"):Connect(function()
-		updateWeaponVisual(character)
+	CharacterService.applySkins(player)
+	watchVisuals(character, function()
+		CharacterService.applySkins(player)
 	end)
+	applyStance(fighter)
 	character.Destroying:Connect(function()
 		rootJointC0[character] = nil
 	end)
@@ -202,11 +337,8 @@ end
 -- Visuels d'un combattant non joueur (mercenaire IA) : arme en main et posture.
 function CharacterService.attachVisuals(fighter: Fighter)
 	local character = fighter.character
-	updateWeaponVisual(character)
+	watchVisuals(character, nil)
 	applyStance(fighter)
-	character:GetAttributeChangedSignal("WeaponId"):Connect(function()
-		updateWeaponVisual(character)
-	end)
 	character.Destroying:Connect(function()
 		rootJointC0[character] = nil
 	end)

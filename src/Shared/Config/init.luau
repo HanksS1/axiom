@@ -20,6 +20,7 @@ local Config = {
 	Loot = require(script.Loot),
 	Economy = require(script.Economy),
 	Monetization = require(script.Monetization),
+	Cosmetics = require(script.Cosmetics),
 	Progression = require(script.Progression),
 	Matchmaking = require(script.Matchmaking),
 	Maps = require(script.Maps),

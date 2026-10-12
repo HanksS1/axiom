@@ -58,6 +58,8 @@ return Freeze.deep({
 		rotationPeriod = 24 * 60 * 60, -- renouvellement à 00:00 UTC
 	},
 
+	-- Valeur d'un cosmétique par rareté (prix direct ; Mythique : valeur de référence).
+	rarityValue = { common = 100, rare = 250, epic = 500, legendary = 1000, mythic = 2000 },
 	-- Doublon de caisse : converti en 20 % de la valeur de l'objet, en Noyaux.
 	duplicateRefundShare = 0.20,
 

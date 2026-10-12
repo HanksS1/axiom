@@ -44,6 +44,10 @@ return Freeze.deep({
 		Repair = { rate = 2, burst = 4 },
 		SetInsurance = { rate = 2, burst = 4 },
 		OpenFreeCrate = { rate = 1, burst = 2 },
+		-- Holo-Bazar
+		BazaarBuy = { rate = 1, burst = 3 },
+		CosmeticCrateOpen = { rate = 0.5, burst = 2 },
+		EquipCosmetic = { rate = 2, burst = 6 },
 		-- Matchmaking
 		SetPlatform = { rate = 1, burst = 4 },
 		PartyInvite = { rate = 0.5, burst = 3 },

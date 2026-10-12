@@ -121,6 +121,9 @@ function DataService.buildView(profile: Profile): Types.ProfileView
 		bestScoreByMode = profile.bestScoreByMode,
 		tutorialDone = profile.tutorialDone,
 		settings = profile.settings,
+		pity = profile.pity,
+		cosmeticsOwned = profile.cosmeticsOwned,
+		cosmeticsEquipped = profile.cosmeticsEquipped,
 		stats = profile.stats :: any,
 	}
 end

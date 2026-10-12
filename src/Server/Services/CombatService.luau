@@ -99,6 +99,11 @@ local function publishPublic(fighter: Fighter)
 	local weapon = if fighter.activeSlot == "ranged" then fighter.ranged else fighter.melee
 	character:SetAttribute("WeaponId", if weapon then weapon.item.itemId else nil)
 	character:SetAttribute("WeaponCondition", if weapon then weapon.item.condition else nil)
+	-- Armure et sac visibles (visuels greybox, skins cosmétiques).
+	local backpack = if fighter.bag then fighter.bag.equipped.backpack else nil
+	character:SetAttribute("HelmetId", if fighter.helmet then fighter.helmet.itemId else nil)
+	character:SetAttribute("VestId", if fighter.vest then fighter.vest.itemId else nil)
+	character:SetAttribute("BackpackId", if backpack then backpack.itemId else nil)
 	if fighter.humanoid.Parent ~= nil then
 		fighter.humanoid.Health = math.max(if fighter.dead then 0 else 0.01, fighter.health)
 	end
