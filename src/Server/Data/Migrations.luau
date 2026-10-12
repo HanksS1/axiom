@@ -39,6 +39,13 @@ local steps: { [number]: (data: any) -> () } = {
 	[1] = function(_data)
 		-- Version initiale : rien à transformer (l'assainissement complète les clés).
 	end,
+	[2] = function(data)
+		-- P3 : loot extrait en attente de tri, partie en cours.
+		data.pendingLoot = data.pendingLoot or {}
+	end,
+	[3] = function(_data)
+		-- P5 : assurance choisie pour la prochaine partie (assainie plus bas).
+	end,
 }
 
 local function isInteger(value: any): boolean
@@ -215,6 +222,35 @@ function Migrations.sanitize(data: any, now: number): (Profile, Report)
 	profile.tempItem = if data.tempItem ~= nil then cleanItem(data.tempItem, seen, report, "tempItem") else nil
 	if data.pendingInsurance ~= nil then
 		profile.pendingInsurance = cleanItemList(data.pendingInsurance, seen, report, "pendingInsurance")
+	end
+	profile.pendingLoot = cleanItemList(data.pendingLoot, seen, report, "pendingLoot")
+	if type(data.insuranceTier) == "string" and Config.Economy.insurance.tiers[data.insuranceTier] ~= nil then
+		profile.insuranceTier = data.insuranceTier
+	end
+	-- Partie en cours : en dernier (un uid déjà présent ailleurs est écarté).
+	local active = data.activeMatch
+	if type(active) == "table" and type(active.id) == "string" and type(active.mode) == "string" then
+		local snapshot = if type(active.snapshot) == "table" then active.snapshot else {}
+		local snapshotLoadout = {}
+		if type(snapshot.loadout) == "table" then
+			for _, slot in ItemCatalog.slotNames do
+				local raw = snapshot.loadout[slot]
+				if raw ~= nil then
+					local item = cleanItem(raw, seen, report, `activeMatch.{slot}`)
+					local info = if item then ItemCatalog.get(item.itemId) else nil
+					if item and info and info.category == ItemCatalog.slotCategories[slot :: Types.SlotName] then
+						(snapshotLoadout :: any)[slot] = item
+					end
+				end
+			end
+		end
+		profile.activeMatch = {
+			id = active.id,
+			startedAt = if isInteger(active.startedAt) then active.startedAt else now,
+			mode = active.mode,
+			insurance = if type(active.insurance) == "string" then active.insurance else nil,
+			snapshot = { loadout = snapshotLoadout, bag = cleanItemList(snapshot.bag, seen, report, "activeMatch.bag") },
+		}
 	end
 
 	if type(data.freeCrate) == "table" then

@@ -45,6 +45,7 @@ return Freeze.deep({
 	freeCrate = {
 		interval = 20 * 60, -- secondes, temps réel (même hors ligne)
 		maxStored = 2,
+		checkInterval = 30, -- secondes entre deux vérifications serveur de l'accumulation
 		creditsChance = 0.85,
 		credits = { min = 50, max = 300 },
 		-- 15 % : objet temporaire (consommable ou gadget, Bon état), 3 parties.

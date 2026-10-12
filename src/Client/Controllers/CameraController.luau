@@ -25,6 +25,7 @@ local Config = require(Shared.Config)
 
 local InputController = require(script.Parent.InputController)
 local ProfileController = require(script.Parent.ProfileController)
+local PanelState = require(script.Parent.Parent.UI.PanelState)
 
 local CameraConfig = Config.Combat.camera
 
@@ -183,6 +184,13 @@ function CameraController.init() end
 
 function CameraController.start()
 	CameraController.setMouseFree(false)
+	-- Panneau ouvert (sac, conteneur…) : souris libre, actions relâchées.
+	PanelState.Changed:Connect(function(anyOpen)
+		CameraController.setMouseFree(anyOpen)
+		if anyOpen then
+			InputController.releaseAll()
+		end
+	end)
 
 	UserInputService.InputChanged:Connect(function(input: InputObject, processed: boolean)
 		if input.UserInputType == Enum.UserInputType.MouseMovement then

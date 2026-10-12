@@ -196,6 +196,12 @@ function ServerNet.flag(player: Player, remoteName: string, reason: string)
 end
 
 -- Notification localisée : le client traduit la clé dans sa langue.
+-- Expulsion avec un message localisé (langue du compte Roblox).
+function ServerNet.kick(player: Player, key: string)
+	local lang: Localization.Language = Localization.resolve(nil, player.LocaleId)
+	player:Kick(Localization.get(lang, key))
+end
+
 function ServerNet.notify(player: Player, key: string, params: { [string]: any }?)
 	ServerNet.fire("Notify", player, key, params)
 end

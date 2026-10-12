@@ -75,7 +75,8 @@ end
 -- Tracés d'un tir (rafale / plombs inclus).
 function EffectsController.playShot(itemId: string, muzzle: Vector3, endpoints: { Vector3 }, isLocal: boolean)
 	local shape = Visuals.weapons[itemId]
-	local color = if shape then shape.accent else Visuals.tracer.color
+	local isRobot = string.sub(itemId, 1, 6) == "robot_"
+	local color = if shape then shape.accent elseif isRobot then Visuals.tracer.robotColor else Visuals.tracer.color
 	local def = Config.Weapons.ranged[itemId]
 	-- L'Aiguille : tracé visible longtemps (révèle la position du tireur).
 	local lifetime = if def and def.tracerDuration then def.tracerDuration else Visuals.tracer.lifetime
@@ -247,6 +248,28 @@ function EffectsController.start()
 			muzzle = (body.CFrame * CFrame.new(0, 0, -body.Size.Z / 2)).Position
 		end
 		EffectsController.playShot(itemId, muzzle, endpoints, false)
+	end)
+
+	-- Alarme de casier d'AXIOM : onde rouge visible dans son rayon.
+	ClientNet.on("LootAlarm", function(position: Vector3, radius: number)
+		if typeof(position) ~= "Vector3" or type(radius) ~= "number" then
+			return
+		end
+		local ring = Instance.new("Part")
+		ring.Name = "Alarm"
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Size = Vector3.new(0.2, 2, 2)
+		ring.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
+		ring.Color = Color3.fromRGB(255, 59, 59)
+		ring.Material = Enum.Material.Neon
+		ring.Transparency = 0.3
+		decorative(ring)
+		ring.Parent = effectsFolder
+		TweenService:Create(ring, TweenInfo.new(1.2), {
+			Size = Vector3.new(0.2, radius * 2, radius * 2),
+			Transparency = 1,
+		}):Play()
+		Debris:AddItem(ring, 1.3)
 	end)
 
 	ClientNet.on("MeleeSwing", function(attacker: Player?)

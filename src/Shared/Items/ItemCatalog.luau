@@ -106,8 +106,9 @@ local slotCategories: { [Types.SlotName]: Types.ItemCategory } = {
 	vest = "vest",
 	backpack = "backpack",
 }
-ItemCatalog.slotCategories = table.freeze(slotCategories)
-ItemCatalog.slotNames =
-	table.freeze({ "ranged", "melee", "gadget1", "gadget2", "helmet", "vest", "backpack" } :: { Types.SlotName })
+ItemCatalog.slotCategories = (table.freeze(slotCategories) :: any) :: { [Types.SlotName]: Types.ItemCategory }
+ItemCatalog.slotNames = (
+	table.freeze({ "ranged", "melee", "gadget1", "gadget2", "helmet", "vest", "backpack" }) :: any
+) :: { Types.SlotName }
 
 return ItemCatalog

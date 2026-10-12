@@ -13,6 +13,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Types = require(Shared.Types)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
+local InventoryLogic = require(Shared.Items.InventoryLogic)
 local ItemRules = require(Shared.Items.ItemRules)
 local Movement = require(Shared.Combat.Movement)
 local WeaponLogic = require(Shared.Combat.WeaponLogic)
@@ -38,8 +39,15 @@ export type MeleeWeapon = {
 	lastAttackAt: number,
 }
 
+export type FighterKind = "player" | "bot" | "robot" | "object"
+
 export type Fighter = {
-	kind: "player" | "bot" | "robot",
+	kind: FighterKind,
+	-- Équipe (duo, mercenaires IA, « axiom » pour les robots). Pour un joueur,
+	-- l'attribut TeamId du Player fait foi (voir Fighter.teamOf).
+	teamId: string?,
+	robotId: string?, -- type de robot (score, loot)
+	maxHealth: number,
 	player: Player?,
 	character: Model,
 	humanoid: Humanoid,
@@ -55,6 +63,9 @@ export type Fighter = {
 	melee: MeleeWeapon?,
 	activeSlot: WeaponSlot,
 	inventory: FighterInventory,
+	-- Sac de partie (joueurs, mercenaires IA) ; nil pour les cibles simples.
+	bag: InventoryLogic.Inventory?,
+	onInventoryChanged: (() -> ())?,
 
 	move: Movement.MoveState,
 	sprintEndedAt: number,
@@ -66,6 +77,13 @@ export type Fighter = {
 	stunnedUntil: number,
 	slowUntil: number,
 	slowMultiplier: number,
+	boostUntil: number, -- Surcharge (+20 % de vitesse)
+	boostMultiplier: number,
+
+	usingItemId: string?, -- consommable en cours d'utilisation
+	usingUntil: number,
+	usingToken: number,
+	exoUsed: boolean,
 
 	lastShotTime: number, -- horodatage du dernier tir accepté (anti-retour en arrière)
 	dead: boolean,
@@ -73,6 +91,9 @@ export type Fighter = {
 }
 
 local Fighter = {}
+
+-- État des armes à distance par uid d'objet (chargeur, chaleur), pour la partie en cours.
+local weaponStates: { [string]: WeaponLogic.RangedState } = {}
 
 -- Réserve de cellules simple (P1 : stand de tir / arène).
 function Fighter.simpleInventory(cells: { [string]: number }): FighterInventory
@@ -109,7 +130,7 @@ export type Equipment = {
 }
 
 function Fighter.new(
-	kind: "player" | "bot" | "robot",
+	kind: FighterKind,
 	player: Player?,
 	character: Model,
 	humanoid: Humanoid,
@@ -120,6 +141,9 @@ function Fighter.new(
 	local maxShield = ItemRules.maxShield(equipment.vest)
 	local fighter: Fighter = {
 		kind = kind,
+		teamId = nil,
+		robotId = nil,
+		maxHealth = Config.Combat.maxHealth,
 		player = player,
 		character = character,
 		humanoid = humanoid,
@@ -149,6 +173,14 @@ function Fighter.new(
 		stunnedUntil = 0,
 		slowUntil = 0,
 		slowMultiplier = 1,
+		boostUntil = 0,
+		boostMultiplier = 1,
+		usingItemId = nil,
+		usingUntil = 0,
+		usingToken = 0,
+		exoUsed = false,
+		bag = nil,
+		onInventoryChanged = nil,
 		lastShotTime = -math.huge,
 		dead = false,
 		lastAttacker = nil,
@@ -173,22 +205,132 @@ function Fighter.setWeapon(fighter: Fighter, slot: WeaponSlot, item: ItemInstanc
 	local info = ItemCatalog.get(item.itemId)
 	assert(info and info.category == slot, `objet {item.itemId} incompatible avec l'emplacement {slot}`)
 	if slot == "ranged" then
-		-- L'arme apparaît chargée (le chargeur n'est pas modélisé dans le sac).
-		fighter.ranged = { item = item, def = info.def, state = WeaponLogic.new(info.def) }
+		-- L'état (chargeur, chaleur) suit l'objet : jeter puis reprendre une
+		-- arme ne la recharge pas. Une arme jamais utilisée apparaît chargée.
+		local state = weaponStates[item.uid]
+		if state == nil then
+			state = WeaponLogic.new(info.def)
+			weaponStates[item.uid] = state
+		end
+		WeaponLogic.cancelReload(state)
+		fighter.ranged = { item = item, def = info.def, state = state }
 	else
 		fighter.melee = { item = item, def = info.def, lastAttackAt = -math.huge }
 	end
 end
 
--- Met à jour les états temporaires (étourdissement, ralentissement).
+-- Met à jour les états temporaires (étourdissement, ralentissement, surcharge, consommable).
 function Fighter.refresh(fighter: Fighter, now: number)
 	fighter.move.stunned = now < fighter.stunnedUntil
 	local slow = if now < fighter.slowUntil then fighter.slowMultiplier else 1
-	fighter.move.speedMultiplier = slow
+	local boost = if now < fighter.boostUntil then fighter.boostMultiplier else 1
+	fighter.move.speedMultiplier = slow * boost
+	if fighter.usingItemId ~= nil and now >= fighter.usingUntil then
+		fighter.usingItemId = nil
+	end
+	if fighter.usingItemId then
+		local info = ItemCatalog.get(fighter.usingItemId)
+		fighter.move.usingConsumable = if info then info.def.moveSpeedMultiplierWhileUsing else nil
+	else
+		fighter.move.usingConsumable = nil
+	end
+end
+
+-- Inventaire « sac de partie » : cellules prélevées dans les vraies piles.
+function Fighter.bagInventory(fighter: Fighter): FighterInventory
+	local inventory = {} :: any
+	function inventory:countCells(cellId: string): number
+		local bag = fighter.bag
+		return if bag then InventoryLogic.count(bag, cellId) else 0
+	end
+	function inventory:takeCells(cellId: string, amount: number): number
+		local bag = fighter.bag
+		if bag == nil then
+			return 0
+		end
+		local taken = InventoryLogic.consume(bag, cellId, amount)
+		if taken > 0 and fighter.onInventoryChanged then
+			fighter.onInventoryChanged()
+		end
+		return taken
+	end
+	return inventory :: FighterInventory
+end
+
+--[[
+	Aligne armes, casque, gilet et bouclier max sur les emplacements équipés
+	du sac (après un ramassage, un échange, un objet jeté…).
+]]
+function Fighter.syncEquipment(fighter: Fighter)
+	local bag = fighter.bag
+	if bag == nil then
+		return
+	end
+	local equipped = bag.equipped
+	local ranged = equipped.ranged
+	if ranged == nil or fighter.ranged == nil or fighter.ranged.item.uid ~= ranged.uid then
+		Fighter.setWeapon(fighter, "ranged", ranged)
+	end
+	local melee = equipped.melee
+	if melee == nil or fighter.melee == nil or fighter.melee.item.uid ~= melee.uid then
+		Fighter.setWeapon(fighter, "melee", melee)
+	end
+	if fighter.activeSlot == "ranged" and fighter.ranged == nil and fighter.melee ~= nil then
+		fighter.activeSlot = "melee"
+	elseif fighter.activeSlot == "melee" and fighter.melee == nil and fighter.ranged ~= nil then
+		fighter.activeSlot = "ranged"
+	end
+	fighter.helmet = equipped.helmet
+	fighter.vest = equipped.vest
+	fighter.maxShield = ItemRules.maxShield(equipped.vest)
+	-- Le bouclier ne se recharge qu'avec une batterie : un nouveau gilet ne
+	-- remplit pas la barre, on se contente de la borner.
+	fighter.shield = math.min(fighter.shield, fighter.maxShield)
+end
+
+-- Oublie l'état des armes (fin de partie).
+function Fighter.clearWeaponStates()
+	table.clear(weaponStates)
 end
 
 function Fighter.isAlive(fighter: Fighter): boolean
 	return not fighter.dead and fighter.health > 0
+end
+
+-- Équipe d'un combattant (nil = sans équipe : tout le monde est ennemi).
+function Fighter.teamOf(fighter: Fighter): string?
+	local player = fighter.player
+	if player then
+		local team = player:GetAttribute("TeamId")
+		if type(team) == "string" and team ~= "" then
+			return team
+		end
+	end
+	return fighter.teamId
+end
+
+function Fighter.sameTeam(a: Fighter, b: Fighter): boolean
+	local teamA = Fighter.teamOf(a)
+	return teamA ~= nil and teamA == Fighter.teamOf(b)
+end
+
+--[[
+	Cible « objet » destructible (orbe, mur déployable, drone) : un modèle
+	avec un humanoïde caché, pour réutiliser toute la chaîne de dégâts.
+]]
+function Fighter.newObject(model: Model, root: BasePart, health: number, teamId: string?): Fighter
+	local humanoid = Instance.new("Humanoid")
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	humanoid.MaxHealth = health
+	humanoid.Health = health
+	humanoid.BreakJointsOnDeath = false
+	humanoid.Parent = model
+	local fighter = Fighter.new("object", nil, model, humanoid, root, {}, Fighter.simpleInventory({}))
+	fighter.maxHealth = health
+	fighter.health = health
+	fighter.teamId = teamId
+	return fighter
 end
 
 return Fighter

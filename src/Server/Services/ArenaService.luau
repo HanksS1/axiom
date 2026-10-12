@@ -19,7 +19,10 @@ local Config = require(Shared.Config)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
+local PlaceRole = require(script.Parent.Parent.Matchmaking.PlaceRole)
 local CombatService = require(script.Parent.CombatService)
+local LootService = require(script.Parent.LootService)
+local MapService = require(script.Parent.MapService)
 
 local Dev = Config.Dev
 
@@ -125,21 +128,19 @@ local function buildArena(): Folder
 	)
 	ramp.Name = "Ramp"
 
-	-- Points d'apparition en bordure.
-	for index = 1, 8 do
-		local angle = index / 8 * math.pi * 2
-		local spawn = Instance.new("SpawnLocation")
-		spawn.Name = "Spawn" .. index
-		spawn.Anchored = true
-		spawn.Neutral = true
-		spawn.Duration = 0
-		spawn.Size = Vector3.new(6, 1, 6)
-		spawn.CFrame = CFrame.new(math.cos(angle) * (half - 12), 0.5, math.sin(angle) * (half - 12))
-		spawn.Color = NEON_CYAN
-		spawn.Material = Enum.Material.Neon
-		spawn.Transparency = 0.6
-		spawn.Parent = arena
-	end
+	-- Retour au Terminus (les joueurs apparaissent au Terminus hors partie).
+	local pad =
+		part(arena, "HubPad", Vector3.new(6, 1, 6), CFrame.new(0, 0.5, -half + 8), NEON_CYAN, Enum.Material.Neon)
+	pad.Transparency = 0.4
+	local prompt = Instance.new("ProximityPrompt")
+	prompt:SetAttribute("ActionKey", "station.open")
+	prompt:SetAttribute("ObjectKey", "station.hub")
+	prompt:SetAttribute("Station", "hub")
+	prompt.ActionText = "station.open"
+	prompt.ObjectText = "station.hub"
+	prompt.HoldDuration = 0.3
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = pad
 
 	arena.Parent = Workspace
 	return arena
@@ -181,10 +182,112 @@ local function spawnDummy(arena: Instance, spec: any)
 	CombatService.register(fighter)
 end
 
+-- Caisses de test : 6 de ravitaillement, 3 coffres militaires, 1 casier d'AXIOM.
+local CRATES: { { position: Vector3, crateType: string } } = {
+	{ position = Vector3.new(25, 0, 10), crateType = "supply" },
+	{ position = Vector3.new(-25, 0, 10), crateType = "supply" },
+	{ position = Vector3.new(0, 0, 30), crateType = "supply" },
+	{ position = Vector3.new(60, 0, -20), crateType = "supply" },
+	{ position = Vector3.new(-60, 0, -20), crateType = "supply" },
+	{ position = Vector3.new(-40, 0, 55), crateType = "supply" },
+	{ position = Vector3.new(45, 8.5, 50), crateType = "military" },
+	{ position = Vector3.new(-65, 0, 60), crateType = "military" },
+	{ position = Vector3.new(65, 0, -60), crateType = "military" },
+	{ position = Vector3.new(0, 0, 70), crateType = "axiom_locker" },
+}
+
+-- Bac à sable (hors partie) : caisses qui réapparaissent, réapparition des joueurs.
+local sandbox = true
+
+local function spawnCrate(cframe: CFrame, crateType: string)
+	if not sandbox then
+		return
+	end
+	local container = LootService.spawnCrate(cframe, crateType)
+	-- La caisse ouverte est remplacée par une neuve après un délai.
+	container.model:GetAttributeChangedSignal("Opened"):Once(function()
+		task.delay(Config.Loot.arenaRespawnDelay, function()
+			if not sandbox then
+				return
+			end
+			LootService.remove(container)
+			spawnCrate(cframe, crateType)
+		end)
+	end)
+end
+
+-- Remplit l'arène de caisses de bac à sable à partir des repères.
+function ArenaService.spawnSandboxCrates()
+	for _, marker in MapService.crateSpawns() do
+		spawnCrate(marker.cframe, marker.attributes.CrateType or "supply")
+	end
+end
+
+-- Active / désactive le bac à sable (désactivé pendant une partie).
+function ArenaService.setSandbox(enabled: boolean)
+	sandbox = enabled
+end
+
+function ArenaService.isSandbox(): boolean
+	return sandbox
+end
+
+-- Repères de partie : points de départ, extractions, accélérateurs, caisses.
+local function placeMarkers(arena: Instance)
+	local half = Dev.arenaSize / 2
+	for index = 1, 8 do
+		local angle = index / 8 * math.pi * 2 + math.pi / 8
+		MapService.placeMarker(
+			arena,
+			"DeploySpawn",
+			CFrame.new(math.cos(angle) * (half - 10), 3, math.sin(angle) * (half - 10))
+		)
+	end
+	local extractions = {
+		{ position = Vector3.new(0, 0.2, -70), name = "extraction.arena.north" },
+		{ position = Vector3.new(65, 0.2, 35), name = "extraction.arena.east" },
+		{ position = Vector3.new(-65, 0.2, 35), name = "extraction.arena.west" },
+	}
+	for _, spec in extractions do
+		MapService.placeMarker(arena, "ExtractionPoint", CFrame.new(spec.position), { NameKey = spec.name })
+	end
+	for index = 1, 6 do
+		local angle = index / 6 * math.pi * 2
+		MapService.placeMarker(arena, "AcceleratorSpot", CFrame.new(math.cos(angle) * 60, 0.2, math.sin(angle) * 60))
+	end
+	for _, spec in CRATES do
+		MapService.placeMarker(arena, "CrateSpawn", CFrame.new(spec.position), { CrateType = spec.crateType })
+	end
+	-- Zones à risque (garnisons, Gardien) et points de patrouille des robots.
+	MapService.placeMarker(arena, "RiskZone", CFrame.new(0, 1, 62), { Main = true, Radius = 14 })
+	MapService.placeMarker(arena, "RiskZone", CFrame.new(50, 9, 50), { Main = false, Radius = 8 })
+	for index = 1, 4 do
+		local angle = index / 4 * math.pi * 2 + math.pi / 4
+		MapService.placeMarker(arena, "RobotSpawn", CFrame.new(math.cos(angle) * 55, 1, math.sin(angle) * 55), {
+			Garrison = false,
+		})
+	end
+end
+
+-- L'arène de test est-elle la carte courante ?
+function ArenaService.isArena(): boolean
+	return Workspace:FindFirstChild("Arena") ~= nil
+end
+
+-- Position dans l'arène greybox (zone de combat hors partie : entraînement).
+function ArenaService.contains(position: Vector3): boolean
+	local half = Dev.arenaSize / 2
+	return Workspace:FindFirstChild("Arena") ~= nil
+		and math.abs(position.X) <= half
+		and math.abs(position.Z) <= half
+		and position.Y < 80
+end
+
 function ArenaService.init() end
 
 function ArenaService.start()
-	if not (RunService:IsStudio() and Dev.testArenaInStudio) then
+	-- Arène greybox : en Studio, et en ligne tant que les cartes (P7) n'existent pas.
+	if not (if RunService:IsStudio() then Dev.testArenaInStudio else Dev.greyboxOnline) then
 		return
 	end
 	if Workspace:FindFirstChild("Map") or Workspace:FindFirstChild("Arena") then
@@ -195,9 +298,17 @@ function ArenaService.start()
 		baseplate:Destroy()
 	end
 	local arena = buildArena()
+	-- Serveur de partie : ni mannequins, ni bac à sable.
+	if PlaceRole.isMatchServer() then
+		sandbox = false
+		placeMarkers(arena)
+		return
+	end
 	for _, spec in Dev.dummies do
 		task.spawn(spawnDummy, arena, spec)
 	end
+	placeMarkers(arena)
+	ArenaService.spawnSandboxCrates()
 
 	-- Les mannequins détruits réapparaissent.
 	CombatService.FighterDied:Connect(function(fighter)

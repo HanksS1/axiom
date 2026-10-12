@@ -89,7 +89,12 @@ tests/
 |---|---|
 | P0 : Fondations | ✅ terminée |
 | P1 : Combat de base | ✅ terminée (à valider dans Studio) |
-| P2 → P10 | à venir |
+| P2 : Loot et inventaire | ✅ terminée (à valider dans Studio) |
+| P3 : Boucle de partie | ✅ terminée (à valider dans Studio) |
+| P4 : Robots | ✅ terminée (à valider dans Studio) |
+| P5 : Hub et économie | ✅ terminée (à valider dans Studio) |
+| P6 : Matchmaking | ✅ terminée (à valider dans Studio et en ligne) |
+| P7 → P10 | à venir |
 
 Le détail de chaque phase (fichiers, comment tester, limites, questions) est
 dans [`docs/phases/`](docs/phases).

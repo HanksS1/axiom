@@ -27,5 +27,30 @@ return Freeze.deep({
 		MeleeAttack = { rate = 4, burst = 6 },
 		SetParry = { rate = 6, burst = 10 },
 		SetMovement = { rate = 10, burst = 15 },
+		-- Loot et inventaire
+		TakeItem = { rate = 5, burst = 8 },
+		CloseContainer = { rate = 4, burst = 8 },
+		EquipItem = { rate = 4, burst = 8 },
+		UnequipItem = { rate = 4, burst = 8 },
+		DropItem = { rate = 4, burst = 8 },
+		UseConsumable = { rate = 2, burst = 4 },
+		-- Partie
+		Ping = { rate = 2, burst = 4 },
+		UseGadget = { rate = 2, burst = 4 },
+		-- Terminus et économie
+		VaultAction = { rate = 6, burst = 12 },
+		MerchantSell = { rate = 2, burst = 4 },
+		MerchantBuy = { rate = 3, burst = 6 },
+		Repair = { rate = 2, burst = 4 },
+		SetInsurance = { rate = 2, burst = 4 },
+		OpenFreeCrate = { rate = 1, burst = 2 },
+		-- Matchmaking
+		SetPlatform = { rate = 1, burst = 4 },
+		PartyInvite = { rate = 0.5, burst = 3 },
+		PartyRespond = { rate = 1, burst = 3 },
+		PartyLeave = { rate = 1, burst = 2 },
+		QueueJoin = { rate = 0.5, burst = 3 },
+		QueueLeave = { rate = 1, burst = 3 },
+		ReturnToHub = { rate = 0.5, burst = 2 },
 	} :: { [string]: Limit },
 })

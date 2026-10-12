@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Format et déroulé d'une partie (sections 4, 9.3, 13).
+	Format et déroulé d'une partie (sections 4, 6.10, 9.3, 13, 16.5).
 ]]
 
 local Freeze = require(script.Parent.Parent.Util.Freeze)
@@ -17,6 +17,10 @@ return Freeze.deep({
 		points = 3,
 		openAtStart = 2,
 		holdTime = 30,
+		-- Rayon du cercle lumineux au sol (non précisé par le document).
+		radius = 10,
+		verticalTolerance = 12,
+		updateInterval = 0.2,
 	},
 
 	alertWave = {
@@ -27,5 +31,34 @@ return Freeze.deep({
 	pickup = {
 		holdTime = 0.3,
 		maxDistance = 10,
+	},
+
+	-- Après la mort (désintégration), délai avant l'écran de fin (solo).
+	deathScreenDelay = 1.5,
+	-- Fin de partie : délai avant le retour (Terminus ; arène de test en Studio).
+	returnDelay = 20,
+
+	-- Orbe et Accélérateur (duo, section 6.10).
+	revive = {
+		orbPickupHold = 0.3,
+		orbPickupDistance = 8,
+		acceleratorDistance = 10,
+	},
+
+	-- Pings (section 16.5).
+	ping = {
+		lifetime = 8,
+		maxDistance = 500,
+		longPressThreshold = 0.35,
+		lowHealthForHealPing = 35,
+	},
+
+	-- Gadgets : PV des objets destructibles (non précisés par le document).
+	gadgets = {
+		droneHealth = 30,
+		droneHoverHeight = 12,
+		wallDistance = 5,
+		grappleSpeed = 80,
+		grappleMaxTime = 1.2,
 	},
 })

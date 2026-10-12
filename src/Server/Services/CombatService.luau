@@ -21,6 +21,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Damage = require(Shared.Combat.Damage)
+local InventoryLogic = require(Shared.Items.InventoryLogic)
 local Guard = require(Shared.Util.Guard)
 local Movement = require(Shared.Combat.Movement)
 local Signal = require(Shared.Util.Signal)
@@ -40,6 +41,10 @@ local CombatService = {}
 CombatService.FighterDied = Signal.new() :: Signal.Signal<Fighter, Fighter?>
 -- (victime, attaquant?, dégâts) : un combattant a subi des dégâts.
 CombatService.FighterDamaged = Signal.new() :: Signal.Signal<Fighter, Fighter?, number>
+-- (position, rayon) : bruit audible par les robots (tirs).
+CombatService.NoiseMade = Signal.new() :: Signal.Signal<Vector3, number>
+-- (combattant) : le joueur quitte le serveur (avant la destruction du personnage).
+CombatService.PlayerLeaving = Signal.new() :: Signal.Signal<Fighter>
 -- (combattant) : posture / vitesse modifiée (pour le contrôle de mouvement).
 CombatService.MovementChanged = Signal.new() :: Signal.Signal<Fighter>
 
@@ -61,9 +66,13 @@ end
 
 -- Exclut tous les personnages des rayons « monde » (ligne de vue).
 local function refreshRayFilter()
+	-- Les personnages ne bloquent pas la ligne de vue ; les objets (mur
+	-- déployable, drone, orbe) la bloquent.
 	local excluded = {}
-	for character in fighters do
-		table.insert(excluded, character)
+	for character, fighter in fighters do
+		if fighter.kind ~= "object" then
+			table.insert(excluded, character)
+		end
 	end
 	worldRayParams.FilterDescendantsInstances = excluded
 end
@@ -86,6 +95,7 @@ local function publishPublic(fighter: Fighter)
 	character:SetAttribute("Parrying", fighter.move.parrying)
 	character:SetAttribute("Stunned", fighter.move.stunned)
 	character:SetAttribute("Dead", fighter.dead)
+	character:SetAttribute("Using", fighter.usingItemId ~= nil)
 	local weapon = if fighter.activeSlot == "ranged" then fighter.ranged else fighter.melee
 	character:SetAttribute("WeaponId", if weapon then weapon.item.itemId else nil)
 	character:SetAttribute("WeaponCondition", if weapon then weapon.item.condition else nil)
@@ -119,6 +129,12 @@ local function buildOwnerState(fighter: Fighter): { [string]: any }
 	if melee then
 		state.melee = { itemId = melee.item.itemId, condition = melee.item.condition }
 	end
+	if fighter.usingItemId then
+		state.using = { itemId = fighter.usingItemId, endsAt = fighter.usingUntil }
+	end
+	if fighter.boostUntil > state.serverTime then
+		state.boostUntil = fighter.boostUntil
+	end
 	return state
 end
 
@@ -147,7 +163,8 @@ local function applyMovement(fighter: Fighter)
 	if fighter.dead then
 		humanoid.WalkSpeed = 0
 		humanoid.JumpHeight = 0
-	else
+	elseif fighter.kind == "player" or fighter.kind == "bot" then
+		-- Les robots ont leur propre vitesse (RobotService).
 		humanoid.WalkSpeed = Movement.walkSpeed(fighter.move)
 		humanoid.JumpHeight = Movement.jumpHeight(fighter.move)
 	end
@@ -190,6 +207,8 @@ local function kill(fighter: Fighter, killer: Fighter?)
 	end
 	fighter.dead = true
 	fighter.health = 0
+	fighter.usingToken += 1
+	fighter.usingItemId = nil
 	fighter.move.parrying = false
 	fighter.move.sprinting = false
 	if fighter.ranged then
@@ -199,6 +218,16 @@ local function kill(fighter: Fighter, killer: Fighter?)
 	applyMovement(fighter)
 	queueOwnerState(fighter)
 	CombatService.FighterDied:Fire(fighter, killer)
+
+	-- Objet détruit (mur, drone, orbe) : il disparaît après l'effet.
+	if fighter.kind == "object" then
+		task.delay(Combat.death.disintegrateDuration, function()
+			if fighter.character.Parent then
+				fighter.character:Destroy()
+			end
+		end)
+		return
+	end
 
 	local handler = deathHandler
 	if handler then
@@ -212,6 +241,32 @@ local function kill(fighter: Fighter, killer: Fighter?)
 			fighter.humanoid.Health = 0
 		end
 	end)
+end
+
+-- Mouvement d'un mercenaire IA (décidé par le serveur, sans horodatage client).
+function CombatService.setBotMovement(fighter: Fighter, sprinting: boolean)
+	if fighter.kind ~= "bot" or not Fighter.isAlive(fighter) then
+		return
+	end
+	local time = now()
+	Fighter.refresh(fighter, time)
+	local move = fighter.move
+	local wantsSprint = sprinting and Movement.canSprint(move)
+	if wantsSprint == move.sprinting then
+		return
+	end
+	if move.sprinting then
+		fighter.sprintEndedAt = time
+	end
+	move.sprinting = wantsSprint
+	applyMovement(fighter)
+end
+
+-- Filtre des dégâts (zones sans combat) : false = dégâts annulés.
+local damageFilter: ((attacker: Fighter?, target: Fighter) -> boolean)? = nil
+
+function CombatService.setDamageFilter(filter: ((attacker: Fighter?, target: Fighter) -> boolean)?)
+	damageFilter = filter
 end
 
 export type DamageOptions = {
@@ -231,6 +286,15 @@ function CombatService.applyDamage(
 	options: DamageOptions?
 ): (number, boolean)
 	if not Fighter.isAlive(target) or amount <= 0 then
+		return 0, false
+	end
+	-- Pas de tir ami entre coéquipiers.
+	if attacker and attacker ~= target and Fighter.sameTeam(attacker, target) then
+		return 0, false
+	end
+	-- Zones sans combat (Terminus).
+	local filter = damageFilter
+	if filter and not filter(attacker, target) then
 		return 0, false
 	end
 	local opts: DamageOptions = options or {}
@@ -257,9 +321,145 @@ function CombatService.heal(target: Fighter, health: number, shield: number)
 	if not Fighter.isAlive(target) then
 		return
 	end
-	target.health = math.min(Combat.maxHealth, target.health + math.max(0, health))
+	target.health = math.min(target.maxHealth, target.health + math.max(0, health))
 	target.shield = math.min(target.maxShield, target.shield + math.max(0, shield))
 	publishPublic(target)
+end
+
+--[[
+	Utilisation d'un consommable du sac (section 8.6). Pendant le temps
+	d'utilisation, le joueur est ralenti et ne peut ni tirer, ni frapper, ni
+	parer ; l'effet s'applique à la fin (annulé en cas de mort).
+	Retourne (succès, raison) : "dead", "busy", "missing", "useless".
+]]
+function CombatService.useConsumable(fighter: Fighter, itemId: string): (boolean, string?)
+	local bag = fighter.bag
+	if bag == nil or not Fighter.isAlive(fighter) then
+		return false, "dead"
+	end
+	local time = now()
+	Fighter.refresh(fighter, time)
+	if fighter.move.stunned or fighter.usingItemId ~= nil then
+		return false, "busy"
+	end
+	local def = Config.Equipment.consumables[itemId]
+	if def == nil or InventoryLogic.count(bag, itemId) <= 0 then
+		return false, "missing"
+	end
+	local effect = def.effect
+	if effect.heal and fighter.health >= fighter.maxHealth then
+		return false, "useless"
+	end
+	if effect.shield and (fighter.maxShield <= 0 or fighter.shield >= fighter.maxShield) then
+		return false, "useless"
+	end
+	if effect.bonusUp and fighter.exoUsed then
+		return false, "useless"
+	end
+
+	local function apply()
+		if not Fighter.isAlive(fighter) or fighter.bag ~= bag then
+			return
+		end
+		if InventoryLogic.consume(bag, itemId, 1) < 1 then
+			return
+		end
+		if effect.heal or effect.shield then
+			CombatService.heal(fighter, effect.heal or 0, effect.shield or 0)
+		end
+		if effect.speedMultiplier then
+			fighter.boostMultiplier = effect.speedMultiplier
+			fighter.boostUntil = now() + (effect.duration or 0)
+			refreshAt(fighter, fighter.boostUntil)
+		end
+		if effect.bonusUp then
+			fighter.exoUsed = true
+			bag.bonusUp += effect.bonusUp
+		end
+		if fighter.onInventoryChanged then
+			fighter.onInventoryChanged()
+		end
+		applyMovement(fighter)
+		queueOwnerState(fighter)
+	end
+
+	if def.useTime <= 0 then
+		apply()
+		return true, nil
+	end
+	fighter.usingToken += 1
+	local token = fighter.usingToken
+	fighter.usingItemId = itemId
+	fighter.usingUntil = time + def.useTime
+	fighter.move.sprinting = false
+	endParry(fighter, time)
+	applyMovement(fighter)
+	queueOwnerState(fighter)
+	task.delay(def.useTime, function()
+		if fighter.usingToken ~= token then
+			return
+		end
+		fighter.usingItemId = nil
+		apply()
+		applyMovement(fighter)
+		queueOwnerState(fighter)
+	end)
+	return true, nil
+end
+
+export type MeleeOptions = {
+	breaksParry: boolean?,
+	parryBreakStun: number?,
+	shieldIgnore: number?,
+}
+
+--[[
+	Coup de mêlée d'un combattant (joueur, robot, mercenaire IA) sur un autre :
+	résolution de la parade (6.8), étourdissements, puis dégâts.
+	Retourne (dégâts infligés, cible tuée).
+]]
+function CombatService.meleeHit(
+	attacker: Fighter,
+	target: Fighter,
+	amount: number,
+	options: MeleeOptions?
+): (number, boolean)
+	local opts: MeleeOptions = options or {}
+	local time = now()
+	Fighter.refresh(target, time)
+	local outcome: Damage.ParryOutcome = Damage.resolveParry({
+		parrying = target.move.parrying,
+		parryStartedAt = target.parryStartedAt,
+		now = time,
+		frontal = Damage.isFrontal(target.root.CFrame.LookVector, target.root.Position, attacker.root.Position),
+		breaksParry = opts.breaksParry == true,
+	})
+	if outcome == "perfect" then
+		target.parryPerfected = true
+		stun(attacker, Combat.parry.perfectStun)
+		if target.player then
+			ServerNet.fire("ParryResult", target.player, "perfect")
+		end
+		if attacker.player then
+			ServerNet.fire("ParryResult", attacker.player, "parried")
+		end
+		return 0, false
+	elseif outcome == "broken" then
+		endParry(target, time)
+		stun(target, opts.parryBreakStun or 1)
+		if target.player then
+			ServerNet.fire("ParryResult", target.player, "broken")
+		end
+	end
+	return CombatService.applyDamage(target, amount * Damage.parryMultiplier(outcome), attacker, {
+		shieldIgnore = opts.shieldIgnore,
+		sourcePosition = attacker.root.Position,
+	})
+end
+
+-- Le combattant est-il étourdi (robots : aucune action pendant l'étourdissement) ?
+function CombatService.isStunned(fighter: Fighter): boolean
+	return now() < fighter.stunnedUntil
 end
 
 -- Registre ------------------------------------------------------------------
@@ -296,6 +496,30 @@ function CombatService.getFighter(player: Player): Fighter?
 	return byPlayer[player]
 end
 
+-- Tous les combattants enregistrés (copie : sûre à parcourir).
+function CombatService.allFighters(): { Fighter }
+	local list = {}
+	for _, fighter in fighters do
+		table.insert(list, fighter)
+	end
+	return list
+end
+
+-- Fixe les PV (réanimation à 50 PV…).
+function CombatService.setHealth(fighter: Fighter, health: number)
+	if Fighter.isAlive(fighter) then
+		fighter.health = math.clamp(health, 1, fighter.maxHealth)
+		publishPublic(fighter)
+	end
+end
+
+-- Tue un combattant sans attaquant (Purge, mort instantanée de l'environnement).
+function CombatService.kill(fighter: Fighter)
+	if Fighter.isAlive(fighter) then
+		kill(fighter, nil)
+	end
+end
+
 function CombatService.getFighterByCharacter(character: Model): Fighter?
 	return fighters[character]
 end
@@ -317,6 +541,13 @@ end
 
 function CombatService.setDeathHandler(handler: ((fighter: Fighter, killer: Fighter?) -> ())?)
 	deathHandler = handler
+end
+
+-- L'équipement du sac a changé (ramassage, échange, objet jeté).
+function CombatService.equipmentChanged(fighter: Fighter)
+	Fighter.syncEquipment(fighter)
+	applyMovement(fighter)
+	queueOwnerState(fighter)
 end
 
 function CombatService.publish(fighter: Fighter)
@@ -368,7 +599,7 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 	end
 	local time = now()
 	Fighter.refresh(fighter, time)
-	if fighter.move.stunned then
+	if fighter.move.stunned or fighter.usingItemId ~= nil then
 		return
 	end
 	if shot.t < fighter.lastShotTime then
@@ -419,6 +650,9 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 		return
 	end
 
+	-- Le tir s'entend (les robots dans le rayon viennent voir).
+	CombatService.NoiseMade:Fire(shot.origin, def.noiseRadius)
+
 	-- Dégâts regroupés par cible (plombs d'un fusil à pompe).
 	local condition = ranged.item.condition :: number
 	local totals: { [Fighter]: { damage: number, head: boolean } } = {}
@@ -432,6 +666,11 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 			helmet = target.helmet,
 			targetKind = target.kind,
 		})
+		-- Point faible d'un robot (dos du Bastion).
+		if target.kind == "robot" and hit.part.Name == "WeakSpot" and target.robotId then
+			local robot = Config.Robots.byId[target.robotId]
+			amount *= if robot and robot.weakSpotMultiplier then robot.weakSpotMultiplier else 1
+		end
 		local entry = totals[target]
 		if entry == nil then
 			entry = { damage = 0, head = false }
@@ -528,7 +767,7 @@ local function onMeleeAttack(player: Player, targetPart: BasePart?)
 	end
 	local time = now()
 	Fighter.refresh(fighter, time)
-	if fighter.move.stunned or fighter.move.parrying then
+	if fighter.move.stunned or fighter.move.parrying or fighter.usingItemId ~= nil then
 		return
 	end
 	local def = melee.def
@@ -573,35 +812,10 @@ local function onMeleeAttack(player: Player, targetPart: BasePart?)
 		return
 	end
 
-	Fighter.refresh(target, time)
-	local outcome: Damage.ParryOutcome = Damage.resolveParry({
-		parrying = target.move.parrying,
-		parryStartedAt = target.parryStartedAt,
-		now = time,
-		frontal = Damage.isFrontal(target.root.CFrame.LookVector, target.root.Position, fighter.root.Position),
+	local dealt, killed = CombatService.meleeHit(fighter, target, Damage.melee(def, melee.item.condition :: number), {
 		breaksParry = def.breaksParry == true,
-	})
-
-	if outcome == "perfect" then
-		target.parryPerfected = true
-		stun(fighter, Combat.parry.perfectStun)
-		if target.player then
-			ServerNet.fire("ParryResult", target.player, "perfect")
-		end
-		ServerNet.fire("ParryResult", player, "parried")
-		return
-	elseif outcome == "broken" then
-		endParry(target, time)
-		stun(target, def.parryBreakStun or 1)
-		if target.player then
-			ServerNet.fire("ParryResult", target.player, "broken")
-		end
-	end
-
-	local amount = Damage.melee(def, melee.item.condition :: number) * Damage.parryMultiplier(outcome)
-	local dealt, killed = CombatService.applyDamage(target, amount, fighter, {
+		parryBreakStun = def.parryBreakStun,
 		shieldIgnore = def.shieldIgnore,
-		sourcePosition = fighter.root.Position,
 	})
 	if dealt > 0 then
 		ServerNet.fire("HitConfirm", player, false, killed)
@@ -620,7 +834,12 @@ local function onSetParry(player: Player, active: boolean)
 		applyMovement(fighter)
 		return
 	end
-	if fighter.move.parrying or fighter.move.stunned or time < fighter.parryCooldownUntil then
+	if
+		fighter.move.parrying
+		or fighter.move.stunned
+		or fighter.usingItemId ~= nil
+		or time < fighter.parryCooldownUntil
+	then
 		return
 	end
 	if fighter.melee == nil then
@@ -678,6 +897,11 @@ local function onSetMovement(player: Player, stance: Movement.Stance, sprinting:
 	applyMovement(fighter)
 end
 
+-- Fin de recharge due (mercenaires IA : pas de minuterie côté client).
+function CombatService.finishReload(fighter: Fighter)
+	finishReloadIfDue(fighter, now())
+end
+
 function CombatService.init()
 	Players.RespawnTime = Combat.respawnTime
 
@@ -694,10 +918,12 @@ function CombatService.init()
 end
 
 function CombatService.start()
+	-- Le combattant d'un joueur qui part reste enregistré jusqu'à la
+	-- destruction de son personnage : la partie peut encore lâcher son sac.
 	Players.PlayerRemoving:Connect(function(player)
 		local fighter = byPlayer[player]
 		if fighter then
-			CombatService.unregister(fighter)
+			CombatService.PlayerLeaving:Fire(fighter)
 		end
 	end)
 end

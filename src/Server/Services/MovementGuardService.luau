@@ -38,6 +38,7 @@ type Track = {
 	recentMaxUntil: number,
 	allowanceSpeed: number,
 	allowanceUntil: number,
+	allowanceRise: number, -- montée verticale tolérée par contrôle pendant l'allocation
 	resetUntil: number, -- après un recalage ou une téléportation serveur
 }
 
@@ -53,6 +54,7 @@ local function newTrack(position: CFrame): Track
 		recentMaxUntil = os.clock() + G.speedGraceTime,
 		allowanceSpeed = 0,
 		allowanceUntil = 0,
+		allowanceRise = 0,
 		resetUntil = os.clock() + 1,
 	}
 end
@@ -96,7 +98,10 @@ local function check(player: Player, clock: number, dt: number)
 	local horizontal = Vector3.new(delta.X, 0, delta.Z).Magnitude
 	local maxHorizontal = allowedSpeed(player, track, clock) * dt * G.speedTolerance + G.flatTolerance
 	local tooFast = horizontal > maxHorizontal
-	local tooHigh = delta.Y > G.maxVerticalRise
+	local maxRise = if clock < track.allowanceUntil
+		then math.max(G.maxVerticalRise, track.allowanceRise)
+		else G.maxVerticalRise
+	local tooHigh = delta.Y > maxRise
 	track.lastPosition = position
 
 	if tooFast or tooHigh then
@@ -120,11 +125,17 @@ local function check(player: Player, clock: number, dt: number)
 end
 
 -- Tolérance temporaire (gadgets, poussées, téléportations scriptées).
-function MovementGuardService.grantAllowance(player: Player, speed: number, duration: number)
+function MovementGuardService.grantAllowance(player: Player, speed: number, duration: number, rise: number?)
 	local track = tracks[player]
 	if track then
+		local clock = os.clock()
+		if clock >= track.allowanceUntil then
+			track.allowanceSpeed = 0
+			track.allowanceRise = 0
+		end
 		track.allowanceSpeed = math.max(track.allowanceSpeed, speed)
-		track.allowanceUntil = math.max(track.allowanceUntil, os.clock() + duration)
+		track.allowanceRise = math.max(track.allowanceRise, rise or 0)
+		track.allowanceUntil = math.max(track.allowanceUntil, clock + duration)
 	end
 end
 

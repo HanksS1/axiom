@@ -43,6 +43,17 @@ export type TopGame = {
 	date: number,
 }
 
+-- Partie en cours : l'équipement emporté est retiré du profil au départ et
+-- conservé ici. Si la partie ne se termine pas normalement (échec de
+-- téléportation, serveur planté), il est restitué au retour au Terminus.
+export type ActiveMatch = {
+	id: string,
+	startedAt: number,
+	mode: string,
+	insurance: string?,
+	snapshot: { loadout: Loadout, bag: { ItemInstance } },
+}
+
 export type Profile = {
 	version: number,
 	createdAt: number,
@@ -60,6 +71,9 @@ export type Profile = {
 	cosmeticsOwned: { [string]: boolean },
 	cosmeticsEquipped: { [string]: string },
 	pendingInsurance: { ItemInstance }?,
+	pendingLoot: { ItemInstance }, -- loot extrait en attente de l'écran de tri
+	activeMatch: ActiveMatch?,
+	insuranceTier: string?, -- assurance choisie pour la prochaine partie (payée au départ)
 	season: { id: number, top10: { TopGame } },
 	seasonHistory: { { id: number, rank: string } },
 	bestScoreByMode: { [string]: number },
@@ -91,9 +105,42 @@ export type ProfileView = {
 	tempItem: ItemInstance?,
 	hasVaultExtension: boolean,
 	freeCrate: { stored: number, nextGrantUnix: number? },
+	pendingLoot: { ItemInstance },
+	pendingInsuranceCount: number,
+	insuranceTier: string?,
+	rank: string,
+	rankingScore: number,
+	seasonId: number,
+	top10: { TopGame },
+	bestScoreByMode: { [string]: number },
 	tutorialDone: boolean,
 	settings: { [string]: any },
 	stats: { [string]: number },
+}
+
+-- Groupe duo (Terminus), envoyé à ses membres.
+export type PartyMemberView = {
+	userId: number,
+	name: string,
+	platform: string?,
+}
+
+export type PartyView = {
+	leaderUserId: number,
+	members: { PartyMemberView },
+}
+
+-- État de la file d'attente, envoyé au joueur (et à son coéquipier).
+export type QueueView = {
+	status: "idle" | "queued" | "teleporting",
+	modeId: string?,
+	format: string?,
+	group: string?,
+	forcedCrossplay: boolean?,
+	players: number?,
+	needed: number?,
+	since: number?, -- os.time() de l'entrée dans la file
+	suggestCrossplay: boolean?,
 }
 
 return {}

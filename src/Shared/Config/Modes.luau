@@ -20,6 +20,8 @@ export type ModeDef = {
 		reactionTime: number, -- secondes
 	},
 	scoreMultiplier: number,
+	-- Multiplicateur du budget de valeur des caisses (loot Faible / Moyen / Élevé).
+	lootValueMultiplier: number,
 	-- Le Module de calibration n'existe qu'en Difficile (7.3).
 	calibrationAllowed: boolean,
 }
@@ -33,6 +35,7 @@ local modes: { [string]: ModeDef } = {
 		conditionDropRates = { 50, 30, 15, 4.5, 0.5 },
 		robots = { health = 0.7, damage = 0.6, accuracy = 0.40, reactionTime = 0.8 },
 		scoreMultiplier = 1,
+		lootValueMultiplier = 1,
 		calibrationAllowed = false,
 	},
 	medium = {
@@ -43,6 +46,7 @@ local modes: { [string]: ModeDef } = {
 		conditionDropRates = { 25, 35, 25, 12, 3 },
 		robots = { health = 1.0, damage = 1.0, accuracy = 0.60, reactionTime = 0.5 },
 		scoreMultiplier = 1.5,
+		lootValueMultiplier = 1.6,
 		calibrationAllowed = false,
 	},
 	hard = {
@@ -53,6 +57,7 @@ local modes: { [string]: ModeDef } = {
 		conditionDropRates = { 5, 20, 35, 28, 12 },
 		robots = { health = 1.4, damage = 1.3, accuracy = 0.80, reactionTime = 0.3 },
 		scoreMultiplier = 2.5,
+		lootValueMultiplier = 2.5,
 		calibrationAllowed = true,
 	},
 }

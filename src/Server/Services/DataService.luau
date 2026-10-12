@@ -27,6 +27,7 @@ local Types = require(Shared.Types)
 local try = require(Shared.Util.Try)
 local ItemRules = require(Shared.Items.ItemRules)
 local Leveling = require(Shared.Progression.Leveling)
+local MatchRules = require(Shared.Match.MatchRules)
 
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
 local Uid = require(script.Parent.Parent.Util.Uid)
@@ -108,6 +109,14 @@ function DataService.buildView(profile: Profile): Types.ProfileView
 		tempItem = profile.tempItem,
 		hasVaultExtension = profile.hasVaultExtension,
 		freeCrate = { stored = profile.freeCrate.stored, nextGrantUnix = nextGrant },
+		pendingLoot = profile.pendingLoot,
+		pendingInsuranceCount = if profile.pendingInsurance then #profile.pendingInsurance else 0,
+		insuranceTier = profile.insuranceTier,
+		rank = MatchRules.rank(MatchRules.rankingScore(profile.season.top10)),
+		rankingScore = MatchRules.rankingScore(profile.season.top10),
+		seasonId = profile.season.id,
+		top10 = profile.season.top10,
+		bestScoreByMode = profile.bestScoreByMode,
 		tutorialDone = profile.tutorialDone,
 		settings = profile.settings,
 		stats = profile.stats :: any,
@@ -340,7 +349,7 @@ end
 	remplace l'original qu'en cas de succès.
 	Retourne true si la modification a été appliquée.
 ]]
-function DataService.update(player: Player, mutator: (profile: Profile) -> ()): boolean
+function DataService.update(player: Player, mutator: (profile: Profile) -> ...any): boolean
 	local session = sessions[player]
 	if session == nil or not session.active then
 		return false
@@ -354,6 +363,10 @@ function DataService.update(player: Player, mutator: (profile: Profile) -> ()): 
 	-- d'écraser une autre modification faite pendant l'attente.
 	local routine = coroutine.create(mutator)
 	local ok, err = coroutine.resume(routine, working)
+	if ok and err == false then
+		-- Refus explicite (`return false`) : abandon silencieux.
+		return false
+	end
 	if not ok then
 		warn(`[DataService] modification annulée pour {player.UserId} : {err}`)
 		return false
@@ -388,6 +401,14 @@ end
 -- Après cet appel, plus aucune modification n'est acceptée pour ce joueur.
 function DataService.releaseForTeleport(player: Player): boolean
 	return releaseSession(player)
+end
+
+-- Recharge le profil d'un joueur resté sur ce serveur après une
+-- libération (téléportation échouée).
+function DataService.reload(player: Player)
+	if sessions[player] == nil and player.Parent == Players and not shuttingDown then
+		task.spawn(onPlayerAdded, player)
+	end
 end
 
 -- Enregistre une fonction appelée (de façon synchrone, sans céder la main)
