@@ -45,6 +45,7 @@ local LootService = require(script.Parent.LootService)
 local MapService = require(script.Parent.MapService)
 local MovementGuardService = require(script.Parent.MovementGuardService)
 local ReviveService = require(script.Parent.ReviveService)
+local RobotService = require(script.Parent.RobotService)
 
 type Fighter = Fighter.Fighter
 type ItemInstance = Types.ItemInstance
@@ -432,6 +433,7 @@ local function tick()
 	if not alerted and (phase == "alert" or phase == "final" or phase == "purge") then
 		alerted = true
 		ExtractionService.openAll()
+		RobotService.alertWave()
 		announce("axiom.alert")
 		MatchService.AlertTriggered:Fire()
 	end
@@ -528,6 +530,8 @@ function MatchService.begin(config: StartConfig): boolean
 		LootService.spawnCrate(marker.cframe, marker.attributes.CrateType or "supply")
 	end
 	ExtractionService.setup(random, aliveMembers)
+	-- Robots : population réduite dans l'arène de test (petite carte).
+	RobotService.populate(modeId, if ArenaService.isArena() then Config.Dev.arenaRobots else nil)
 
 	CharacterService.setLoadoutProvider(function(player)
 		local participant = participants[player]
@@ -591,6 +595,7 @@ function MatchService.finish()
 	end
 	ExtractionService.clear()
 	ReviveService.clearAll()
+	RobotService.clear()
 	CombatService.setDeathHandler(nil)
 	CharacterService.setLoadoutProvider(nil)
 	MatchService.Ended:Fire()

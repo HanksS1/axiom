@@ -41,6 +41,8 @@ local CombatService = {}
 CombatService.FighterDied = Signal.new() :: Signal.Signal<Fighter, Fighter?>
 -- (victime, attaquant?, dégâts) : un combattant a subi des dégâts.
 CombatService.FighterDamaged = Signal.new() :: Signal.Signal<Fighter, Fighter?, number>
+-- (position, rayon) : bruit audible par les robots (tirs).
+CombatService.NoiseMade = Signal.new() :: Signal.Signal<Vector3, number>
 -- (combattant) : le joueur quitte le serveur (avant la destruction du personnage).
 CombatService.PlayerLeaving = Signal.new() :: Signal.Signal<Fighter>
 -- (combattant) : posture / vitesse modifiée (pour le contrôle de mouvement).
@@ -161,7 +163,8 @@ local function applyMovement(fighter: Fighter)
 	if fighter.dead then
 		humanoid.WalkSpeed = 0
 		humanoid.JumpHeight = 0
-	else
+	elseif fighter.kind == "player" or fighter.kind == "bot" then
+		-- Les robots ont leur propre vitesse (RobotService).
 		humanoid.WalkSpeed = Movement.walkSpeed(fighter.move)
 		humanoid.JumpHeight = Movement.jumpHeight(fighter.move)
 	end
@@ -373,6 +376,61 @@ function CombatService.useConsumable(fighter: Fighter, itemId: string): (boolean
 	return true, nil
 end
 
+export type MeleeOptions = {
+	breaksParry: boolean?,
+	parryBreakStun: number?,
+	shieldIgnore: number?,
+}
+
+--[[
+	Coup de mêlée d'un combattant (joueur, robot, mercenaire IA) sur un autre :
+	résolution de la parade (6.8), étourdissements, puis dégâts.
+	Retourne (dégâts infligés, cible tuée).
+]]
+function CombatService.meleeHit(
+	attacker: Fighter,
+	target: Fighter,
+	amount: number,
+	options: MeleeOptions?
+): (number, boolean)
+	local opts: MeleeOptions = options or {}
+	local time = now()
+	Fighter.refresh(target, time)
+	local outcome: Damage.ParryOutcome = Damage.resolveParry({
+		parrying = target.move.parrying,
+		parryStartedAt = target.parryStartedAt,
+		now = time,
+		frontal = Damage.isFrontal(target.root.CFrame.LookVector, target.root.Position, attacker.root.Position),
+		breaksParry = opts.breaksParry == true,
+	})
+	if outcome == "perfect" then
+		target.parryPerfected = true
+		stun(attacker, Combat.parry.perfectStun)
+		if target.player then
+			ServerNet.fire("ParryResult", target.player, "perfect")
+		end
+		if attacker.player then
+			ServerNet.fire("ParryResult", attacker.player, "parried")
+		end
+		return 0, false
+	elseif outcome == "broken" then
+		endParry(target, time)
+		stun(target, opts.parryBreakStun or 1)
+		if target.player then
+			ServerNet.fire("ParryResult", target.player, "broken")
+		end
+	end
+	return CombatService.applyDamage(target, amount * Damage.parryMultiplier(outcome), attacker, {
+		shieldIgnore = opts.shieldIgnore,
+		sourcePosition = attacker.root.Position,
+	})
+end
+
+-- Le combattant est-il étourdi (robots : aucune action pendant l'étourdissement) ?
+function CombatService.isStunned(fighter: Fighter): boolean
+	return now() < fighter.stunnedUntil
+end
+
 -- Registre ------------------------------------------------------------------
 
 function CombatService.register(fighter: Fighter)
@@ -561,6 +619,9 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 		return
 	end
 
+	-- Le tir s'entend (les robots dans le rayon viennent voir).
+	CombatService.NoiseMade:Fire(shot.origin, def.noiseRadius)
+
 	-- Dégâts regroupés par cible (plombs d'un fusil à pompe).
 	local condition = ranged.item.condition :: number
 	local totals: { [Fighter]: { damage: number, head: boolean } } = {}
@@ -574,6 +635,11 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 			helmet = target.helmet,
 			targetKind = target.kind,
 		})
+		-- Point faible d'un robot (dos du Bastion).
+		if target.kind == "robot" and hit.part.Name == "WeakSpot" and target.robotId then
+			local robot = Config.Robots.byId[target.robotId]
+			amount *= if robot and robot.weakSpotMultiplier then robot.weakSpotMultiplier else 1
+		end
 		local entry = totals[target]
 		if entry == nil then
 			entry = { damage = 0, head = false }
@@ -715,35 +781,10 @@ local function onMeleeAttack(player: Player, targetPart: BasePart?)
 		return
 	end
 
-	Fighter.refresh(target, time)
-	local outcome: Damage.ParryOutcome = Damage.resolveParry({
-		parrying = target.move.parrying,
-		parryStartedAt = target.parryStartedAt,
-		now = time,
-		frontal = Damage.isFrontal(target.root.CFrame.LookVector, target.root.Position, fighter.root.Position),
+	local dealt, killed = CombatService.meleeHit(fighter, target, Damage.melee(def, melee.item.condition :: number), {
 		breaksParry = def.breaksParry == true,
-	})
-
-	if outcome == "perfect" then
-		target.parryPerfected = true
-		stun(fighter, Combat.parry.perfectStun)
-		if target.player then
-			ServerNet.fire("ParryResult", target.player, "perfect")
-		end
-		ServerNet.fire("ParryResult", player, "parried")
-		return
-	elseif outcome == "broken" then
-		endParry(target, time)
-		stun(target, def.parryBreakStun or 1)
-		if target.player then
-			ServerNet.fire("ParryResult", target.player, "broken")
-		end
-	end
-
-	local amount = Damage.melee(def, melee.item.condition :: number) * Damage.parryMultiplier(outcome)
-	local dealt, killed = CombatService.applyDamage(target, amount, fighter, {
+		parryBreakStun = def.parryBreakStun,
 		shieldIgnore = def.shieldIgnore,
-		sourcePosition = fighter.root.Position,
 	})
 	if dealt > 0 then
 		ServerNet.fire("HitConfirm", player, false, killed)

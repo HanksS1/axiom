@@ -259,6 +259,20 @@ local function placeMarkers(arena: Instance)
 	for _, spec in CRATES do
 		MapService.placeMarker(arena, "CrateSpawn", CFrame.new(spec.position), { CrateType = spec.crateType })
 	end
+	-- Zones à risque (garnisons, Gardien) et points de patrouille des robots.
+	MapService.placeMarker(arena, "RiskZone", CFrame.new(0, 1, 62), { Main = true, Radius = 14 })
+	MapService.placeMarker(arena, "RiskZone", CFrame.new(50, 9, 50), { Main = false, Radius = 8 })
+	for index = 1, 4 do
+		local angle = index / 4 * math.pi * 2 + math.pi / 4
+		MapService.placeMarker(arena, "RobotSpawn", CFrame.new(math.cos(angle) * 55, 1, math.sin(angle) * 55), {
+			Garrison = false,
+		})
+	end
+end
+
+-- L'arène de test est-elle la carte courante ?
+function ArenaService.isArena(): boolean
+	return Workspace:FindFirstChild("Arena") ~= nil
 end
 
 function ArenaService.init() end

@@ -245,4 +245,6 @@ return {
 	["touch.ping"] = "PING",
 	["hud.gadgetReady"] = "PRÊT",
 	["hud.gadgetUses"] = "×{uses}",
+	["dev.spawnRobots"] = "Robots de test",
+	["dev.clearRobots"] = "Retirer robots",
 }

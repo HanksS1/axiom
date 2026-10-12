@@ -50,6 +50,7 @@ return Freeze.deep({
 		width = 0.08,
 		lifetime = 0.06,
 		color = CYAN,
+		robotColor = Color3.fromRGB(255, 40, 40),
 	},
 
 	disintegration = {

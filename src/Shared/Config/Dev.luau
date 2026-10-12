@@ -16,4 +16,6 @@ return Freeze.deep({
 		{ position = Vector3.new(-12, 3, -30), vestCondition = 5, helmetCondition = 5 },
 	},
 	dummyRespawnDelay = 4,
+	-- Robots dans l'arène (petite carte) : partie et bac à sable.
+	arenaRobots = 8,
 })

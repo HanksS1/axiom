@@ -75,7 +75,8 @@ end
 -- Tracés d'un tir (rafale / plombs inclus).
 function EffectsController.playShot(itemId: string, muzzle: Vector3, endpoints: { Vector3 }, isLocal: boolean)
 	local shape = Visuals.weapons[itemId]
-	local color = if shape then shape.accent else Visuals.tracer.color
+	local isRobot = string.sub(itemId, 1, 6) == "robot_"
+	local color = if shape then shape.accent elseif isRobot then Visuals.tracer.robotColor else Visuals.tracer.color
 	local def = Config.Weapons.ranged[itemId]
 	-- L'Aiguille : tracé visible longtemps (révèle la position du tireur).
 	local lifetime = if def and def.tracerDuration then def.tracerDuration else Visuals.tracer.lifetime

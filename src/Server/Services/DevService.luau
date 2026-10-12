@@ -34,6 +34,7 @@ local ServerNet = require(script.Parent.Parent.Net.ServerNet)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local DataService = require(script.Parent.DataService)
 local MatchService = require(script.Parent.MatchService)
+local RobotService = require(script.Parent.RobotService)
 local Players = game:GetService("Players")
 
 local DevService = {}
@@ -53,6 +54,8 @@ local COMMANDS = {
 	"startDuo",
 	"endMatch",
 	"skipTime",
+	"spawnRobots",
+	"clearRobots",
 }
 
 local MODES = { "easy", "medium", "hard" }
@@ -169,6 +172,16 @@ local handlers: { [string]: (player: Player, amount: number?) -> () } = {
 	end,
 	endMatch = function()
 		MatchService.finish()
+	end,
+	spawnRobots = function()
+		if not MatchService.isRunning() then
+			RobotService.populate("easy", Config.Dev.arenaRobots)
+		end
+	end,
+	clearRobots = function()
+		if not MatchService.isRunning() then
+			RobotService.clear()
+		end
 	end,
 	skipTime = function(_player, amount)
 		MatchService.skip(math.clamp(amount or 60, 1, 900))
