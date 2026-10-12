@@ -13,6 +13,7 @@
 	Stations (ProximityPrompt, attribut Station → panneau côté client) :
 	merchant, armorer, insurer, vault, bazaar, deploy, range, legends.
 	Le pavé « training » téléporte vers l'arène d'entraînement (bac à sable).
+	Les cibles du stand de tir suivent leurs propres règles (RangeService).
 ]]
 
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -31,6 +32,7 @@ local CombatService = require(script.Parent.CombatService)
 local MapService = require(script.Parent.MapService)
 local MatchService = require(script.Parent.MatchService)
 local MovementGuardService = require(script.Parent.MovementGuardService)
+local RangeService = require(script.Parent.RangeService)
 
 local HubService = {}
 
@@ -79,6 +81,11 @@ function HubService.start()
 	end
 
 	CombatService.setDamageFilter(function(attacker, target)
+		-- Cibles du stand de tir : règles propres (joueur au stand, propriétaire du défi).
+		local range = RangeService.damageVerdict(attacker, target)
+		if range ~= nil then
+			return range
+		end
 		if not inCombatArea(target) then
 			return false
 		end

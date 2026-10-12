@@ -29,7 +29,7 @@ local ProfileScreen = {}
 export type Screen = {
 	panel: Panel.Panel,
 	render: (view: Types.ProfileView) -> (),
-	showTab: (tab: string) -> (),
+	showTab: (tab: string, board: string?) -> (),
 }
 
 local TABS = { "profile", "top10", "leaderboards" }
@@ -347,8 +347,11 @@ function ProfileScreen.create(parent: Instance, t: Translate, displayName: strin
 		end
 	end
 
-	local function showTab(key: string)
+	local function showTab(key: string, board: string?)
 		tab = key
+		if board and table.find(BOARDS, board) then
+			boardKey = board
+		end
 	end
 
 	return { panel = panel, render = render, showTab = showTab }

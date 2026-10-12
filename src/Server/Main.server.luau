@@ -33,6 +33,7 @@ local order = {
 	"EconomyService",
 	"MonetizationService",
 	"LeaderboardService",
+	"RangeService",
 	"HubService",
 	"MatchServerService",
 	"DevService",

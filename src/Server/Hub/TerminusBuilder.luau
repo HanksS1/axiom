@@ -813,25 +813,54 @@ function TerminusBuilder.build(origin: Vector3): Built
 		Enum.Material.DiamondPlate
 	)
 	prompt(rangeCounter, "range")
-	for index = 1, 3 do
-		local target = Kit.part(
-			range,
-			"Target",
-			Vector3.new(0.4, 4, 3),
-			CFrame.new(at(-97, 4, 10 + index * 5)),
-			Color3.fromRGB(220, 220, 220),
-			Enum.Material.SmoothPlastic
-		)
+	-- Pare-balles, rails et zone des cibles (les cibles mobiles sont gérées par RangeService).
+	Kit.part(
+		range,
+		"Backstop",
+		Vector3.new(1, 12, 22),
+		CFrame.new(at(-99.2, 6, 18)),
+		Color3.fromRGB(58, 52, 46),
+		Enum.Material.CorrodedMetal
+	)
+	for index = 0, 3 do
 		Kit.decor(
 			range,
-			"Bullseye",
-			Vector3.new(0.05, 1, 1),
-			CFrame.new(at(-96.8, 4.6, 10 + index * 5)),
-			NEON.range,
-			Enum.Material.Neon
+			"Rail",
+			Vector3.new(0.3, 0.3, 21),
+			CFrame.new(at(-91 - index * 2.2, 0.25, 18)),
+			Color3.fromRGB(90, 84, 70),
+			Enum.Material.Metal
 		)
-		local _ = target
 	end
+	Kit.decor(
+		range,
+		"FiringLine",
+		Vector3.new(0.4, 0.06, 14),
+		CFrame.new(at(-81.6, 0.05, 18)),
+		NEON.range,
+		Enum.Material.Neon,
+		{ tag = "Flicker" }
+	)
+	for index = 1, 4 do
+		Kit.decor(
+			range,
+			"Sandbag",
+			Vector3.new(2.4, 1.2, 1.4),
+			CFrame.new(at(-97.5, 0.6, 7 + index * 0.1)) * CFrame.Angles(0, index * 0.4, 0),
+			Color3.fromRGB(120, 108, 84),
+			Enum.Material.Fabric
+		)
+	end
+	local lane = Instance.new("Part")
+	lane.Name = "RangeLane"
+	lane.Anchored = true
+	lane.CanCollide = false
+	lane.CanQuery = false
+	lane.CanTouch = false
+	lane.Transparency = 1
+	lane.Size = Vector3.new(8, 7, 19)
+	lane.CFrame = CFrame.new(at(-94, 4.5, 18))
+	lane.Parent = range
 	sign(range, "range", CFrame.new(at(-84, 8.5, 18)) * CFrame.Angles(0, -math.pi / 2, 0), 9)
 	range.Parent = decor
 	table.insert(stations, {

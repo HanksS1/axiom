@@ -22,6 +22,7 @@ local Config = {
 	Monetization = require(script.Monetization),
 	Cosmetics = require(script.Cosmetics),
 	Progression = require(script.Progression),
+	Range = require(script.Range),
 	Matchmaking = require(script.Matchmaking),
 	Maps = require(script.Maps),
 	Data = require(script.Data),

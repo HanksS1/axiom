@@ -85,6 +85,12 @@ function TerminusController.open(station: string)
 	end
 end
 
+-- Ouvre les classements du profil sur un classement donné (« range », « season »…).
+function TerminusController.openBoard(board: string)
+	profileScreen.showTab("leaderboards", board)
+	TerminusController.open("profile")
+end
+
 local function renderOpen(view: Types.ProfileView)
 	for _, screen in screens do
 		if screen.panel:isOpen() then
