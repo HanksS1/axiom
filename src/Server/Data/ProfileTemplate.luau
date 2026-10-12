@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local SettingRules = require(Shared.Settings.SettingRules)
 local Types = require(Shared.Types)
 
 local ProfileTemplate = {}
@@ -18,8 +19,8 @@ ProfileTemplate.VERSION = 3
 
 function ProfileTemplate.defaultSettings(): { [string]: any }
 	local settings = {}
-	for key, def in Config.Settings do
-		settings[key] = def.default
+	for key in Config.Settings do
+		settings[key] = SettingRules.default(key)
 	end
 	return settings
 end

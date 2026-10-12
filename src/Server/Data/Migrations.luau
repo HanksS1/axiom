@@ -14,6 +14,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local SettingRules = require(Shared.Settings.SettingRules)
 local Types = require(Shared.Types)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
 local ItemRules = require(Shared.Items.ItemRules)
@@ -113,23 +114,12 @@ local function cleanSettings(settings: any, report: Report): { [string]: any }
 		report.fixedFields += 1
 		return result
 	end
-	for key, def in Config.Settings do
+	for key in Config.Settings do
 		local value = settings[key]
 		if value == nil then
 			continue
 		end
-		local valid = false
-		if def.kind == "boolean" then
-			valid = type(value) == "boolean"
-		elseif def.kind == "number" then
-			valid = type(value) == "number"
-				and value == value
-				and value >= (def.min :: number)
-				and value <= (def.max :: number)
-		elseif def.kind == "enum" then
-			valid = type(value) == "string" and table.find(def.values :: { string }, value) ~= nil
-		end
-		if valid then
+		if SettingRules.isValid(key, value) then
 			result[key] = value
 		else
 			report.fixedFields += 1
@@ -283,7 +273,28 @@ function Migrations.sanitize(data: any, now: number): (Profile, Report)
 					and isInteger(entry.date)
 					and #profile.season.top10 < Config.Progression.season.topGames
 				then
-					table.insert(profile.season.top10, { score = entry.score, mode = entry.mode, date = entry.date })
+					local detail = entry.detail
+					local cleanDetail = nil
+					if
+						type(detail) == "table"
+						and isInteger(detail.kills)
+						and isInteger(detail.bots)
+						and isInteger(detail.robots)
+						and isInteger(detail.loot)
+						and type(detail.extracted) == "boolean"
+					then
+						cleanDetail = {
+							kills = detail.kills,
+							bots = detail.bots,
+							robots = detail.robots,
+							loot = detail.loot,
+							extracted = detail.extracted,
+						}
+					end
+					table.insert(
+						profile.season.top10,
+						{ score = entry.score, mode = entry.mode, date = entry.date, detail = cleanDetail }
+					)
 				end
 			end
 		end

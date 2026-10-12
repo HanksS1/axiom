@@ -10,6 +10,7 @@ local Config = require(ReplicatedStorage:WaitForChild("Shared").Config)
 local Theme = {
 	panel = Color3.fromRGB(18, 22, 30), -- anthracite / bleu nuit
 	panelTransparency = 0.25,
+	background = Color3.fromRGB(8, 10, 16), -- fonds de jauges et de barres
 	text = Color3.fromRGB(235, 240, 245),
 	textDim = Color3.fromRGB(150, 158, 170),
 

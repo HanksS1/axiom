@@ -8,7 +8,9 @@
 	  accessibles (grisés avec la raison sinon).
 ]]
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
@@ -19,6 +21,7 @@ local Types = require(Shared.Types)
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local ConfirmDialog = require(script.Parent.Parent.UI.ConfirmDialog)
 local Create = require(script.Parent.Parent.UI.Create)
+local DragDrop = require(script.Parent.Parent.UI.DragDrop)
 local ItemCard = require(script.Parent.Parent.UI.ItemCard)
 local Panel = require(script.Parent.Parent.UI.Panel)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -55,15 +58,66 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 		BackgroundTransparency = 1,
 		Parent = panel.body,
 	})
+	-- Personnage en 3D (aperçu de l'avatar, qui tourne lentement).
+	local viewport = Create("ViewportFrame", {
+		Size = UDim2.new(1, 0, 0.3, -4),
+		BackgroundColor3 = Theme.background,
+		BackgroundTransparency = 0.3,
+		Ambient = Color3.fromRGB(150, 160, 180),
+		LightColor = Color3.fromRGB(0, 229, 255),
+		Parent = left,
+	})
+	local viewportCamera = Instance.new("Camera")
+	viewportCamera.FieldOfView = 40
+	viewportCamera.Parent = viewport
+	viewport.CurrentCamera = viewportCamera
+	local world = Instance.new("WorldModel")
+	world.Parent = viewport
+	local previewOf: Model? = nil
+	local previewAngle = 0
+	local function refreshPreview()
+		local character = Players.LocalPlayer.Character
+		if character == nil or character == previewOf then
+			return
+		end
+		previewOf = character
+		world:ClearAllChildren()
+		local archivable = character.Archivable
+		character.Archivable = true
+		local copy = character:Clone()
+		character.Archivable = archivable
+		if copy == nil then
+			return
+		end
+		for _, descendant in copy:GetDescendants() do
+			if descendant:IsA("Script") or descendant:IsA("LocalScript") or descendant:IsA("Sound") then
+				descendant:Destroy()
+			elseif descendant:IsA("BasePart") then
+				descendant.Anchored = true
+			end
+		end
+		copy:PivotTo(CFrame.new())
+		copy.Parent = world
+	end
+	RunService.RenderStepped:Connect(function(dt: number)
+		if not panel:isOpen() then
+			return
+		end
+		previewAngle += dt * 0.6
+		viewportCamera.CFrame = CFrame.Angles(0, previewAngle, 0) * CFrame.new(0, 0.5, 9)
+		viewportCamera.CFrame = CFrame.lookAt(viewportCamera.CFrame.Position, Vector3.new(0, 0.3, 0))
+	end)
+
 	local equippedList = Panel.list("Equipped")
-	equippedList.Size = UDim2.new(1, 0, 0.58, 0)
+	equippedList.Position = UDim2.fromScale(0, 0.3)
+	equippedList.Size = UDim2.new(1, 0, 0.32, 0)
 	equippedList.Parent = left
 	local bagTitle = Panel.label("", 14, Theme.cyan)
-	bagTitle.Position = UDim2.new(0, 0, 0.58, 4)
+	bagTitle.Position = UDim2.new(0, 0, 0.62, 4)
 	bagTitle.Parent = left
 	local bagList = Panel.list("Bag")
-	bagList.Position = UDim2.new(0, 0, 0.58, 30)
-	bagList.Size = UDim2.new(1, 0, 0.42, -30)
+	bagList.Position = UDim2.new(0, 0, 0.62, 30)
+	bagList.Size = UDim2.new(1, 0, 0.38, -30)
 	bagList.Parent = left
 
 	local right = Create("Frame", {
@@ -162,6 +216,7 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 	local function render(view: Types.ProfileView)
 		current = view
 		panel.title.Text = t("vault.title")
+		refreshPreview()
 		Panel.clear(equippedList)
 		Panel.clear(bagList)
 		Panel.clear(vaultList)
@@ -171,15 +226,16 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 		for index, slot in SLOTS do
 			local item = (view.loadout :: any)[slot] :: Types.ItemInstance?
 			if item then
-				ItemCard.create(item, t, {
+				local card = ItemCard.create(item, t, {
 					{
 						label = t("inventory.action.store"),
 						callback = function()
 							vaultAction("unequip", nil, slot)
 						end,
 					},
-				}, index).Parent =
-					equippedList
+				}, index)
+				card.Parent = equippedList
+				DragDrop.attach(card, { from = "equipped", uid = item.uid, slot = slot })
 			else
 				local empty = Panel.label(t("slot." .. slot) .. " — " .. t("inventory.empty"), 14, Theme.textDim)
 				empty.LayoutOrder = index
@@ -191,15 +247,16 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 		local bagCapacity = ItemRules.bagCapacity(view.loadout.backpack)
 		bagTitle.Text = t("vault.bag", { used = bagUsed, capacity = bagCapacity })
 		for index, item in view.bag do
-			ItemCard.create(item, t, {
+			local card = ItemCard.create(item, t, {
 				{
 					label = t("inventory.action.store"),
 					callback = function()
 						vaultAction("fromBag", item.uid)
 					end,
 				},
-			}, index).Parent =
-				bagList
+			}, index)
+			card.Parent = bagList
+			DragDrop.attach(card, { from = "bag", uid = item.uid })
 		end
 
 		for index, mode in { "type", "condition", "value" } do
@@ -248,7 +305,9 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 					)
 				end,
 			})
-			ItemCard.create(item, t, actions, index).Parent = vaultList
+			local card = ItemCard.create(item, t, actions, index)
+			card.Parent = vaultList
+			DragDrop.attach(card, { from = "vault", uid = item.uid, itemId = item.itemId })
 		end
 		if #view.vault == 0 then
 			Panel.label(t("inventory.empty"), 14, Theme.textDim).Parent = vaultList
@@ -278,6 +337,29 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 			})
 		end
 	end
+
+	-- Glisser-déposer (PC) : coffre ↔ équipement ↔ sac préparé.
+	DragDrop.target(equippedList, "equipped")
+	DragDrop.target(bagList, "bag")
+	DragDrop.target(vaultList, "vault")
+	DragDrop.Dropped:Connect(function(payload: any, target: string)
+		local view = current
+		if view == nil or not panel:isOpen() or type(payload) ~= "table" then
+			return
+		end
+		if payload.from == "vault" and target == "equipped" then
+			local slot = slotFor(view, payload.itemId)
+			if slot then
+				vaultAction("equip", payload.uid, slot)
+			end
+		elseif payload.from == "vault" and target == "bag" then
+			vaultAction("toBag", payload.uid)
+		elseif payload.from == "bag" and target == "vault" then
+			vaultAction("fromBag", payload.uid)
+		elseif payload.from == "equipped" and target == "vault" then
+			vaultAction("unequip", nil, payload.slot)
+		end
+	end)
 
 	return { panel = panel, render = render }
 end

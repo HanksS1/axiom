@@ -25,6 +25,7 @@ local order = {
 	"DeployController",
 	"MapEffectsController",
 	"TouchControlsController",
+	"SettingsController",
 	"DevPanelController",
 }
 
@@ -40,3 +41,12 @@ end
 for _, controller in loaded do
 	controller.start()
 end
+
+-- Écran de chargement (ReplicatedFirst) : le client est prêt une fois le profil reçu.
+task.spawn(function()
+	local ProfileController = require(Controllers.ProfileController) :: any
+	while ProfileController.get() == nil do
+		task.wait(0.2)
+	end
+	game:GetService("Players").LocalPlayer:SetAttribute("AxiomReady", true)
+end)

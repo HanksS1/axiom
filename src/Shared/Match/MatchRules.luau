@@ -9,6 +9,7 @@
 ]]
 
 local Config = require(script.Parent.Parent.Config)
+local Types = require(script.Parent.Parent.Types)
 
 local Match = Config.Match
 local Progression = Config.Progression
@@ -109,7 +110,7 @@ function MatchRules.score(stats: MatchStats, modeId: string, extracted: boolean)
 	}
 end
 
-export type TopGame = { score: number, mode: string, date: number }
+export type TopGame = Types.TopGame
 
 --[[
 	Insère une partie dans le top 10 de saison si elle bat la plus faible.

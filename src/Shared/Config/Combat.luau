@@ -33,6 +33,16 @@ return Freeze.deep({
 		crouchHipOffset = -1.1,
 	},
 
+	-- Visée assistée (5.4) : manette et mobile uniquement, jamais à la souris.
+	-- `strength` (paramètre joueur, 0..1) module ralentissement et adhérence.
+	aimAssist = {
+		cone = 6, -- degrés autour du centre de l'écran
+		range = 140,
+		slowdown = 0.45, -- réduction maximale de la vitesse de rotation sur une cible
+		pull = 7, -- degrés/s maximum d'adhérence vers la cible
+		refresh = 0.05, -- secondes entre deux recherches de cible
+	},
+
 	camera = {
 		fieldOfView = 70,
 		aimFieldOfView = 55,

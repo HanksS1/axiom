@@ -15,18 +15,22 @@ local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
 local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local Create = require(script.Parent.Parent.UI.Create)
 local Panel = require(script.Parent.Parent.UI.Panel)
+local PanelState = require(script.Parent.Parent.UI.PanelState)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local ArmorerScreen = require(script.Parent.Parent.Screens.ArmorerScreen)
 local InsurerScreen = require(script.Parent.Parent.Screens.InsurerScreen)
 local MerchantScreen = require(script.Parent.Parent.Screens.MerchantScreen)
+local ProfileScreen = require(script.Parent.Parent.Screens.ProfileScreen)
 local SortScreen = require(script.Parent.Parent.Screens.SortScreen)
 local VaultScreen = require(script.Parent.Parent.Screens.VaultScreen)
 local HUDController = require(script.Parent.HUDController)
@@ -113,6 +117,103 @@ local function renderCrate()
 	crateButton.TextColor3 = if stored > 0 then Theme.green else Theme.textDim
 end
 
+-- Ouverture de la caisse gratuite (écran 9) : 2 s d'animation, puis le résultat.
+local crateOverlay: Frame
+local crateBox: Frame
+local crateFill: Frame
+local crateText: TextLabel
+local crateClose: TextButton
+local crateOpening = false
+
+local function buildCrateOverlay(root: Instance)
+	crateText = Panel.label("", 22, Theme.text)
+	crateText.Size = UDim2.new(1, -20, 0, 70)
+	crateText.Position = UDim2.fromOffset(10, 150)
+	crateText.TextXAlignment = Enum.TextXAlignment.Center
+	crateText.TextWrapped = true
+	crateText.Font = Theme.fontTitle
+	crateClose = Panel.button("", Theme.green, 160)
+	crateClose.AnchorPoint = Vector2.new(0.5, 1)
+	crateClose.Position = UDim2.new(0.5, 0, 1, -12)
+	crateBox = Create("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 30),
+		Size = UDim2.fromOffset(90, 70),
+		BackgroundColor3 = Color3.fromRGB(40, 60, 50),
+	}, {
+		Stroke = Create("UIStroke", { Color = Theme.green, Thickness = 2 }),
+		Lid = Create("Frame", {
+			Size = UDim2.new(1, 0, 0, 12),
+			BackgroundColor3 = Theme.green,
+			BorderSizePixel = 0,
+		}),
+	})
+	crateFill = Create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = Theme.green, BorderSizePixel = 0 })
+	crateOverlay = Create("Frame", {
+		Name = "FreeCrate",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(380, 290),
+		BackgroundColor3 = Theme.panel,
+		Visible = false,
+		ZIndex = 25,
+		Parent = root,
+	}, {
+		Stroke = Create("UIStroke", { Color = Theme.green, Transparency = 0.3, Thickness = 2 }),
+		Box = crateBox,
+		Bar = Create("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0),
+			Position = UDim2.new(0.5, 0, 0, 118),
+			Size = UDim2.new(0.8, 0, 0, 10),
+			BackgroundColor3 = Theme.background,
+			BorderSizePixel = 0,
+		}, { Fill = crateFill }),
+		Result = crateText,
+		Close = crateClose,
+	})
+	crateClose.Activated:Connect(function()
+		crateOverlay.Visible = false
+		PanelState.set("freeCrate", false)
+	end)
+end
+
+local function openCrate()
+	local view = ProfileController.get()
+	if crateOpening or view == nil or view.freeCrate.stored <= 0 then
+		ClientNet.fire("OpenFreeCrate") -- le serveur explique le refus
+		return
+	end
+	if view.settings.skipCrateAnimation == true then
+		ClientNet.fire("OpenFreeCrate")
+		return
+	end
+	crateOpening = true
+	crateOverlay.Visible = true
+	PanelState.set("freeCrate", true)
+	crateText.Text = t("freecrate.opening")
+	crateText.TextColor3 = Theme.text
+	crateClose.Visible = false
+	crateFill.Size = UDim2.fromScale(0, 1)
+	local duration = Config.Economy.freeCrate.openDuration
+	TweenService:Create(crateFill, TweenInfo.new(duration, Enum.EasingStyle.Linear), { Size = UDim2.fromScale(1, 1) })
+		:Play()
+	-- La caisse tremble de plus en plus.
+	local started = os.clock()
+	local shake: RBXScriptConnection
+	shake = RunService.RenderStepped:Connect(function()
+		local progress = math.clamp((os.clock() - started) / duration, 0, 1)
+		crateBox.Rotation = math.sin(os.clock() * 40) * 6 * progress
+		if progress >= 1 then
+			shake:Disconnect()
+			crateBox.Rotation = 0
+		end
+	end)
+	task.delay(duration, function()
+		crateOpening = false
+		ClientNet.fire("OpenFreeCrate")
+	end)
+end
+
 local function showCrateResult(reward: { [string]: any })
 	local text: string
 	if reward.kind == "credits" then
@@ -122,7 +223,14 @@ local function showCrateResult(reward: { [string]: any })
 	else
 		return
 	end
-	NotificationController.show(text, Theme.green)
+	if crateOverlay.Visible then
+		crateText.Text = text
+		crateText.TextColor3 = Theme.green
+		crateClose.Text = t("common.confirm")
+		crateClose.Visible = true
+	else
+		NotificationController.show(text, Theme.green)
+	end
 end
 
 local function buildTopBar(root: Instance)
@@ -174,9 +282,7 @@ local function buildTopBar(root: Instance)
 	crateButton = Panel.button("", Theme.green, 170)
 	crateButton.LayoutOrder = 7
 	crateButton.Parent = topBar
-	crateButton.Activated:Connect(function()
-		ClientNet.fire("OpenFreeCrate")
-	end)
+	crateButton.Activated:Connect(openCrate)
 	local menu = Panel.button("☰", Theme.cyan, 44)
 	menu.LayoutOrder = 8
 	menu.Parent = topBar
@@ -189,7 +295,8 @@ local function buildTopBar(root: Instance)
 	end)
 end
 
-local QUICK_STATIONS = { "vault", "merchant", "armorer", "insurer", "bazaar", "deploy", "range", "legends" }
+local QUICK_STATIONS =
+	{ "vault", "merchant", "armorer", "insurer", "bazaar", "deploy", "range", "legends", "profile", "settings" }
 
 local function buildQuickMenu(root: Instance)
 	quickMenu = Panel.create("QuickMenu", root, Theme.cyan)
@@ -234,11 +341,13 @@ function TerminusController.start()
 	local root = HUDController.root()
 	buildTopBar(root)
 	buildQuickMenu(root)
+	buildCrateOverlay(root)
 	screens.vault = VaultScreen.create(root, t)
 	screens.merchant = MerchantScreen.create(root, t)
 	screens.armorer = ArmorerScreen.create(root, t)
 	screens.insurer = InsurerScreen.create(root, t)
 	screens.sort = SortScreen.create(root, t)
+	screens.profile = ProfileScreen.create(root, t, player.DisplayName)
 	screens.sort.panel.onClosed = function()
 		sortDismissed = true
 	end

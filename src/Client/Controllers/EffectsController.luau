@@ -22,6 +22,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
+local ProfileController = require(script.Parent.ProfileController)
 
 local Visuals = Config.Visuals
 local Combat = Config.Combat
@@ -143,7 +144,15 @@ end
 -- Désintégration : le corps se décompose en voxels néon qui s'envolent.
 local function disintegrate(character: Model)
 	local spec = Visuals.disintegration
-	local perPart = if isMobile then spec.voxelsPerPartMobile else spec.voxelsPerPart
+	-- Qualité graphique (paramètre) : « auto » suit le type d'appareil.
+	local view = ProfileController.get()
+	local quality = if view then view.settings.graphicsQuality else "auto"
+	local perPart = if quality == "low"
+		then 1
+		elseif quality == "medium" then spec.voxelsPerPartMobile
+		elseif quality == "high" then spec.voxelsPerPart
+		elseif isMobile then spec.voxelsPerPartMobile
+		else spec.voxelsPerPart
 	local duration = Combat.death.disintegrateDuration
 	for _, descendant in character:GetDescendants() do
 		if descendant:IsA("BasePart") then
