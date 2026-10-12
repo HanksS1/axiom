@@ -137,10 +137,6 @@ local function join(player: Player, modeId: string, format: Matchmaking.Format, 
 		ServerNet.notify(player, "queue.refused.not_leader")
 		return
 	end
-	if format == "duo" and #members ~= 2 then
-		ServerNet.notify(player, "queue.refused.need_partner")
-		return
-	end
 	if format == "solo" and #members > 1 then
 		ServerNet.notify(player, "queue.refused.leave_party")
 		return
@@ -186,6 +182,8 @@ local function join(player: Player, modeId: string, format: Matchmaking.Format, 
 	local ticket: Matchmaking.Ticket = {
 		id = Uid.new(),
 		userIds = userIds,
+		-- Duo sans coéquipier : apparié au hasard avec un autre joueur seul.
+		fill = if format == "duo" and #userIds == 1 then true else nil,
 		modeId = modeId,
 		format = format,
 		group = group,
@@ -244,24 +242,31 @@ end
 
 -- Partie locale (Studio / places non configurées) : lancée sur ce serveur.
 local function startLocal(composition: Matchmaking.Composition)
-	local teams: { { Player } } = {}
-	local players: { Player } = {}
-	local modeId: string = "easy"
-	local format: Matchmaking.Format = "solo"
+	local byUserId: { [number]: Player } = {}
+	local first = composition.tickets[1]
 	for _, ticket in composition.tickets do
 		local entry = entries[ticket.id]
 		if entry == nil then
 			continue
 		end
-		modeId, format = ticket.modeId, ticket.format
-		local team = {}
 		for _, member in entry.members do
 			if member.Parent == Players then
+				byUserId[member.UserId] = member
+			end
+		end
+		drop(entry, nil)
+	end
+	local teams: { { Player } } = {}
+	local players: { Player } = {}
+	for _, userIds in composition.teams do
+		local team = {}
+		for _, userId in userIds do
+			local member = byUserId[userId]
+			if member then
 				table.insert(team, member)
 				table.insert(players, member)
 			end
 		end
-		drop(entry, nil)
 		if #team > 0 then
 			table.insert(teams, team)
 		end
@@ -270,8 +275,8 @@ local function startLocal(composition: Matchmaking.Composition)
 		return
 	end
 	MatchService.begin({
-		modeId = modeId,
-		format = format,
+		modeId = first.modeId,
+		format = first.format,
 		players = players,
 		teams = teams,
 		mercenaries = MM.matchSize - #players,
@@ -310,10 +315,7 @@ local function matchmakeRemote(key: string)
 		return
 	end
 	local first = composition.tickets[1]
-	local teams = {}
-	for _, ticket in composition.tickets do
-		table.insert(teams, ticket.userIds)
-	end
+	local teams = composition.teams
 	local matchId = Uid.new()
 	local written = MatchStore.writeMatch(serverId, {
 		matchId = matchId,

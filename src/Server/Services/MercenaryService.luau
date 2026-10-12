@@ -50,9 +50,16 @@ local AI = Merc.ai
 
 local MercenaryService = {}
 
+export type Partner = {
+	teamId: string,
+	cframe: CFrame,
+	leader: Player,
+}
+
 type Mercenary = {
 	fighter: Fighter,
 	name: string,
+	leader: Player?, -- duo aléatoire : joueur que ce mercenaire accompagne
 	extractAt: number, -- secondes de partie
 	extracting: boolean,
 	extractProgress: number,
@@ -527,6 +534,25 @@ local function update(merc: Mercenary, time: number)
 	end
 	merc.lastKnown = nil
 
+	-- Coéquipier d'un joueur : il le suit ; sans lui (extrait, mort, parti), il s'extrait.
+	local leader = merc.leader
+	if leader and not merc.extracting then
+		local leaderFighter = CombatService.getFighter(leader)
+		if leaderFighter == nil or not Fighter.isAlive(leaderFighter) then
+			merc.leader = nil
+			merc.extracting = true
+			releaseGoal(merc)
+		else
+			local gap = (leaderFighter.root.Position - fighter.root.Position).Magnitude
+			if gap > AI.followDistance then
+				releaseGoal(merc)
+				CombatService.setBotMovement(fighter, gap > AI.followDistance * 2)
+				moveTo(merc, leaderFighter.root.Position)
+				return
+			end
+		end
+	end
+
 	local elapsed = time - startTime
 	if not merc.extracting and (alerted or elapsed >= merc.extractAt or bagFull(merc)) then
 		merc.extracting = true
@@ -574,7 +600,7 @@ end
 
 -- Apparition -----------------------------------------------------------------
 
-local function spawnMercenary(teamId: string, cframe: CFrame)
+local function spawnMercenary(teamId: string, cframe: CFrame, leader: Player?)
 	local ok, model = pcall(function()
 		local description = Instance.new("HumanoidDescription")
 		local tone =
@@ -631,6 +657,7 @@ local function spawnMercenary(teamId: string, cframe: CFrame)
 	mercs[fighter] = {
 		fighter = fighter,
 		name = name,
+		leader = leader,
 		extractAt = random:NextNumber(AI.extractAfter.min, AI.extractAfter.max),
 		extracting = false,
 		extractProgress = 0,
@@ -673,6 +700,15 @@ function MercenaryService.deploy(
 		for member = 1, size do
 			task.spawn(spawnMercenary, "m" .. index, base * CFrame.new((member - 1) * 4 + 2, 0, 3))
 		end
+	end
+end
+
+-- Duo aléatoire impair : un mercenaire rejoint l'équipe d'un joueur seul.
+function MercenaryService.deployPartners(newModeId: string, partners: { Partner }, matchStart: number)
+	modeId = newModeId
+	startTime = matchStart
+	for _, partner in partners do
+		task.spawn(spawnMercenary, partner.teamId, partner.cframe, partner.leader)
 	end
 end
 

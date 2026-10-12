@@ -128,6 +128,49 @@ return function(T, H)
 			expect(composition.players).toBe(1)
 		end)
 
+		it("duo aléatoire : joueurs seuls appariés dans l'ordre d'arrivée", function()
+			local tickets = {}
+			for index = 1, 16 do
+				local lone = ticket("duo", index, { index })
+				lone.fill = true
+				table.insert(tickets, lone)
+			end
+			local composition = Matchmaking.compose(tickets, options)
+			expect(composition.full).toBe(true)
+			expect(#composition.teams).toBe(8)
+			expect(composition.teams[1][1]).toBe(1)
+			expect(composition.teams[1][2]).toBe(2)
+		end)
+
+		it("duo aléatoire : le dernier joueur seul part avec un mercenaire", function()
+			local tickets = {}
+			for index = 1, 3 do
+				local lone = ticket("duo", 50 + index * 2, { index })
+				lone.fill = true
+				table.insert(tickets, lone)
+			end
+			table.insert(tickets, ticket("duo", 55, { 40, 41 }))
+			expect(Matchmaking.compose(tickets, options)).toBeNil()
+			local composition =
+				Matchmaking.compose(tickets, { now = 500, matchSize = 16, fillTimeout = 90, minPlayers = 1 })
+			expect(#composition.teams).toBe(3)
+			expect(#composition.teams[2]).toBe(2) -- duo complet (arrivé avant le 3e joueur seul)
+			expect(#composition.teams[3]).toBe(1)
+			expect(composition.players).toBe(5)
+			expect(composition.bots).toBe(11)
+		end)
+
+		it("duo aléatoire : un groupe déjà formé n'est pas mélangé", function()
+			local lone = ticket("duo", 1, { 1 })
+			lone.fill = true
+			local composition = Matchmaking.compose(
+				{ lone, ticket("duo", 2, { 2, 3 }) },
+				{ now = 500, matchSize = 16, fillTimeout = 90, minPlayers = 1 }
+			)
+			expect(#composition.teams[1]).toBe(1)
+			expect(#composition.teams[2]).toBe(2)
+		end)
+
 		it("mercenaires en solo : une équipe chacun", function()
 			local teams = Matchmaking.botTeams("solo", 3)
 			expect(#teams).toBe(3)

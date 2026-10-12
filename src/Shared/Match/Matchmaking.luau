@@ -10,6 +10,9 @@
 	- Composition d'une partie à partir d'une file triée par ancienneté :
 	  16 places (un duo en prend 2) ; lancement dès que c'est plein, ou après
 	  le délai d'attente avec complément de mercenaires IA.
+	- Duo aléatoire : un joueur seul peut rejoindre la file Duo (ticket
+	  « à compléter »). Deux joueurs seuls sont appariés ; celui qui reste
+	  seul au départ reçoit un mercenaire IA comme coéquipier.
 ]]
 
 local Config = require(script.Parent.Parent.Config)
@@ -24,6 +27,7 @@ export type Format = "solo" | "duo"
 export type Ticket = {
 	id: string,
 	userIds: { number },
+	fill: boolean?, -- duo aléatoire : joueur seul à apparier
 	modeId: string,
 	format: Format,
 	group: string,
@@ -33,6 +37,7 @@ export type Ticket = {
 
 export type Composition = {
 	tickets: { Ticket },
+	teams: { { number } }, -- joueurs par équipe (un duo aléatoire peut rester à 1)
 	players: number,
 	bots: number,
 	full: boolean,
@@ -134,7 +139,8 @@ function Matchmaking.isValidTicket(ticket: any): boolean
 	if Config.Modes.byId[ticket.modeId] == nil or type(ticket.joinedAt) ~= "number" then
 		return false
 	end
-	if #ticket.userIds ~= Matchmaking.ticketSize(ticket.format) then
+	local expected = if ticket.format == "duo" and ticket.fill == true then 1 else Matchmaking.ticketSize(ticket.format)
+	if #ticket.userIds ~= expected then
 		return false
 	end
 	local seen = {}
@@ -160,6 +166,8 @@ export type ComposeOptions = {
 	- Plein (16 places) : départ immédiat.
 	- Sinon, dès que le plus ancien ticket a attendu `fillTimeout` : départ
 	  avec les joueurs présents (au moins `minPlayers`) et des mercenaires IA.
+	- Duo aléatoire : les joueurs seuls sont appariés deux à deux, dans
+	  l'ordre d'arrivée ; chaque équipe occupe 2 places.
 	Un joueur présent dans deux tickets n'est retenu qu'une fois.
 ]]
 function Matchmaking.compose(tickets: { Ticket }, options: ComposeOptions): Composition?
@@ -171,14 +179,15 @@ function Matchmaking.compose(tickets: { Ticket }, options: ComposeOptions): Comp
 		return a.id < b.id
 	end)
 	local chosen: { Ticket } = {}
-	local players = 0
+	local teams: { { number } } = {}
+	local slots, players = 0, 0
 	local taken: { [number]: boolean } = {}
+	local waitingTeam: { number }? = nil -- joueur seul en attente d'un coéquipier
 	for _, ticket in sorted do
-		if not Matchmaking.isValidTicket(ticket) then
-			continue
+		if slots >= options.matchSize and waitingTeam == nil then
+			break
 		end
-		local size = #ticket.userIds
-		if players + size > options.matchSize then
+		if not Matchmaking.isValidTicket(ticket) then
 			continue
 		end
 		local duplicate = false
@@ -190,24 +199,45 @@ function Matchmaking.compose(tickets: { Ticket }, options: ComposeOptions): Comp
 		if duplicate then
 			continue
 		end
+		local lone = ticket.format == "duo" and ticket.fill == true
+		local open = waitingTeam
+		if lone and open then
+			-- Coéquipier trouvé : la place était déjà réservée.
+			table.insert(open, ticket.userIds[1])
+			waitingTeam = nil
+		else
+			local size = Matchmaking.ticketSize(ticket.format)
+			if slots + size > options.matchSize then
+				continue
+			end
+			slots += size
+			local team = table.clone(ticket.userIds)
+			table.insert(teams, team)
+			if lone then
+				waitingTeam = team
+			end
+		end
 		for _, userId in ticket.userIds do
 			taken[userId] = true
 		end
 		table.insert(chosen, ticket)
-		players += size
-		if players == options.matchSize then
-			break
-		end
+		players += #ticket.userIds
 	end
 	if #chosen == 0 then
 		return nil
 	end
 	if players == options.matchSize then
-		return { tickets = chosen, players = players, bots = 0, full = true }
+		return { tickets = chosen, teams = teams, players = players, bots = 0, full = true }
 	end
 	local oldest = chosen[1].joinedAt
 	if options.now - oldest >= options.fillTimeout and players >= options.minPlayers then
-		return { tickets = chosen, players = players, bots = options.matchSize - players, full = false }
+		return {
+			tickets = chosen,
+			teams = teams,
+			players = players,
+			bots = options.matchSize - players,
+			full = false,
+		}
 	end
 	return nil
 end

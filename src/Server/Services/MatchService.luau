@@ -635,26 +635,37 @@ function MatchService.begin(config: StartConfig): boolean
 		spawns[index], spawns[swap] = spawns[swap], spawns[index]
 	end
 	local teamIndex = 0
-	for _, members in teams do
+	-- Duo resté à un seul joueur (duo aléatoire impair, coéquipier absent) :
+	-- un mercenaire IA complète l'équipe.
+	local partners: { MercenaryService.Partner } = {}
+	for teamId, members in teams do
 		teamIndex += 1
 		local marker = spawns[(teamIndex - 1) % math.max(1, #spawns) + 1]
 		local base = if marker then marker.cframe else CFrame.new(0, 5, 0)
-		for memberIndex, player in members do
+		local present: { Player } = {}
+		for _, player in members do
 			local participant = participants[player]
 			if participant then
-				local offset = CFrame.new((memberIndex - 1) * 4, 0, 0)
+				local offset = CFrame.new(#present * 4, 0, 0)
+				table.insert(present, player)
 				task.spawn(spawnPlayer, participant, base * offset)
 				setStatus(participant, "alive")
 			end
+		end
+		if format == "duo" and #present == 1 then
+			table.insert(partners, { teamId = teamId, cframe = base * CFrame.new(4, 0, 0), leader = present[1] })
 		end
 	end
 
 	startTime = now()
 	-- Mercenaires IA : sur les points de départ restants.
-	local mercenaries = config.mercenaries or 0
+	local mercenaries = math.max(0, (config.mercenaries or 0) - #partners)
 	if ArenaService.isArena() then
 		-- Petite arène de test : effectif réduit (comme les robots).
-		mercenaries = math.min(mercenaries, Config.Dev.arenaMercenaries)
+		mercenaries = math.min(mercenaries, math.max(0, Config.Dev.arenaMercenaries - #partners))
+	end
+	if #partners > 0 then
+		MercenaryService.deployPartners(modeId, partners, startTime)
 	end
 	if mercenaries > 0 then
 		local free = {}

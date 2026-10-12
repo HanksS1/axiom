@@ -83,5 +83,6 @@ return Freeze.deep({
 		memory = 6, -- secondes : poursuite de la dernière position connue
 		pathRefresh = 1.5,
 		wanderRadius = 50,
+		followDistance = 18, -- coéquipier d'un joueur (duo aléatoire) : distance de suivi
 	},
 })

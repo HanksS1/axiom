@@ -26,9 +26,12 @@ locales »), avec une attente raccourcie à 8 s (`Config.Matchmaking.localFillTi
    pour qu'elle reste jouable ; 15 sur une vraie carte). Ils lootent les caisses, se battent entre eux,
    contre vous et contre les robots, se soignent, puis vont s'extraire. À leur mort : sac de dépouille.
 4. Fin de partie → **Retour au Terminus**.
-5. **Duo** (Test → Clients and Servers, 2 joueurs) : approchez l'autre joueur au Terminus →
-   « Inviter en duo » (G / Y) → Accepter. La Porte passe en Duo ; seul le chef lance la recherche.
-6. **Zone sans combat** : au Terminus, les tirs entre joueurs ne font aucun dégât (seulement dans
+5. **Duo avec un ami** (Test → Clients and Servers, 2 joueurs) : approchez l'autre joueur au
+   Terminus → « Inviter en duo » (G / Y) → Accepter. La Porte passe en Duo ; seul le chef lance la recherche.
+6. **Duo aléatoire** : seul, choisissez Duo puis DÉPLOIEMENT. Deux joueurs seuls dans la file Duo
+   sont appariés dans l'ordre d'arrivée ; celui qui reste seul au départ reçoit un **mercenaire IA
+   coéquipier** qui le suit et combat à ses côtés (pas de réanimation par orbe).
+7. **Zone sans combat** : au Terminus, les tirs entre joueurs ne font aucun dégât (seulement dans
    l'arène d'entraînement et en partie).
 
 ## Mise en ligne (vraies places)
@@ -63,8 +66,10 @@ reste ensemble), lancement dès 16 joueurs ou après 90 s avec complément de me
 
 ## Choix mineurs (à valider)
 
-- **Duo = groupe de deux joueurs** : pas de « duo aléatoire » avec un inconnu (le bouton Duo
-  indique d'inviter un joueur). Un duo aléatoire peut être ajouté plus tard.
+- **Duo aléatoire** (validé) : appariement dans l'ordre d'arrivée, dans la même file (mode et
+  groupe de plateformes) ; un groupe déjà formé n'est jamais séparé.
+- **16 joueurs par partie** (validé) : les places vides sont toujours comblées par des mercenaires
+  IA. Seule l'arène de test de Studio en limite le nombre (5), car elle est trop petite.
 - **Niveau 2 requis** : la vérification existe mais reste désactivée (`levelGateEnabled = false`)
   jusqu'au tutoriel (P10), sinon personne ne pourrait jouer.
 - **Plateforme** : déclarée par le client d'après son dernier périphérique d'entrée (Roblox
@@ -83,5 +88,4 @@ reste ensemble), lancement dès 16 joueurs ou après 90 s avec complément de me
 
 ## Questions
 
-1. Voulez-vous un **duo aléatoire** (deux joueurs seuls appariés automatiquement) ?
-2. Combien de **mercenaires** au plus par partie ? Aujourd'hui, ils comblent toutes les places vides (jusqu'à 15).
+Aucune question en suspens : duo aléatoire et 16 joueurs par partie validés.

@@ -199,8 +199,6 @@ function DeployScreen.create(parent: Instance, t: Translate): Screen
 		local partySize = if party then #party.members else 1
 		if partySize >= 2 then
 			format = "duo"
-		elseif format == "duo" then
-			format = "solo"
 		end
 		local formatRow = row(3, 48)
 		local solo = toggle(t("mode.format.solo"), format == "solo", Theme.cyan, 140)
@@ -212,7 +210,14 @@ function DeployScreen.create(parent: Instance, t: Translate): Screen
 		solo.Activated:Connect(function()
 			if partySize >= 2 then
 				ClientNet.fire("PartyLeave")
+			else
+				format = "solo"
+				rerender()
 			end
+		end)
+		duo.Activated:Connect(function()
+			format = "duo"
+			rerender()
 		end)
 		local invite = Panel.button(t("deploy.inviteFriend"), Theme.magenta, 200)
 		invite.LayoutOrder = 3
@@ -237,18 +242,14 @@ function DeployScreen.create(parent: Instance, t: Translate): Screen
 				table.insert(names, partyMember.name)
 			end
 			partyText = t("deploy.partyWith", { names = table.concat(names, " · ") })
+		elseif format == "duo" then
+			partyText = t("deploy.randomDuo")
 		else
 			partyText = t("deploy.partyHint")
 		end
 		local partyLabel = Panel.label(partyText, 14, Theme.textDim)
 		partyLabel.LayoutOrder = 4
 		partyLabel.Parent = content
-		duo.Activated:Connect(function()
-			if partySize < 2 then
-				partyLabel.Text = t("deploy.reason.need_partner")
-				partyLabel.TextColor3 = Theme.orange
-			end
-		end)
 
 		-- Crossplay (forcé pour un duo de deux plateformes différentes).
 		local _, forced = Matchmaking.platformGroup(false, partyPlatforms())
@@ -301,7 +302,7 @@ function DeployScreen.create(parent: Instance, t: Translate): Screen
 		end
 
 		-- Bouton de départ.
-		local canDeploy = selectedMode ~= nil and isLeader() and (format == "solo" or partySize >= 2)
+		local canDeploy = selectedMode ~= nil and isLeader() and (format == "duo" or partySize < 2)
 		deployButton.Text = if not isLeader() then t("deploy.waitLeader") else t("deploy.go")
 		deployButton.TextColor3 = if canDeploy then Theme.red else Theme.textDim
 		deployButton.AutoButtonColor = canDeploy
