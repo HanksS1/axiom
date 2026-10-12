@@ -173,4 +173,35 @@ function MatchRules.seasonAt(unix: number): number
 	return math.floor((unix - season.firstSeasonStartUnix) / length) + 1
 end
 
+-- Rang affiché pour un top 10 de saison (« legend » si le joueur a atteint le top mondial).
+function MatchRules.seasonRank(season: { top10: { TopGame }, legend: boolean? }): string
+	if season.legend then
+		return "legend"
+	end
+	return MatchRules.rank(MatchRules.rankingScore(season.top10))
+end
+
+--[[
+	Passe le profil à la saison en cours si elle a changé : le rang final
+	de l'ancienne saison va dans l'historique, puis top 10 et rang sont
+	remis à zéro. Renvoie true si le profil a été modifié.
+]]
+function MatchRules.rollSeason(
+	profile: {
+		season: { id: number, top10: { TopGame }, legend: boolean? },
+		seasonHistory: { { id: number, rank: string } },
+	},
+	unix: number
+): boolean
+	local current = MatchRules.seasonAt(unix)
+	if profile.season.id == current then
+		return false
+	end
+	if profile.season.id > 0 and #profile.season.top10 > 0 then
+		table.insert(profile.seasonHistory, { id = profile.season.id, rank = MatchRules.seasonRank(profile.season) })
+	end
+	profile.season = { id = current, top10 = {} }
+	return true
+end
+
 return MatchRules

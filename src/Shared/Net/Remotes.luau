@@ -98,6 +98,9 @@ local Remotes: { [string]: RemoteDef } = {
 	QueueLeave = { kind = "event", toServer = true },
 	QueueState = { kind = "event", toServer = false },
 	ReturnToHub = { kind = "event", toServer = true },
+
+	-- Progression (P10) : classements (mondial, amis, par mode, défi du stand de tir)
+	LeaderboardRequest = { kind = "function", toServer = true },
 }
 
 return table.freeze(Remotes)

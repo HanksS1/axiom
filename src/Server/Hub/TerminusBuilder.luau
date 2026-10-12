@@ -890,7 +890,11 @@ function TerminusBuilder.build(origin: Vector3): Built
 		NEON.legends,
 		Enum.Material.Neon
 	)
-	Kit.text(wall, Enum.NormalId.Back, "station.legends", NEON.legends, Enum.Font.GothamBlack)
+	-- Titre en haut du tableau ; le top 10 (LeaderboardService) s'affiche dessous.
+	local title = Kit.text(wall, Enum.NormalId.Back, "station.legends", NEON.legends, Enum.Font.GothamBlack)
+	local titleLabel = title:FindFirstChildOfClass("TextLabel") :: TextLabel
+	titleLabel.Position = UDim2.fromScale(0.1, 0.03)
+	titleLabel.Size = UDim2.fromScale(0.8, 0.22)
 	local legendsBase = Kit.part(
 		legends,
 		"LegendsConsole",

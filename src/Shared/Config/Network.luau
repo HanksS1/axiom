@@ -56,5 +56,7 @@ return Freeze.deep({
 		QueueJoin = { rate = 0.5, burst = 3 },
 		QueueLeave = { rate = 1, burst = 3 },
 		ReturnToHub = { rate = 0.5, burst = 2 },
+		-- Progression (P10)
+		LeaderboardRequest = { rate = 0.5, burst = 4 },
 	} :: { [string]: Limit },
 })

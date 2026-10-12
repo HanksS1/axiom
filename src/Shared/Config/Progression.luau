@@ -44,5 +44,24 @@ return Freeze.deep({
 		},
 		-- « Légende d'AXIOM » : top 500 mondial (calculé via le classement).
 		legendTopCount = 500,
+		-- Score de classement minimum pour être Légende (évite que tout le monde
+		-- le soit tant que le jeu compte peu de joueurs).
+		legendMinScore = 15000,
+	},
+
+	-- Classements (OrderedDataStore, avec repli en mémoire en Studio).
+	leaderboards = {
+		storeName = "AxiomBoards_v1",
+		entries = 50, -- lignes envoyées au client
+		cacheSeconds = 60, -- un même classement n'est relu qu'une fois par minute et par serveur
+		friendsLimit = 40, -- amis consultés au maximum (budget GetAsync)
+		friendScoreCacheSeconds = 300,
+		nameCacheSeconds = 3600,
+		legendRefreshSeconds = 600,
+		-- Mur des Légendes (hub) : top 10 en hologrammes.
+		wallSize = 10,
+		wallRefreshSeconds = 600,
+		wallScale = 0.55,
+		wallChampionScale = 0.8,
 	},
 })

@@ -6,15 +6,18 @@
 	  meilleurs scores par mode, historique des saisons.
 	- Top 10 : les 10 meilleures parties de la saison, avec le détail de
 	  chaque score (kills, mercenaires, robots, loot, extrait ou mort).
-	- Classements (mondial, amis, par mode) : avec les saisons (P10).
+	- Classements (P10) : mondial, amis, par mode et défi quotidien du stand
+	  de tir, demandés au serveur (mis en cache 30 s côté client).
 ]]
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Types = require(Shared.Types)
 
+local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local Create = require(script.Parent.Parent.UI.Create)
 local Panel = require(script.Parent.Parent.UI.Panel)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -26,14 +29,25 @@ local ProfileScreen = {}
 export type Screen = {
 	panel: Panel.Panel,
 	render: (view: Types.ProfileView) -> (),
+	showTab: (tab: string) -> (),
 }
 
 local TABS = { "profile", "top10", "leaderboards" }
 local STATS = { "matchesPlayed", "extractions", "deaths", "playerKills", "botKills", "robotKills" }
+-- Classements : mondial, amis, un par mode, défi quotidien du stand de tir.
+local BOARDS = { "season", "friends", "mode:easy", "mode:medium", "mode:hard", "range" }
+local BOARD_CACHE_SECONDS = 30
+
+type BoardResult = { [string]: any }
+local boardCache: { [string]: { at: number, result: BoardResult? } } = {}
+local boardLoading: { [string]: boolean } = {}
 
 function ProfileScreen.create(parent: Instance, t: Translate, displayName: string): Screen
 	local panel = Panel.create("ProfileScreen", parent, Theme.cyan)
 	local tab = "profile"
+	local boardKey = "season"
+	local lastView: Types.ProfileView? = nil
+	local render: (view: Types.ProfileView) -> ()
 
 	local tabs = Panel.list("Tabs")
 	tabs.Size = UDim2.new(1, 0, 0, 48)
@@ -170,7 +184,147 @@ function ProfileScreen.create(parent: Instance, t: Translate, displayName: strin
 		end
 	end
 
-	local function render(view: Types.ProfileView)
+	-- Demande un classement au serveur (une seule demande en cours par classement).
+	local function fetchBoard(key: string)
+		if boardLoading[key] then
+			return
+		end
+		boardLoading[key] = true
+		task.spawn(function()
+			local kind, modeId = string.match(key, "^(%w+):?(%w*)$")
+			local ok, result = pcall(ClientNet.invoke, "LeaderboardRequest", kind, if modeId ~= "" then modeId else nil)
+			boardCache[key] = { at = os.clock(), result = if ok and type(result) == "table" then result else nil }
+			boardLoading[key] = nil
+			local view = lastView
+			if view and tab == "leaderboards" and boardKey == key and panel:isOpen() then
+				render(view)
+			end
+		end)
+	end
+
+	local function boardLabel(key: string): string
+		local kind, modeId = string.match(key, "^(%w+):?(%w*)$")
+		if kind == "mode" and modeId then
+			return t("mode." .. modeId)
+		end
+		return t("board.kind." .. (kind or "season"))
+	end
+
+	local function boardRow(row: { [string]: any }, mine: boolean)
+		order += 1
+		local podium = row.position <= 3
+		Create("Frame", {
+			LayoutOrder = order,
+			Size = UDim2.new(1, -8, 0, 34),
+			BackgroundColor3 = if mine then Theme.background else Theme.panel,
+			BackgroundTransparency = 0.2,
+			Parent = list,
+		}, {
+			Stroke = Create("UIStroke", {
+				Color = if mine then Theme.cyan elseif podium then Theme.orange else Theme.textDim,
+				Transparency = if mine or podium then 0.2 else 0.7,
+			}),
+			Position = Create("TextLabel", {
+				Position = UDim2.fromOffset(8, 0),
+				Size = UDim2.new(0, 56, 1, 0),
+				BackgroundTransparency = 1,
+				Font = Theme.fontNumbers,
+				TextSize = 18,
+				TextColor3 = if podium then Theme.orange else Theme.text,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Text = "#" .. tostring(row.position),
+			}),
+			Name = Create("TextLabel", {
+				Position = UDim2.fromOffset(68, 0),
+				Size = UDim2.new(1, -200, 1, 0),
+				BackgroundTransparency = 1,
+				Font = Theme.fontText,
+				TextSize = 16,
+				TextColor3 = if mine then Theme.cyan else Theme.text,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				Text = tostring(row.name),
+			}),
+			Score = Create("TextLabel", {
+				AnchorPoint = Vector2.new(1, 0),
+				Position = UDim2.new(1, -8, 0, 0),
+				Size = UDim2.new(0, 120, 1, 0),
+				BackgroundTransparency = 1,
+				Font = Theme.fontNumbers,
+				TextSize = 18,
+				TextColor3 = Theme.cyan,
+				TextXAlignment = Enum.TextXAlignment.Right,
+				Text = tostring(row.score),
+			}),
+		})
+	end
+
+	local function renderLeaderboards()
+		order += 1
+		local picker = Create("Frame", {
+			LayoutOrder = order,
+			Size = UDim2.new(1, -8, 0, 40),
+			BackgroundTransparency = 1,
+			Parent = list,
+		}, {
+			Layout = Create("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				Padding = UDim.new(0, 6),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+		})
+		for index, key in BOARDS do
+			local button = Panel.button(boardLabel(key), if boardKey == key then Theme.cyan else Theme.textDim, 104)
+			button.LayoutOrder = index
+			button.TextSize = 14
+			button.Parent = picker
+			button.Activated:Connect(function()
+				boardKey = key
+				local view = lastView
+				if view then
+					render(view)
+				end
+			end)
+		end
+
+		local cached = boardCache[boardKey]
+		if cached == nil or os.clock() - cached.at > BOARD_CACHE_SECONDS then
+			fetchBoard(boardKey)
+		end
+		if cached == nil then
+			line(t("board.loading"), 15, Theme.textDim)
+			return
+		end
+		local result = cached.result
+		if result == nil or not result.available then
+			line(t("board.unavailable"), 15, Theme.orange)
+			return
+		end
+		if result.kind == "range" then
+			line(t("board.rangeHint"), 14, Theme.textDim)
+		elseif result.season and result.season > 0 then
+			line(t("profile.season", { season = result.season }), 14, Theme.textDim)
+		else
+			line(t("board.preseason"), 14, Theme.textDim)
+		end
+		local entries = result.entries :: { { [string]: any } }
+		if #entries == 0 then
+			line(t("board.empty"), 15, Theme.textDim)
+		end
+		local me = Players.LocalPlayer.UserId
+		local listed = false
+		for _, row in entries do
+			local mine = row.userId == me
+			listed = listed or mine
+			boardRow(row, mine)
+		end
+		if not listed and type(result.me) == "table" then
+			line(t("board.me", { score = result.me.score or 0 }), 15, Theme.cyan)
+		end
+	end
+
+	render = function(view: Types.ProfileView)
+		lastView = view
 		panel.title.Text = t("station.profile")
 		Panel.clear(tabs)
 		Panel.clear(list)
@@ -189,11 +343,15 @@ function ProfileScreen.create(parent: Instance, t: Translate, displayName: strin
 		elseif tab == "top10" then
 			renderTop10(view)
 		else
-			line(t("profile.leaderboardsSoon"), 16, Theme.textDim)
+			renderLeaderboards()
 		end
 	end
 
-	return { panel = panel, render = render }
+	local function showTab(key: string)
+		tab = key
+	end
+
+	return { panel = panel, render = render, showTab = showTab }
 end
 
 return ProfileScreen

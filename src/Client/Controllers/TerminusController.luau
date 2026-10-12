@@ -5,8 +5,8 @@
 	- Barre du haut : pseudo, niveau, rang, crédits, Noyaux (+ vers la boutique),
 	  caisse gratuite (minuteur et badge « 1 » / « 2 »).
 	- Stations (invites avec l'attribut Station) → écrans : Coffre, Marchand,
-	  Armurier, Assureur. Holo-Bazar (P9), Porte de déploiement (P6), Stand de
-	  tir et Mur des Légendes (P10) arrivent dans leurs phases.
+	  Armurier, Assureur, Holo-Bazar (P9), Porte de déploiement (P6), Stand de
+	  tir (P10). Le Mur des Légendes ouvre les classements du profil.
 	- Menu rapide (mobile, manette) : accès à tous les lieux sans se déplacer.
 	- L'écran de tri s'ouvre automatiquement quand du loot attend d'être trié.
 ]]
@@ -53,6 +53,7 @@ local labels: { [string]: TextLabel } = {}
 local crateButton: TextButton
 local quickMenu: Panel.Panel
 local sortDismissed = false
+local profileScreen: ProfileScreen.Screen
 
 local function inMatch(): boolean
 	local status = MatchHUDController.status()
@@ -62,6 +63,11 @@ end
 function TerminusController.open(station: string)
 	if inMatch() then
 		return
+	end
+	if station == "legends" then
+		-- Le Mur des Légendes ouvre les classements du profil.
+		profileScreen.showTab("leaderboards")
+		station = "profile"
 	end
 	local screen = screens[station]
 	local view = ProfileController.get()
@@ -347,7 +353,8 @@ function TerminusController.start()
 	screens.armorer = ArmorerScreen.create(root, t)
 	screens.insurer = InsurerScreen.create(root, t)
 	screens.sort = SortScreen.create(root, t)
-	screens.profile = ProfileScreen.create(root, t, player.DisplayName)
+	profileScreen = ProfileScreen.create(root, t, player.DisplayName)
+	screens.profile = profileScreen
 	screens.sort.panel.onClosed = function()
 		sortDismissed = true
 	end

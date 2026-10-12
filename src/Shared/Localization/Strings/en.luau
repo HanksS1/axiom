@@ -556,7 +556,6 @@ return {
 	["profile.top10Empty"] = "No ranked match this season",
 	["profile.score"] = "{score} pts",
 	["profile.detail"] = "Players {kills} · AI {bots} · Robots {robots} · Loot {loot} · {outcome}",
-	["profile.leaderboardsSoon"] = "Global, friends and per-mode leaderboards: available with seasons.",
 	["freecrate.opening"] = "Opening…",
 	["rarity.common"] = "Common",
 	["rarity.rare"] = "Rare",
@@ -660,4 +659,15 @@ return {
 	["hub.monitor.1"] = "SIGNAL LOST",
 	["hub.monitor.2"] = "RECYCLING IN PROGRESS…",
 	["hub.monitor.3"] = "AXIOM IS WATCHING",
+	-- Classements (P10)
+	["board.kind.season"] = "Global",
+	["board.kind.friends"] = "Friends",
+	["board.kind.range"] = "Daily challenge",
+	["board.loading"] = "Connecting to AXIOM's archives…",
+	["board.unavailable"] = "Leaderboard unavailable right now. Try again in a minute.",
+	["board.rangeHint"] = "Shooting range daily challenge: same weapon for everyone, resets at midnight (UTC).",
+	["board.preseason"] = "Pre-season: scores already count, season 1 is coming.",
+	["board.empty"] = "Nobody is ranked yet. The first name engraved could be yours.",
+	["board.me"] = "You: {score} (outside this list)",
+	["legend.reached"] = "AXIOM LEGEND! You are in this season's global top.",
 }

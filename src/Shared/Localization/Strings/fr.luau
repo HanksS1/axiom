@@ -556,7 +556,6 @@ return {
 	["profile.top10Empty"] = "Aucune partie classée cette saison",
 	["profile.score"] = "{score} pts",
 	["profile.detail"] = "Joueurs {kills} · IA {bots} · Robots {robots} · Loot {loot} · {outcome}",
-	["profile.leaderboardsSoon"] = "Classements mondial, amis et par mode : disponibles avec les saisons.",
 	["freecrate.opening"] = "Ouverture…",
 	["rarity.common"] = "Commun",
 	["rarity.rare"] = "Rare",
@@ -660,4 +659,15 @@ return {
 	["hub.monitor.1"] = "SIGNAL PERDU",
 	["hub.monitor.2"] = "RECYCLAGE EN COURS…",
 	["hub.monitor.3"] = "AXIOM VOUS OBSERVE",
+	-- Classements (P10)
+	["board.kind.season"] = "Mondial",
+	["board.kind.friends"] = "Amis",
+	["board.kind.range"] = "Défi du jour",
+	["board.loading"] = "Connexion aux archives d'AXIOM…",
+	["board.unavailable"] = "Classement indisponible pour le moment. Réessayez dans une minute.",
+	["board.rangeHint"] = "Défi quotidien du stand de tir : même arme pour tous, remis à zéro à minuit (UTC).",
+	["board.preseason"] = "Pré-saison : les scores comptent déjà, la saison 1 approche.",
+	["board.empty"] = "Personne n'est encore classé. Le premier nom gravé pourrait être le vôtre.",
+	["board.me"] = "Vous : {score} (hors de cette liste)",
+	["legend.reached"] = "LÉGENDE D'AXIOM ! Vous êtes dans le top mondial de la saison.",
 }
