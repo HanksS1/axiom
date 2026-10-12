@@ -73,6 +73,7 @@ export type Profile = {
 	pendingInsurance: { ItemInstance }?,
 	pendingLoot: { ItemInstance }, -- loot extrait en attente de l'écran de tri
 	activeMatch: ActiveMatch?,
+	insuranceTier: string?, -- assurance choisie pour la prochaine partie (payée au départ)
 	season: { id: number, top10: { TopGame } },
 	seasonHistory: { { id: number, rank: string } },
 	bestScoreByMode: { [string]: number },
@@ -104,6 +105,14 @@ export type ProfileView = {
 	tempItem: ItemInstance?,
 	hasVaultExtension: boolean,
 	freeCrate: { stored: number, nextGrantUnix: number? },
+	pendingLoot: { ItemInstance },
+	pendingInsuranceCount: number,
+	insuranceTier: string?,
+	rank: string,
+	rankingScore: number,
+	seasonId: number,
+	top10: { TopGame },
+	bestScoreByMode: { [string]: number },
 	tutorialDone: boolean,
 	settings: { [string]: any },
 	stats: { [string]: number },

@@ -21,6 +21,7 @@ local order = {
 	"SpectateController",
 	"PingController",
 	"GadgetController",
+	"TerminusController",
 	"TouchControlsController",
 	"DevPanelController",
 }

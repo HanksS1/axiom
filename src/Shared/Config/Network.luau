@@ -37,5 +37,12 @@ return Freeze.deep({
 		-- Partie
 		Ping = { rate = 2, burst = 4 },
 		UseGadget = { rate = 2, burst = 4 },
+		-- Terminus et économie
+		VaultAction = { rate = 6, burst = 12 },
+		MerchantSell = { rate = 2, burst = 4 },
+		MerchantBuy = { rate = 3, burst = 6 },
+		Repair = { rate = 2, burst = 4 },
+		SetInsurance = { rate = 2, burst = 4 },
+		OpenFreeCrate = { rate = 1, burst = 2 },
 	} :: { [string]: Limit },
 })

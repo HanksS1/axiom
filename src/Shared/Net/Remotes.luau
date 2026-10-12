@@ -68,6 +68,15 @@ local Remotes: { [string]: RemoteDef } = {
 	GadgetEffect = { kind = "event", toServer = false }, -- saut / grappin validés (propriétaire)
 	GadgetVisual = { kind = "unreliable", toServer = false },
 	Reveal = { kind = "event", toServer = false }, -- cibles révélées par un drone
+
+	-- Terminus et économie (P5)
+	VaultAction = { kind = "event", toServer = true },
+	MerchantSell = { kind = "event", toServer = true },
+	MerchantBuy = { kind = "event", toServer = true },
+	Repair = { kind = "event", toServer = true },
+	SetInsurance = { kind = "event", toServer = true },
+	OpenFreeCrate = { kind = "event", toServer = true },
+	FreeCrateResult = { kind = "event", toServer = false },
 }
 
 return table.freeze(Remotes)

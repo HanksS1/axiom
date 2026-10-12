@@ -14,7 +14,7 @@ local Types = require(Shared.Types)
 local ProfileTemplate = {}
 
 -- Version courante du format de profil (doit correspondre à la dernière migration).
-ProfileTemplate.VERSION = 2
+ProfileTemplate.VERSION = 3
 
 function ProfileTemplate.defaultSettings(): { [string]: any }
 	local settings = {}
@@ -45,6 +45,7 @@ function ProfileTemplate.new(now: number): Types.Profile
 		pendingInsurance = nil,
 		pendingLoot = {},
 		activeMatch = nil,
+		insuranceTier = nil,
 		season = { id = 0, top10 = {} },
 		seasonHistory = {},
 		bestScoreByMode = {},

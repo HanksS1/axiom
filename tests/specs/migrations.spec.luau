@@ -149,7 +149,7 @@ return function(T, H)
 			data.activeMatch = nil
 			local profile, err = Migrations.run(data, NOW)
 			expect(err).toBeNil()
-			expect(profile.version).toBe(2)
+			expect(profile.version).toBe(3)
 			expect(type(profile.pendingLoot)).toBe("table")
 		end)
 	end)

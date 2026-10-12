@@ -43,6 +43,9 @@ local steps: { [number]: (data: any) -> () } = {
 		-- P3 : loot extrait en attente de tri, partie en cours.
 		data.pendingLoot = data.pendingLoot or {}
 	end,
+	[3] = function(_data)
+		-- P5 : assurance choisie pour la prochaine partie (assainie plus bas).
+	end,
 }
 
 local function isInteger(value: any): boolean
@@ -221,6 +224,9 @@ function Migrations.sanitize(data: any, now: number): (Profile, Report)
 		profile.pendingInsurance = cleanItemList(data.pendingInsurance, seen, report, "pendingInsurance")
 	end
 	profile.pendingLoot = cleanItemList(data.pendingLoot, seen, report, "pendingLoot")
+	if type(data.insuranceTier) == "string" and Config.Economy.insurance.tiers[data.insuranceTier] ~= nil then
+		profile.insuranceTier = data.insuranceTier
+	end
 	-- Partie en cours : en dernier (un uid déjà présent ailleurs est écarté).
 	local active = data.activeMatch
 	if type(active) == "table" and type(active.id) == "string" and type(active.mode) == "string" then

@@ -127,21 +127,19 @@ local function buildArena(): Folder
 	)
 	ramp.Name = "Ramp"
 
-	-- Points d'apparition en bordure.
-	for index = 1, 8 do
-		local angle = index / 8 * math.pi * 2
-		local spawn = Instance.new("SpawnLocation")
-		spawn.Name = "Spawn" .. index
-		spawn.Anchored = true
-		spawn.Neutral = true
-		spawn.Duration = 0
-		spawn.Size = Vector3.new(6, 1, 6)
-		spawn.CFrame = CFrame.new(math.cos(angle) * (half - 12), 0.5, math.sin(angle) * (half - 12))
-		spawn.Color = NEON_CYAN
-		spawn.Material = Enum.Material.Neon
-		spawn.Transparency = 0.6
-		spawn.Parent = arena
-	end
+	-- Retour au Terminus (les joueurs apparaissent au Terminus hors partie).
+	local pad =
+		part(arena, "HubPad", Vector3.new(6, 1, 6), CFrame.new(0, 0.5, -half + 8), NEON_CYAN, Enum.Material.Neon)
+	pad.Transparency = 0.4
+	local prompt = Instance.new("ProximityPrompt")
+	prompt:SetAttribute("ActionKey", "station.open")
+	prompt:SetAttribute("ObjectKey", "station.hub")
+	prompt:SetAttribute("Station", "hub")
+	prompt.ActionText = "station.open"
+	prompt.ObjectText = "station.hub"
+	prompt.HoldDuration = 0.3
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = pad
 
 	arena.Parent = Workspace
 	return arena
