@@ -1,0 +1,18 @@
+# Dépendances Wally
+/Packages
+/ServerPackages
+/DevPackages
+wally.lock
+
+# Fichiers Roblox générés
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+*.rbxm
+*.rbxmx
+sourcemap.json
+
+# Divers
+.DS_Store
+/target

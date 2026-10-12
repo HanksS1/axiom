@@ -1,0 +1,7 @@
+# Linter : https://kampfkarren.github.io/selene/
+# `roblox_lite` = Luau + globals Roblox (sans dépendre du dump d'API Roblox).
+# Si vous disposez de `selene generate-roblox-std`, vous pouvez remplacer par std = "roblox".
+std = "roblox_lite"
+
+[lints]
+shadowing = "warn"

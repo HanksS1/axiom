@@ -1,0 +1,29 @@
+--!strict
+--[[
+	Point d'entrée unique des configurations de gameplay.
+
+	RÈGLE : aucune valeur de gameplay en dur dans le code. Tout ce qui peut
+	être ajusté pendant les tests vit dans un module de ce dossier.
+	Toutes les tables exportées sont gelées (lecture seule).
+]]
+
+local Config = {
+	Conditions = require(script.Conditions),
+	Cells = require(script.Cells),
+	Weapons = require(script.Weapons),
+	Equipment = require(script.Equipment),
+	Combat = require(script.Combat),
+	Modes = require(script.Modes),
+	Match = require(script.Match),
+	Robots = require(script.Robots),
+	Loot = require(script.Loot),
+	Economy = require(script.Economy),
+	Monetization = require(script.Monetization),
+	Progression = require(script.Progression),
+	Matchmaking = require(script.Matchmaking),
+	Data = require(script.Data),
+	Network = require(script.Network),
+	Settings = require(script.Settings),
+}
+
+return table.freeze(Config)
