@@ -13,6 +13,37 @@
 | Charte | `UI/Panel.luau` (lignes de balayage, rivets, ruban adhésif, coin fissuré, bordure rouillée), `UI/Flicker.luau` (néons défaillants), `UI/Sounds.luau` (groupes de sons, clic électronique), `UI/DragDrop.luau`, `UI/Sparks.luau` |
 | Tests | `tests/specs/settings.spec.luau` (9 tests) |
 
+## Aides contextuelles (ajoutées après la P10)
+
+Beaucoup de gestes ne se devinent pas (soin, parade, sac plein, maintien pour ramasser).
+Plutôt qu'un mode d'emploi, une courte ligne rappelle la commande **au moment où elle sert**,
+avec la touche du périphérique utilisé.
+
+| Aide | Quand |
+|---|---|
+| Soin, batterie | PV ou bouclier bas, avec le consommable en poche |
+| Plus de cellules, surchauffe | l'arme ne peut plus tirer |
+| Sac plein | le sac vient de se remplir |
+| Parade | première fois que l'arme de mêlée est en main |
+| Objectif, extraction, accroupi, ping (duo) | début de partie, puis au calme, 3 au plus par partie |
+| Terminus | arrivée au hub : comptoirs et Porte de déploiement |
+
+Pour ne pas gêner le jeu (`Config/Hints.luau`, `Shared/Hints/HintRules.luau`, testé) :
+
+- une seule aide à la fois, 5 s, puis 6 s de silence au moins ;
+- 1 à 3 affichages par aide et par session, jamais deux fois de suite ;
+- en plein combat (tir ou dégât depuis moins de 4 s), seules les aides urgentes passent ;
+- **plus jamais** une fois que le joueur a fait le geste de lui-même ;
+- rien pendant le tutoriel, ni panneau ouvert, ni mort ;
+- la ligne ne capte aucune entrée et ne recouvre ni le réticule ni la barre rapide ;
+- désactivable : Paramètres → Affichage → « Aides contextuelles ».
+
+Panneau de butin (caisse, sac de dépouille) :
+
+- pied de panneau « Maintenez un bouton pour prendre ou équiper », avec la touche de fermeture ;
+- un simple clic sur un bouton à maintenir affiche « Maintenir » sur le bouton ;
+- bouton « Tout prendre » : prend les objets un par un, au même rythme qu'à la main.
+
 ## Comment tester dans Studio
 
 1. **Chargement** : logo néon qui grésille, messages d'AXIOM et astuces, jauge d'énergie.

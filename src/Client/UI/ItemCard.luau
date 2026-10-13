@@ -33,7 +33,7 @@ local ItemCard = {}
 
 local CARD_HEIGHT = 64
 
-local function actionButton(action: Action, order: number): TextButton
+local function actionButton(action: Action, order: number, holdHint: string): TextButton
 	local button = Create("TextButton", {
 		LayoutOrder = order,
 		Size = UDim2.fromOffset(84, Theme.minButtonSize),
@@ -68,6 +68,21 @@ local function actionButton(action: Action, order: number): TextButton
 		token += 1
 		fill.Size = UDim2.fromScale(0, 1)
 	end
+	-- Relâché avant la fin (simple clic) : le bouton rappelle qu'il faut maintenir.
+	local flash = 0
+	local function release()
+		if holding then
+			flash += 1
+			local mine = flash
+			button.Text = holdHint
+			task.delay(1, function()
+				if flash == mine and button.Parent ~= nil then
+					button.Text = action.label
+				end
+			end)
+		end
+		stop()
+	end
 	local function start()
 		if holding then
 			return
@@ -92,7 +107,7 @@ local function actionButton(action: Action, order: number): TextButton
 		end)
 	end
 	button.MouseButton1Down:Connect(start)
-	button.MouseButton1Up:Connect(stop)
+	button.MouseButton1Up:Connect(release)
 	button.MouseLeave:Connect(stop)
 	button.InputBegan:Connect(function(input: InputObject)
 		if input.UserInputType == Enum.UserInputType.Touch or input.KeyCode == Enum.KeyCode.ButtonA then
@@ -101,7 +116,7 @@ local function actionButton(action: Action, order: number): TextButton
 	end)
 	button.InputEnded:Connect(function(input: InputObject)
 		if input.UserInputType == Enum.UserInputType.Touch or input.KeyCode == Enum.KeyCode.ButtonA then
-			stop()
+			release()
 		end
 	end)
 	return button
@@ -168,8 +183,9 @@ function ItemCard.create(item: Types.ItemInstance, t: Translate, actions: { Acti
 			VerticalAlignment = Enum.VerticalAlignment.Center,
 		}),
 	})
+	local holdHint = t("hint.hold")
 	for index, action in actions do
-		actionButton(action, index).Parent = actionRow
+		actionButton(action, index, holdHint).Parent = actionRow
 	end
 
 	return Create("Frame", {
