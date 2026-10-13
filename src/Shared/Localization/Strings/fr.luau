@@ -136,6 +136,7 @@ return {
 	["touch.sprint"] = "SPRINT",
 	["dev.equipRifle"] = "Fusil de Sentinelle",
 	["dev.equipPistol"] = "Pistolet maison",
+	["dev.equipSpecial"] = "Armes spéciales",
 	["dev.equipArmor"] = "Gilet + casque",
 	["dev.respawn"] = "Réapparaître",
 	["dev.mouseHint"] = "[M] libérer / verrouiller la souris",

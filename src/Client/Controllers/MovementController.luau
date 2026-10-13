@@ -140,6 +140,16 @@ end
 function MovementController.init() end
 
 function MovementController.start()
+	-- Repoussement (Gantelet à impulsion) : le client simule son personnage,
+	-- c'est donc lui qui applique l'impulsion décidée par le serveur.
+	ClientNet.on("Knockback", function(velocity: Vector3)
+		local model = player.Character
+		local root = if model then model:FindFirstChild("HumanoidRootPart") else nil
+		if typeof(velocity) == "Vector3" and root and root:IsA("BasePart") then
+			root.AssemblyLinearVelocity = velocity
+		end
+	end)
+
 	task.spawn(function()
 		local playerModule = player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule", 10)
 		if playerModule then

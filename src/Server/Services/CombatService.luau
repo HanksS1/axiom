@@ -5,6 +5,11 @@
 	- Registre des combattants (joueurs, mannequins, plus tard robots).
 	- Tirs : validation (cadence, munitions, position, portée, ligne de vue)
 	  puis calcul des dégâts par le serveur uniquement.
+	- Rayon continu (Canon à rayons X) : un tir par tic, traverse les couverts
+	  légers (tag LightCover) avec des dégâts réduits.
+	- Projectiles lents (Lance-clous, Court-Circuit) : simulés ici, le client
+	  n'envoie qu'une direction ; explosion en zone à l'impact.
+	- Repoussement (Gantelet), renvoi des tirs laser (Sabre en état Neuf).
 	- Mêlée, parade (garde, parade parfaite, garde brisée), étourdissement.
 	- Recharge, changement d'arme, postures et vitesses.
 	- PV / bouclier, mort (désintégration côté client).
@@ -16,6 +21,7 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -24,6 +30,7 @@ local Damage = require(Shared.Combat.Damage)
 local InventoryLogic = require(Shared.Items.InventoryLogic)
 local Guard = require(Shared.Util.Guard)
 local Movement = require(Shared.Combat.Movement)
+local Projectiles = require(Shared.Combat.Projectiles)
 local Signal = require(Shared.Util.Signal)
 local WeaponLogic = require(Shared.Combat.WeaponLogic)
 
@@ -51,6 +58,8 @@ CombatService.MovementChanged = Signal.new() :: Signal.Signal<Fighter>
 CombatService.ParryResolved = Signal.new() :: Signal.Signal<Fighter, Fighter, string>
 -- (combattant, objet) : un consommable a fait effet.
 CombatService.ConsumableUsed = Signal.new() :: Signal.Signal<Fighter, string>
+-- (combattant, vitesse, durée) : repoussement (le contrôle de mouvement doit le tolérer).
+CombatService.Knockback = Signal.new() :: Signal.Signal<Fighter, Vector3, number>
 
 local fighters: { [Model]: Fighter } = {}
 local byPlayer: { [Player]: Fighter } = {}
@@ -63,6 +72,23 @@ local deathHandler: ((fighter: Fighter, killer: Fighter?) -> ())? = nil
 local worldRayParams = RaycastParams.new()
 worldRayParams.FilterType = Enum.RaycastFilterType.Exclude
 worldRayParams.IgnoreWater = true
+
+-- Rayons qui traversent les couverts légers (Canon à rayons X).
+local coverRayParams = RaycastParams.new()
+coverRayParams.FilterType = Enum.RaycastFilterType.Exclude
+coverRayParams.IgnoreWater = true
+local excludedCharacters: { Instance } = {}
+local MAX_COVERS = 4
+
+-- Projectiles lents en vol.
+type Flight = {
+	owner: Fighter,
+	def: any,
+	condition: number,
+	itemId: string,
+	params: RaycastParams,
+}
+local flights: { Projectiles.Projectile } = {}
 
 local function now(): number
 	return Workspace:GetServerTimeNow()
@@ -79,6 +105,7 @@ local function refreshRayFilter()
 		end
 	end
 	worldRayParams.FilterDescendantsInstances = excluded
+	excludedCharacters = excluded
 end
 
 local function castWorldRay(origin: Vector3, displacement: Vector3): number?
@@ -87,6 +114,36 @@ local function castWorldRay(origin: Vector3, displacement: Vector3): number?
 		return nil
 	end
 	return result.Distance
+end
+
+--[[
+	Rayon « monde » qui traverse les couverts légers (planches, tôle, verre :
+	tag LightCover). Retourne la distance du premier obstacle solide (nil si
+	la ligne est dégagée) et si un couvert léger a été traversé.
+]]
+local function castThroughLightCover(origin: Vector3, displacement: Vector3): (number?, boolean)
+	local length = displacement.Magnitude
+	if length < 1e-3 then
+		return nil, false
+	end
+	local direction = displacement / length
+	coverRayParams.FilterDescendantsInstances = excludedCharacters
+	local from, traveled, passed = origin, 0, false
+	for _ = 1, MAX_COVERS + 1 do
+		local result = Workspace:Raycast(from, direction * (length - traveled), coverRayParams)
+		if result == nil then
+			return nil, passed
+		end
+		traveled += result.Distance
+		if not CollectionService:HasTag(result.Instance, "LightCover") then
+			return traveled, passed
+		end
+		passed = true
+		coverRayParams:AddToFilter(result.Instance)
+		from = result.Position
+	end
+	-- Trop de couverts d'affilée : le rayon s'arrête là.
+	return traveled, passed
 end
 
 -- Vue publique (répliquée à tous) : attributs du personnage.
@@ -589,6 +646,250 @@ local function finishReloadIfDue(fighter: Fighter, time: number)
 	end
 end
 
+-- Ralentissement à l'impact (Court-Circuit) : seulement si des dégâts ont été infligés.
+local function applySlow(def: any, target: Fighter, time: number)
+	if def.slowOnHit and target.kind ~= "robot" and Fighter.isAlive(target) then
+		target.slowMultiplier = def.slowOnHit.multiplier
+		target.slowUntil = time + def.slowOnHit.duration
+		applyMovement(target)
+		refreshAt(target, target.slowUntil)
+	end
+end
+
+-- Dégâts d'un impact d'arme à distance (point faible des robots compris).
+local function hitDamage(
+	def: any,
+	condition: number,
+	target: Fighter,
+	part: Instance?,
+	distance: number,
+	isHead: boolean,
+	throughCover: boolean
+): number
+	local amount = Damage.ranged({
+		def = def,
+		condition = condition,
+		distance = distance,
+		isHead = isHead,
+		helmet = target.helmet,
+		targetKind = target.kind,
+		throughCover = throughCover,
+	})
+	-- Point faible d'un robot (dos du Bastion).
+	if target.kind == "robot" and part and part.Name == "WeakSpot" and target.robotId then
+		local robot = Config.Robots.byId[target.robotId]
+		amount *= if robot and robot.weakSpotMultiplier then robot.weakSpotMultiplier else 1
+	end
+	return amount
+end
+
+-- Sabre laser en état Neuf : parade parfaite, de face, pendant un tir laser.
+local function canReflect(target: Fighter, attacker: Fighter, time: number): boolean
+	local melee = target.melee
+	if melee == nil or target.activeSlot ~= "melee" or not Fighter.isAlive(target) then
+		return false
+	end
+	return Damage.reflectsShot({
+		parrying = target.move.parrying,
+		parryStartedAt = target.parryStartedAt,
+		now = time,
+		frontal = Damage.isFrontal(target.root.CFrame.LookVector, target.root.Position, attacker.root.Position),
+		reflects = melee.def.reflectsLasersWhenPristine == true,
+		condition = melee.item.condition :: number,
+	})
+end
+
+export type RangedOptions = DamageOptions & {
+	reflectable: boolean?, -- false : tir qui ne se renvoie pas (rayon continu, projectile, explosion)
+	itemId: string?, -- arme du tireur (couleur du tracé renvoyé)
+}
+
+--[[
+	Impact d'un tir laser (joueur, robot, mercenaire IA) : renvoyé vers le
+	tireur si la cible réussit une parade parfaite au Sabre laser en état
+	Neuf (6.8), sinon dégâts normaux. Retourne (dégâts, cible tuée, renvoyé).
+]]
+function CombatService.rangedHit(
+	target: Fighter,
+	amount: number,
+	attacker: Fighter,
+	options: RangedOptions?
+): (number, boolean, boolean)
+	local opts: RangedOptions = options or {}
+	local time = now()
+	Fighter.refresh(target, time)
+	if opts.reflectable ~= false and attacker ~= target and canReflect(target, attacker, time) then
+		target.parryPerfected = true
+		CombatService.ParryResolved:Fire(target, attacker, "perfect")
+		if target.player then
+			ServerNet.fire("ParryResult", target.player, "perfect")
+		end
+		if attacker.player then
+			ServerNet.fire("ParryResult", attacker.player, "parried")
+		end
+		local from = headPosition(target)
+		ServerNet.fireAll("ShotFired", nil, opts.itemId or "robot_reflect", from, { attacker.root.Position })
+		CombatService.applyDamage(attacker, amount, target, { sourcePosition = from })
+		return 0, false, true
+	end
+	local dealt, killed = CombatService.applyDamage(target, amount, attacker, opts)
+	return dealt, killed, false
+end
+
+--[[
+	Repousse un combattant de `distance` studs à l'opposé de `from` (Gantelet
+	à impulsion). Joueur : l'impulsion est appliquée par son client (il
+	simule son personnage) ; robots et mercenaires IA : par le serveur.
+]]
+function CombatService.knockback(target: Fighter, from: Vector3, distance: number)
+	if not Fighter.isAlive(target) or target.kind == "object" or target.root.Anchored then
+		return
+	end
+	local position = target.root.Position
+	local flat = Vector3.new(position.X - from.X, 0, position.Z - from.Z)
+	if flat.Magnitude < 1e-3 then
+		return
+	end
+	local duration = Combat.knockback.duration
+	local velocity = flat.Unit * (distance / duration) + Vector3.new(0, Workspace.Gravity * duration / 2, 0)
+	CombatService.Knockback:Fire(target, velocity, duration)
+	if target.player then
+		ServerNet.fire("Knockback", target.player, velocity)
+	else
+		target.root.AssemblyLinearVelocity = velocity
+	end
+end
+
+-- Projectiles lents ------------------------------------------------------------
+
+local function confirmHit(owner: Fighter, head: boolean, killed: boolean)
+	local player = owner.player
+	if player and player.Parent == Players then
+		ServerNet.fire("HitConfirm", player, head, killed)
+	end
+end
+
+local function resolveImpact(projectile: Projectiles.Projectile, position: Vector3, instance: Instance?)
+	local flight = projectile.data :: Flight
+	local def, owner = flight.def, flight.owner
+	local time = now()
+	local anyHit, anyHead, anyKill = false, false, false
+	if def.splashRadius then
+		-- Explosion en zone (aussi en fin de course) : tout combattant dans le rayon,
+		-- sauf le tireur, s'il n'est pas abrité derrière un obstacle.
+		local speed = projectile.velocity.Magnitude
+		local center = if speed > 1e-3 then position - projectile.velocity / speed * 0.4 else position
+		CombatService.NoiseMade:Fire(center, def.noiseRadius)
+		local reach = def.splashRadius + Combat.projectiles.splashBodyRadius
+		for _, target in CombatService.allFighters() do
+			if target ~= owner and Fighter.isAlive(target) then
+				local offset = target.root.Position - center
+				local distance = offset.Magnitude
+				if distance <= reach then
+					local blockedAt = castWorldRay(center, offset)
+					if blockedAt == nil or blockedAt >= distance - 1.5 then
+						local amount = hitDamage(def, flight.condition, target, nil, 0, false, false)
+						local dealt, killed = CombatService.applyDamage(target, amount, owner, {
+							sourcePosition = center,
+						})
+						if dealt > 0 then
+							applySlow(def, target, time)
+							anyHit = true
+						end
+						anyKill = anyKill or killed
+					end
+				end
+			end
+		end
+	elseif instance then
+		local target = CombatService.findFighterByPart(instance)
+		if target and target ~= owner then
+			local isHead = instance.Name == "Head" and def.headshots == true
+			local distance = (position - projectile.origin).Magnitude
+			local amount = hitDamage(def, flight.condition, target, instance, distance, isHead, false)
+			local dealt, killed = CombatService.applyDamage(target, amount, owner, {
+				sourcePosition = projectile.origin,
+				isHead = isHead,
+			})
+			if dealt > 0 then
+				applySlow(def, target, time)
+				anyHit, anyHead = true, isHead
+			end
+			anyKill = killed
+		end
+	end
+	if anyHit then
+		confirmHit(owner, anyHead, anyKill)
+	end
+	ServerNet.fireAll("ProjectileImpact", flight.itemId, position, def.splashRadius or 0)
+end
+
+local function castFlight(projectile: Projectiles.Projectile, from: Vector3, displacement: Vector3): (Vector3?, any?)
+	local result = Workspace:Raycast(from, displacement, (projectile.data :: Flight).params)
+	if result then
+		return result.Position, result.Instance
+	end
+	return nil, nil
+end
+
+local function onFlightImpact(projectile: Projectiles.Projectile, position: Vector3, instance: any?)
+	-- Une erreur ici ne doit pas laisser le projectile dans la liste (erreur à chaque image).
+	local ok, message = pcall(resolveImpact, projectile, position, instance)
+	if not ok then
+		warn(`[CombatService] impact de projectile : {message}`)
+	end
+end
+
+-- Lance un projectile lent (le tireur et ses coéquipiers ne l'arrêtent pas).
+local function launchProjectile(
+	fighter: Fighter,
+	ranged: Fighter.RangedWeapon,
+	origin: Vector3,
+	direction: Vector3,
+	time: number
+)
+	local active = 0
+	for _, projectile in flights do
+		if (projectile.data :: Flight).owner == fighter then
+			active += 1
+		end
+	end
+	if active >= Combat.projectiles.maxActive then
+		return
+	end
+	local def = ranged.def
+	local ignored: { Instance } = { fighter.character }
+	for character, other in fighters do
+		if other ~= fighter and other.kind ~= "object" and Fighter.sameTeam(fighter, other) then
+			table.insert(ignored, character)
+		end
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.IgnoreWater = true
+	params.FilterDescendantsInstances = ignored
+	local velocity = direction.Unit * def.projectileSpeed
+	local flight: Flight = {
+		owner = fighter,
+		def = def,
+		condition = ranged.item.condition :: number,
+		itemId = ranged.item.itemId,
+		params = params,
+	}
+	table.insert(
+		flights,
+		Projectiles.new(
+			origin,
+			velocity,
+			def.arcGravity or 0,
+			Damage.maxRange(def.effectiveRange),
+			time + Combat.projectiles.maxLifetime,
+			flight
+		)
+	)
+	ServerNet.fireAllExcept("ProjectileFired", fighter.player, fighter.player, ranged.item.itemId, origin, velocity)
+end
+
 local shotValidator = Guard.tuple(Guard.struct({
 	t = Guard.number(0),
 	origin = Guard.vector3(100_000),
@@ -649,6 +950,11 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 		fighter.inventory:takeCells(def.cell, fired.cellsConsumed)
 	end
 
+	-- Projectile lent : aucun impact n'est accepté du client, le serveur le fait voler.
+	local isProjectile = def.projectileSpeed ~= nil
+	if isProjectile then
+		shot.hits = {}
+	end
 	local verdict = HitValidator.validate(shot, {
 		now = time,
 		shooterHead = headPosition(fighter),
@@ -657,6 +963,7 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 		findTarget = CombatService.findFighterByPart,
 		shooter = fighter,
 		castRay = castWorldRay,
+		castThrough = if def.lightCoverDamageMultiplier then castThroughLightCover else nil,
 	})
 	if not verdict.ok then
 		ServerNet.flag(player, "FireWeapon", verdict.reason or "tir invalide")
@@ -667,24 +974,21 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 	-- Le tir s'entend (les robots dans le rayon viennent voir).
 	CombatService.NoiseMade:Fire(shot.origin, def.noiseRadius)
 
+	if isProjectile then
+		-- Origine déclarée cachée derrière un mur : pas de projectile.
+		if not verdict.originBlocked then
+			launchProjectile(fighter, ranged, shot.origin, shot.direction, time)
+		end
+		queueOwnerState(fighter)
+		return
+	end
+
 	-- Dégâts regroupés par cible (plombs d'un fusil à pompe).
 	local condition = ranged.item.condition :: number
 	local totals: { [Fighter]: { damage: number, head: boolean } } = {}
 	for _, hit in verdict.hits do
 		local target = hit.target :: Fighter
-		local amount = Damage.ranged({
-			def = def,
-			condition = condition,
-			distance = hit.distance,
-			isHead = hit.isHead,
-			helmet = target.helmet,
-			targetKind = target.kind,
-		})
-		-- Point faible d'un robot (dos du Bastion).
-		if target.kind == "robot" and hit.part.Name == "WeakSpot" and target.robotId then
-			local robot = Config.Robots.byId[target.robotId]
-			amount *= if robot and robot.weakSpotMultiplier then robot.weakSpotMultiplier else 1
-		end
+		local amount = hitDamage(def, condition, target, hit.part, hit.distance, hit.isHead, hit.throughCover)
 		local entry = totals[target]
 		if entry == nil then
 			entry = { damage = 0, head = false }
@@ -696,15 +1000,14 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 
 	local anyHit, anyHead, anyKill = false, false, false
 	for target, entry in totals do
-		local dealt, killed = CombatService.applyDamage(target, entry.damage, fighter, {
+		local dealt, killed = CombatService.rangedHit(target, entry.damage, fighter, {
 			sourcePosition = shot.origin,
 			isHead = entry.head,
+			reflectable = def.fireMode ~= "beam",
+			itemId = ranged.item.itemId,
 		})
-		if def.slowOnHit and target.kind ~= "robot" then
-			target.slowMultiplier = def.slowOnHit.multiplier
-			target.slowUntil = time + def.slowOnHit.duration
-			applyMovement(target)
-			refreshAt(target, target.slowUntil)
+		if dealt > 0 then
+			applySlow(def, target, time)
 		end
 		anyHit = anyHit or dealt > 0
 		anyHead = anyHead or entry.head
@@ -833,6 +1136,10 @@ local function onMeleeAttack(player: Player, targetPart: BasePart?)
 	})
 	if dealt > 0 then
 		ServerNet.fire("HitConfirm", player, false, killed)
+		-- Gantelet à impulsion : la cible est repoussée.
+		if def.knockback and not killed then
+			CombatService.knockback(target, fighter.root.Position, def.knockback)
+		end
 	end
 end
 
@@ -938,6 +1245,13 @@ function CombatService.start()
 		local fighter = byPlayer[player]
 		if fighter then
 			CombatService.PlayerLeaving:Fire(fighter)
+		end
+	end)
+
+	-- Projectiles lents en vol.
+	RunService.Heartbeat:Connect(function(dt)
+		if #flights > 0 then
+			Projectiles.step(flights, dt, now(), castFlight, onFlightImpact)
 		end
 	end)
 end

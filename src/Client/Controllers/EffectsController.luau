@@ -3,6 +3,8 @@
 	EffectsController : effets visuels de combat (côté client uniquement).
 
 	- Tracés des tirs (les siens immédiatement, ceux des autres via ShotFired).
+	- Projectiles lents (Lance-clous, Court-Circuit) : image du projectile en
+	  vol, explosion à l'impact annoncé par le serveur.
 	- Coups de mêlée (bras animé de façon procédurale, en attendant les animations).
 	- Flash de parade.
 	- Mort : désintégration en voxels néon (~1,2 s), sans gore (section 6.9).
@@ -14,12 +16,15 @@ local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local Damage = require(Shared.Combat.Damage)
+local Projectiles = require(Shared.Combat.Projectiles)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local ProfileController = require(script.Parent.ProfileController)
@@ -81,16 +86,111 @@ function EffectsController.playShot(itemId: string, muzzle: Vector3, endpoints: 
 	local def = Config.Weapons.ranged[itemId]
 	-- L'Aiguille : tracé visible longtemps (révèle la position du tireur).
 	local lifetime = if def and def.tracerDuration then def.tracerDuration else Visuals.tracer.lifetime
+	local width = Visuals.tracer.width
+	if def and def.beamTick then
+		-- Rayon continu : un tracé épais par tic, qui dure jusqu'au tic suivant.
+		lifetime = def.beamTick * 1.6
+		width = Visuals.tracer.beamWidth
+	end
 	local maxTracers = if isMobile then 3 else 8
 	for index, endpoint in endpoints do
 		if index > maxTracers then
 			break
 		end
-		tracer(muzzle, endpoint, color, Visuals.tracer.width, lifetime)
+		tracer(muzzle, endpoint, color, width, lifetime)
 		if isLocal or index <= 2 then
 			impact(endpoint, color)
 		end
 	end
+end
+
+-- Projectiles lents ------------------------------------------------------------
+
+type Flying = { part: BasePart, params: RaycastParams }
+local flying: { Projectiles.Projectile } = {}
+local MAX_FLYING = 24
+
+local function accentOf(itemId: string): Color3
+	local shape = Visuals.weapons[itemId]
+	return if shape then shape.accent else Visuals.tracer.color
+end
+
+--[[
+	Image d'un projectile en vol (même trajectoire que le serveur). Elle
+	s'arrête au premier obstacle ; les dégâts et l'explosion viennent du
+	serveur (ProjectileImpact).
+]]
+function EffectsController.playProjectile(itemId: string, origin: Vector3, velocity: Vector3, ignore: Instance?)
+	local def = Config.Weapons.ranged[itemId]
+	if def == nil or def.projectileSpeed == nil or #flying >= MAX_FLYING then
+		return
+	end
+	local part = Instance.new("Part")
+	part.Name = "Projectile"
+	part.Shape = Enum.PartType.Ball
+	part.Size = Vector3.one * (if def.splashRadius then 1.1 else 0.4)
+	part.CFrame = CFrame.new(origin)
+	part.Color = accentOf(itemId)
+	part.Material = Enum.Material.Neon
+	decorative(part)
+	part.Parent = effectsFolder
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.IgnoreWater = true
+	params.FilterDescendantsInstances = if ignore then { effectsFolder, ignore } else { effectsFolder }
+	local entry: Flying = { part = part, params = params }
+	table.insert(
+		flying,
+		Projectiles.new(
+			origin,
+			velocity,
+			def.arcGravity or 0,
+			Damage.maxRange(def.effectiveRange),
+			os.clock() + Combat.projectiles.maxLifetime,
+			entry
+		)
+	)
+end
+
+local function castFlying(projectile: Projectiles.Projectile, from: Vector3, displacement: Vector3): (Vector3?, any?)
+	local result = Workspace:Raycast(from, displacement, (projectile.data :: Flying).params)
+	if result then
+		return result.Position, result.Instance
+	end
+	return nil, nil
+end
+
+local function endFlying(projectile: Projectiles.Projectile)
+	(projectile.data :: Flying).part:Destroy()
+end
+
+local function stepFlying(dt: number)
+	if #flying == 0 then
+		return
+	end
+	Projectiles.step(flying, dt, os.clock(), castFlying, endFlying)
+	for _, projectile in flying do
+		(projectile.data :: Flying).part.CFrame = CFrame.new(projectile.position)
+	end
+end
+
+-- Explosion en zone : sphère qui gonfle jusqu'au rayon réel des dégâts.
+local function explosion(position: Vector3, radius: number, color: Color3)
+	local blast = Instance.new("Part")
+	blast.Name = "Explosion"
+	blast.Shape = Enum.PartType.Ball
+	blast.Size = Vector3.one
+	blast.CFrame = CFrame.new(position)
+	blast.Color = color
+	blast.Material = Enum.Material.Neon
+	blast.Transparency = 0.25
+	decorative(blast)
+	blast.Parent = effectsFolder
+	TweenService:Create(blast, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.one * radius * 2,
+		Transparency = 1,
+	}):Play()
+	Debris:AddItem(blast, 0.35)
 end
 
 -- Coup de mêlée : rotation rapide de l'épaule droite (procédural, local).
@@ -258,6 +358,31 @@ function EffectsController.start()
 		end
 		EffectsController.playShot(itemId, muzzle, endpoints, false)
 	end)
+
+	ClientNet.on("ProjectileFired", function(shooter: Player?, itemId: string, origin: Vector3, velocity: Vector3)
+		if
+			shooter == player
+			or type(itemId) ~= "string"
+			or typeof(origin) ~= "Vector3"
+			or typeof(velocity) ~= "Vector3"
+		then
+			return
+		end
+		EffectsController.playProjectile(itemId, origin, velocity, if shooter then shooter.Character else nil)
+	end)
+
+	ClientNet.on("ProjectileImpact", function(itemId: string, position: Vector3, radius: number)
+		if type(itemId) ~= "string" or typeof(position) ~= "Vector3" or type(radius) ~= "number" then
+			return
+		end
+		if radius > 0 then
+			explosion(position, radius, accentOf(itemId))
+		else
+			impact(position, accentOf(itemId))
+		end
+	end)
+
+	RunService.Heartbeat:Connect(stepFlying)
 
 	-- Alarme de casier d'AXIOM : onde rouge visible dans son rayon.
 	ClientNet.on("LootAlarm", function(position: Vector3, radius: number)

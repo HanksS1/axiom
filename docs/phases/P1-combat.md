@@ -81,9 +81,28 @@ sur les 3 types d'appareils (PC, manette, mobile).
 - Visée assistée manette / mobile et **personnalisation des touches** : phase P8
   (paramètres). La caméra est déjà prête pour les accueillir.
 - Le chargeur d'une arme n'est pas conservé entre deux apparitions (arène).
-- Armes à projectile (Lance-clous, Court-Circuit), rayon continu (Canon X),
-  poussée du gantelet et renvoi des lasers par le sabre : logique de dégâts prête
-  et testée, comportement en jeu en **P2** quand ces armes deviennent lootables.
+
+## Armes spéciales (ajoutées après la P10)
+
+Les mécaniques décrites par la config mais jamais lues par le serveur sont en place :
+
+| Arme | Comportement |
+|---|---|
+| **Canon à rayons X** | Rayon continu : un tir par tic de 0,1 s tant que la détente est tenue (60 dégâts/s, +25 de chaleur/s, 1 cellule / 0,5 s). Traverse les couverts légers (tag `LightCover`) avec 50 % des dégâts. Il n'avait ni cadence, ni chaleur, ni coût. |
+| **Lance-clous magnétique** | Projectile droit à 250 studs/s, **simulé par le serveur** : le client n'envoie qu'une direction, aucun impact. |
+| **Court-Circuit** | Grenade en cloche (visée automatique sur le point du réticule), explosion de 8 studs : 70 dégâts à tout combattant non abrité, ×2,5 sur les robots, joueurs ralentis 1 s. |
+| **Gantelet à impulsion** | Repousse la cible de 15 studs (appliqué par le client de la victime, toléré par le contrôle de mouvement ; par le serveur pour robots et mercenaires IA). |
+| **Sabre laser (état Neuf)** | Parade parfaite, de face, pendant un tir laser (joueur, robot ou mercenaire IA) : le tir est renvoyé et c'est le tireur qui encaisse. |
+
+- Fichiers : `Shared/Combat/Projectiles.luau` (vol, pur et testé), `WeaponLogic` (tics du rayon),
+  `Damage` (tic, couvert léger, renvoi), `CombatService` (simulation, explosion, repoussement,
+  `rangedHit`), `HitValidator` (`castThrough`), `WeaponController` et `EffectsController` côté client.
+- Le ralentissement du Court-Circuit ne s'applique plus si les dégâts sont refusés
+  (coéquipier, Terminus).
+- **Tester** : panneau DEV → « Armes spéciales » (chaque appui change de paire d'armes).
+
+Choix à valider : l'explosion du Court-Circuit n'atteint pas son tireur ; les projectiles
+traversent les coéquipiers.
 
 ## Questions ouvertes
 

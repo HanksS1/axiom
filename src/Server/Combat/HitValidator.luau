@@ -37,11 +37,16 @@ export type ValidHit = {
 	position: Vector3,
 	distance: number,
 	isHead: boolean,
+	throughCover: boolean, -- un couvert léger a été traversé (dégâts réduits)
 }
 
 -- Raycast « monde » : retourne la distance du premier obstacle (hors
 -- personnages), ou nil si la ligne est dégagée.
 export type CastRay = (origin: Vector3, displacement: Vector3) -> number?
+
+-- Variante qui traverse les couverts légers : (distance du premier obstacle
+-- solide ou nil, un couvert léger a été traversé).
+export type CastThrough = (origin: Vector3, displacement: Vector3) -> (number?, boolean)
 
 export type Context = {
 	now: number,
@@ -51,6 +56,7 @@ export type Context = {
 	findTarget: (part: BasePart) -> any?, -- Fighter vivant possédant la pièce, sinon nil
 	shooter: any, -- Fighter du tireur
 	castRay: CastRay,
+	castThrough: CastThrough?, -- armes qui traversent les couverts légers
 }
 
 export type Verdict = {
@@ -58,6 +64,7 @@ export type Verdict = {
 	reason: string?, -- incohérence grave (journalisée)
 	hits: { ValidHit },
 	dropped: number, -- impacts écartés sans sanction (ligne de vue, désynchronisation)
+	originBlocked: boolean?, -- origine déclarée cachée derrière un obstacle : rien ne part
 }
 
 local HitValidator = {}
@@ -87,7 +94,7 @@ function HitValidator.validate(shot: Shot, context: Context): Verdict
 	if fromHead.Magnitude > 0.5 then
 		local blockedAt = context.castRay(context.shooterHead, fromHead)
 		if blockedAt ~= nil and blockedAt < fromHead.Magnitude - 0.25 then
-			return { ok = true, reason = nil, hits = {}, dropped = #shot.hits }
+			return { ok = true, reason = nil, hits = {}, dropped = #shot.hits, originBlocked = true }
 		end
 	end
 
@@ -112,8 +119,14 @@ function HitValidator.validate(shot: Shot, context: Context): Verdict
 		end
 		-- Ligne de vue : un obstacle avant le point d'impact annule l'impact
 		-- (sans sanction : la cible a pu passer derrière un mur entre-temps).
+		local throughCover = false
 		if distance > 0.5 then
-			local blockedAt = context.castRay(shot.origin, offset)
+			local blockedAt: number?
+			if context.castThrough then
+				blockedAt, throughCover = context.castThrough(shot.origin, offset)
+			else
+				blockedAt = context.castRay(shot.origin, offset)
+			end
 			if blockedAt ~= nil and blockedAt < distance - 1 then
 				verdict.dropped += 1
 				continue
@@ -125,6 +138,7 @@ function HitValidator.validate(shot: Shot, context: Context): Verdict
 			position = claim.position,
 			distance = distance,
 			isHead = claim.part.Name == "Head",
+			throughCover = throughCover,
 		})
 	end
 	return verdict

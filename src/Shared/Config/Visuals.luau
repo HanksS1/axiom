@@ -48,6 +48,7 @@ return Freeze.deep({
 
 	tracer = {
 		width = 0.08,
+		beamWidth = 0.3, -- rayon continu (Canon à rayons X)
 		lifetime = 0.06,
 		color = CYAN,
 		robotColor = Color3.fromRGB(255, 40, 40),

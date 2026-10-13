@@ -41,12 +41,39 @@ function WeaponLogic.usesHeat(def: any): boolean
 	return def.heat ~= nil
 end
 
--- Intervalle minimal entre deux activations (tir ou rafale).
+-- Intervalle minimal entre deux activations (tir, rafale, ou tic d'un rayon continu).
 function WeaponLogic.fireInterval(def: any): number
+	if def.beamTick then
+		return def.beamTick
+	end
 	if def.fireRate <= 0 then
 		return 0
 	end
 	return 1 / def.fireRate
+end
+
+-- Chaleur ajoutée par activation (un tir, ou un tic de rayon).
+function WeaponLogic.heatPerShot(def: any): number
+	local heat = def.heat
+	if heat == nil then
+		return 0
+	end
+	return (heat.perShot or 0) + (heat.perSecond or 0) * (def.beamTick or 0)
+end
+
+-- Cellules consommées par activation (fraction possible : 1 cellule / 3 tirs, 1 cellule / 0,5 s).
+function WeaponLogic.cellsPerShot(def: any): number
+	local cost = def.cellCost
+	if cost == nil then
+		return 0
+	end
+	if cost.everyShots then
+		return cost.cells / cost.everyShots
+	end
+	if cost.everySeconds and def.beamTick then
+		return cost.cells * def.beamTick / cost.everySeconds
+	end
+	return 0
 end
 
 -- Applique le refroidissement : -30/s après 0,4 s sans tirer.
@@ -64,11 +91,10 @@ end
 
 -- Cellules nécessaires pour le prochain tir d'une arme à surchauffe.
 function WeaponLogic.cellsForNextShot(def: any, state: RangedState): number
-	local cost = def.cellCost
-	if cost == nil or cost.everyShots == nil then
+	local perShot = WeaponLogic.cellsPerShot(def)
+	if perShot <= 0 then
 		return 0
 	end
-	local perShot = cost.cells / cost.everyShots
 	return math.max(0, math.ceil(state.cellDebt + perShot - 1e-9))
 end
 
@@ -113,13 +139,12 @@ function WeaponLogic.fire(def: any, state: RangedState, now: number): FireResult
 	local result: FireResult = { projectiles = 0, cellsConsumed = 0, overheated = false }
 	WeaponLogic.updateHeat(state, now)
 	if WeaponLogic.usesHeat(def) then
-		local heat = def.heat
 		result.projectiles = def.burstCount * def.pellets
-		state.heat = math.min(Overheat.max, state.heat + (heat.perShot or 0))
+		state.heat = math.min(Overheat.max, state.heat + WeaponLogic.heatPerShot(def))
 		-- Coût en cellules : accumulation fractionnaire (1 cellule / 3 tirs…).
-		local cost = def.cellCost
-		if cost and cost.everyShots then
-			state.cellDebt += cost.cells / cost.everyShots
+		local perShot = WeaponLogic.cellsPerShot(def)
+		if perShot > 0 then
+			state.cellDebt += perShot
 			local whole = math.floor(state.cellDebt + 1e-9)
 			result.cellsConsumed = whole
 			state.cellDebt -= whole
