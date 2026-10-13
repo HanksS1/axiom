@@ -1,9 +1,14 @@
 --!strict
 --[[
-	LayoutBuilder : description PURE d'une carte greybox (pièces, repères,
-	zones dangereuses, effondrements). Aucune Instance n'est créée ici :
-	MapRenderer s'en charge. Les cartes peuvent ainsi être vérifiées par
-	des tests (nombre de repères, caisses posées sur un sol…).
+	LayoutBuilder : description PURE d'une carte (pièces, lumières, particules,
+	repères, zones dangereuses, effondrements). Aucune Instance n'est créée
+	ici : MapRenderer s'en charge. Les cartes peuvent ainsi être vérifiées par
+	des tests (nombre de repères, caisses posées sur un sol, décor qui ne
+	recouvre aucun repère…).
+
+	Le constructeur tient un index spatial des pièces solides : l'habillage
+	(Props, Dress) demande `isFree` avant de poser un décor, pour ne jamais
+	recouvrir une caisse, une extraction, une porte ou un autre décor.
 
 	Coordonnées LOCALES : x / z autour du centre de la carte, y = hauteur
 	(le sol de la carte est à y = 0). Le décalage vers `Config.Maps.origin`
@@ -11,6 +16,17 @@
 ]]
 
 local LayoutBuilder = {}
+
+export type LightSpec = {
+	kind: string?, -- "point" (défaut) | "spot" | "surface"
+	color: Color3,
+	range: number,
+	brightness: number,
+	face: string?, -- nom d'Enum.NormalId (spot / surface)
+	angle: number?,
+	flicker: boolean?, -- grésille (animé côté client)
+	emergency: boolean?, -- reste allumée pendant une coupure de courant
+}
 
 export type PartSpec = {
 	name: string,
@@ -25,6 +41,8 @@ export type PartSpec = {
 	group: string?, -- regroupement (édifice qui peut s'effondrer…)
 	tags: { string }?,
 	attributes: { [string]: any }?,
+	light: LightSpec?,
+	emitter: string?, -- préréglage de particules (voir MapRenderer.EMITTERS)
 }
 
 export type MarkerSpec = {
@@ -62,6 +80,29 @@ export type Rng = {
 	NextInteger: (self: any, min: number, max: number) -> number,
 }
 
+--[[
+	Générateur aléatoire des cartes (Park-Miller). Les cartes ne passent PAS
+	par `Random.new` : le même code doit donner la même carte dans Studio et
+	dans les tests (Lune), sinon les tests vérifieraient une autre carte que
+	celle qui est jouée.
+]]
+function LayoutBuilder.random(seed: number): Rng
+	local state = math.floor(seed) % 2147483647 + 1
+	local function nextValue(): number
+		state = (state * 48271) % 2147483647
+		return state / 2147483647
+	end
+	local rng = {}
+	function rng.NextNumber(_self: any, min: number?, max: number?): number
+		local a, b = min or 0, max or 1
+		return a + (b - a) * nextValue()
+	end
+	function rng.NextInteger(_self: any, min: number, max: number): number
+		return min + math.floor(nextValue() * (max - min + 1))
+	end
+	return rng
+end
+
 export type BuildingSpec = {
 	x: number,
 	z: number,
@@ -83,7 +124,23 @@ export type BuildingInfo = {
 	levels: { number }, -- hauteur de chaque niveau (rez-de-chaussée, étages, toit)
 	spots: { { Vector3 } }, -- emplacements libres par niveau (caisses…)
 	roof: number,
+	-- Emprise (pour l'habillage intérieur et les toits).
+	x: number,
+	z: number,
+	w: number,
+	d: number,
+	doors: { string },
+	roofAccess: boolean,
+	group: string?,
 }
+
+-- Zone à garder libre (porte, passage, emprise d'un effondrement) : cylindre vertical.
+export type KeepOut = { x: number, z: number, r: number, y0: number, y1: number }
+
+type Box = { x0: number, x1: number, y0: number, y1: number, z0: number, z1: number }
+
+-- Préréglages de particules connus de MapRenderer (champ `emitter` d'une pièce).
+LayoutBuilder.emitterNames = { "smoke", "steam", "fire", "embers", "motes", "dust", "coldfog", "sparks" }
 
 -- Palette greybox commune.
 LayoutBuilder.colors = {
@@ -111,6 +168,9 @@ export type Builder = typeof(setmetatable(
 		layout: Layout,
 		defaultColor: Color3,
 		defaultMaterial: string,
+		keepOuts: { KeepOut },
+		big: { Box },
+		grid: { [number]: { Box } },
 	},
 	Builder
 ))
@@ -120,7 +180,120 @@ function LayoutBuilder.new(defaultColor: Color3?, defaultMaterial: string?): Bui
 		layout = { parts = {}, markers = {}, hazards = {}, collapses = {}, data = {} },
 		defaultColor = defaultColor or LayoutBuilder.colors.concrete,
 		defaultMaterial = defaultMaterial or "Concrete",
+		keepOuts = {},
+		big = {},
+		grid = {},
 	}, Builder)
+end
+
+-- Index spatial des pièces solides ---------------------------------------------
+
+local CELL = 32
+local BIG = 160 -- au-delà : pièce testée à chaque requête (sol, enceinte, grands halls)
+
+local function cellKey(cx: number, cz: number): number
+	return (cx + 512) * 1024 + (cz + 512)
+end
+
+-- Boîte englobante (alignée sur les axes) d'une pièce, rotation comprise.
+local function boundsOf(size: Vector3, cframe: CFrame): Box
+	local r, u, l = cframe.RightVector, cframe.UpVector, cframe.LookVector
+	local hx, hy, hz = size.X / 2, size.Y / 2, size.Z / 2
+	local ex = math.abs(r.X) * hx + math.abs(u.X) * hy + math.abs(l.X) * hz
+	local ey = math.abs(r.Y) * hx + math.abs(u.Y) * hy + math.abs(l.Y) * hz
+	local ez = math.abs(r.Z) * hx + math.abs(u.Z) * hy + math.abs(l.Z) * hz
+	local p = cframe.Position
+	return { x0 = p.X - ex, x1 = p.X + ex, y0 = p.Y - ey, y1 = p.Y + ey, z0 = p.Z - ez, z1 = p.Z + ez }
+end
+
+local function indexBox(self: Builder, box: Box)
+	if box.x1 - box.x0 > BIG or box.z1 - box.z0 > BIG then
+		table.insert(self.big, box)
+		return
+	end
+	for cx = math.floor(box.x0 / CELL), math.floor(box.x1 / CELL) do
+		for cz = math.floor(box.z0 / CELL), math.floor(box.z1 / CELL) do
+			local key = cellKey(cx, cz)
+			local cell = self.grid[key]
+			if cell == nil then
+				cell = {}
+				self.grid[key] = cell
+			end
+			table.insert(cell, box)
+		end
+	end
+end
+
+local function overlaps(box: Box, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): boolean
+	return box.x0 < x1 and box.x1 > x0 and box.y0 < y1 and box.y1 > y0 and box.z0 < z1 and box.z1 > z0
+end
+
+-- Une pièce solide occupe-t-elle ce volume ?
+function Builder.occupied(
+	self: Builder,
+	x0: number,
+	x1: number,
+	y0: number,
+	y1: number,
+	z0: number,
+	z1: number
+): boolean
+	for _, box in self.big do
+		if overlaps(box, x0, x1, y0, y1, z0, z1) then
+			return true
+		end
+	end
+	for cx = math.floor(x0 / CELL), math.floor(x1 / CELL) do
+		for cz = math.floor(z0 / CELL), math.floor(z1 / CELL) do
+			local cell = self.grid[cellKey(cx, cz)]
+			if cell then
+				for _, box in cell do
+					if overlaps(box, x0, x1, y0, y1, z0, z1) then
+						return true
+					end
+				end
+			end
+		end
+	end
+	return false
+end
+
+-- Zone à garder libre de tout décor (porte, passage…).
+function Builder.keepOut(self: Builder, x: number, z: number, r: number, y0: number?, y1: number?)
+	table.insert(self.keepOuts, { x = x, z = z, r = r, y0 = y0 or -1000, y1 = y1 or 1000 })
+end
+
+local MARKER_CLEARANCE = 4
+
+--[[
+	Peut-on poser un décor d'emprise circulaire `radius` et de hauteur
+	`height`, base à (x, y, z) ? Faux s'il toucherait une pièce solide, un
+	repère (caisse, extraction, Accélérateur, départ, patrouille) ou une zone
+	à garder libre.
+]]
+function Builder.isFree(self: Builder, x: number, y: number, z: number, radius: number, height: number): boolean
+	for _, zone in self.keepOuts do
+		if y + height > zone.y0 and y < zone.y1 then
+			local dx, dz = x - zone.x, z - zone.z
+			local reach = zone.r + radius
+			if dx * dx + dz * dz < reach * reach then
+				return false
+			end
+		end
+	end
+	for _, marker in self.layout.markers do
+		if marker.tag ~= "RiskZone" then
+			local p = marker.cframe.Position
+			if p.Y > y - 6 and p.Y < y + height + 6 then
+				local dx, dz = x - p.X, z - p.Z
+				local reach = radius + MARKER_CLEARANCE
+				if dx * dx + dz * dz < reach * reach then
+					return false
+				end
+			end
+		end
+	end
+	return not self:occupied(x - radius, x + radius, y + 0.3, y + height, z - radius, z + radius)
 end
 
 export type PartOptions = {
@@ -131,6 +304,8 @@ export type PartOptions = {
 	group: string?,
 	tags: { string }?,
 	attributes: { [string]: any }?,
+	light: LightSpec?,
+	emitter: string?,
 }
 
 function Builder.part(
@@ -156,8 +331,13 @@ function Builder.part(
 		group = opts.group,
 		tags = opts.tags,
 		attributes = opts.attributes,
+		light = opts.light,
+		emitter = opts.emitter,
 	}
 	table.insert(self.layout.parts, spec)
+	if spec.collide ~= false then
+		indexBox(self, boundsOf(size, cframe))
+	end
 	return spec
 end
 
@@ -309,6 +489,11 @@ function Builder.building(self: Builder, spec: BuildingSpec): BuildingInfo
 				center, length, axis = Vector3.new(x - w / 2, y, z), d, "z"
 			end
 			self:wall(`{name}_{side}{level}`, center, length, fh, axis, gap, color, material, opts)
+			if level == 0 and hasDoor(side) then
+				-- Seuil de la porte (dedans et dehors) : jamais de décor.
+				local alongX = side == "s" or side == "n"
+				self:keepOut(center.X + (if alongX then w / 4 else 0), center.Z, 7, base - 1, base + 10)
+			end
 		end
 	end
 
@@ -363,6 +548,9 @@ function Builder.building(self: Builder, spec: BuildingSpec): BuildingInfo
 			material,
 			opts
 		)
+		-- Pied de la rampe et palier : passages à garder libres de tout décor.
+		self:keepOut(x0 + 2 + run + 4, zs, 5, top - fh - 1, top - fh + 9)
+		self:keepOut(x0 + 5, if south then z0 + strip + 3 else z1 - strip - 3, 5, top - 1, top + 9)
 	end
 
 	-- Emplacements libres sur chaque niveau (hors bandes des rampes).
@@ -376,7 +564,18 @@ function Builder.building(self: Builder, spec: BuildingSpec): BuildingInfo
 			Vector3.new(x - w / 2 + 6, y, z),
 		})
 	end
-	return { levels = levels, spots = spots, roof = base + floors * fh }
+	return {
+		levels = levels,
+		spots = spots,
+		roof = base + floors * fh,
+		x = x,
+		z = z,
+		w = w,
+		d = d,
+		doors = doors,
+		roofAccess = spec.roofAccess == true,
+		group = spec.group,
+	}
 end
 
 -- Repères ----------------------------------------------------------------------

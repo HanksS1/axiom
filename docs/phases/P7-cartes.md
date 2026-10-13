@@ -27,6 +27,39 @@ Chaque carte : 8 points de départ en bordure, 3 extractions, 6 Accélérateurs,
 Les tests vérifient ces nombres, et que chaque caisse, extraction, Accélérateur et point de départ
 est posé sur un sol, hors d'un mur (deux vraies erreurs de placement ont ainsi été corrigées).
 
+## Habillage (ajouté après la P10)
+
+Les cartes ne sont plus de simples blocs : chaque carte reçoit, après la pose de ses repères,
+un habillage généré par le code.
+
+| Fichier | Rôle |
+|---|---|
+| `Server/Maps/Props.luau` | Bibliothèque d'une soixantaine de décors (épaves, mobilier, machines, baies, rochers, dunes…) |
+| `Server/Maps/Dress.luau` | Répartition : rues, façades, intérieurs, toits, abords des points de départ, horizon |
+| `Server/Maps/LayoutBuilder.luau` | Index spatial (`isFree`, `keepOut`), lumières et particules, générateur aléatoire propre aux cartes |
+| `Server/Maps/MapRenderer.luau` | Création des lumières (PointLight, SpotLight) et des particules |
+| `Config/Maps.luau` | Ambiance par carte (`mood` : brume, halo des néons, étalonnage des couleurs) |
+
+- **Un décor ne recouvre jamais** une caisse, une extraction, un Accélérateur, un point de départ,
+  une porte ou un pied de rampe : `Props.place` refuse tout emplacement occupé.
+- **Couverts légers** (planches, tôle, verre, tissu) : tag `LightCover`, présents sur les 4 cartes.
+- **Lumières** : néons défaillants (tag `Flicker`, animés côté client) ; pendant une coupure de
+  courant de Noyau Zéro, l'éclairage sur secteur (tag `PowerLight`) s'éteint et seules les balises
+  de secours restent.
+- **Même carte partout** : les cartes utilisent `LayoutBuilder.random` et non `Random.new`, pour que
+  les tests vérifient exactement la carte jouée (ils ont ainsi trouvé une caisse posée dans des décombres).
+- Forge-7 : toiture du grand hall, passerelles hautes le long des murs (2 rampes chacune).
+
+| Carte | Pièces | Lumières | Couverts légers |
+|---|---|---|---|
+| Néo-Lumen | ~5 000 | ~185 | ~340 |
+| Forge-7 | ~2 200 | ~100 | ~175 |
+| Terres Brûlées | ~1 600 | ~50 | ~65 |
+| Noyau Zéro | ~2 500 | ~190 | ~130 |
+
+Outils : `lune run tests/tools/map_stats.luau` (compteurs) et
+`lune run tests/tools/map_preview.luau [dossier]` (plan vu de dessus de chaque carte, en SVG).
+
 ## Comment tester dans Studio
 
 1. Play → Porte de déploiement → DÉPLOIEMENT : la partie se lance sur **une carte au hasard**
@@ -41,7 +74,7 @@ est posé sur un sol, hors d'un mur (deux vraies erreurs de placement ont ainsi 
 
 - Tout est calculé par le serveur (zones dangereuses 5 fois par seconde, effondrements, production) ;
   aucune nouvelle remote client → serveur hors outil DEV de Studio.
-- 200 à 1 300 pièces par carte, ancrées ; construction étalée sur plusieurs images.
+- 1 600 à 5 000 pièces par carte (habillage compris), ancrées ; construction étalée sur plusieurs images.
 - Les cartes sont identiques d'une partie à l'autre (graine fixe) : les joueurs apprennent les lieux.
 
 ## Revue de P6
