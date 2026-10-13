@@ -72,7 +72,7 @@ local ROWS: { [string]: { string } } = {
 		"mobileButtonOpacity",
 	},
 	audio = { "volumeMusic", "volumeEffects", "volumeAxiom", "volumeVoice" },
-	display = { "language", "graphicsQuality", "crossplay", "skipCrateAnimation" },
+	display = { "language", "graphicsQuality", "crossplay", "skipCrateAnimation", "hints" },
 }
 
 function SettingsScreen.create(parent: Instance, t: Translate, hooks: Hooks): Screen
