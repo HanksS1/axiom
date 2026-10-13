@@ -72,9 +72,16 @@ end
 
 -- Choisit le DataStore réel, ou un stockage en mémoire en Studio si les API sont désactivées.
 local function selectDataStore(): SessionStore.DataStoreLike
-	local dataStore = DataStoreService:GetDataStore(Config.Data.storeName)
-	if RunService:IsStudio() and Config.Data.allowMockInStudio then
-		local ok = pcall(function()
+	local mockAllowed = RunService:IsStudio() and Config.Data.allowMockInStudio
+	-- Place jamais publiée : GetDataStore lui-même échoue (pas seulement les requêtes).
+	local found, dataStore = pcall(function()
+		return DataStoreService:GetDataStore(Config.Data.storeName)
+	end)
+	if not found and not mockAllowed then
+		error(dataStore, 0)
+	end
+	if mockAllowed then
+		local ok = found and pcall(function()
 			dataStore:GetAsync("__access_probe")
 		end)
 		if not ok then

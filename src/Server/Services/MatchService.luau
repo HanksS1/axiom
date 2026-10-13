@@ -457,7 +457,12 @@ local function purge()
 			ReviveService.abandonFor(participant.player)
 		end
 	end
+	local purgedMatch = matchId
 	task.delay(Config.Match.deathScreenDelay + 1, function()
+		-- Une autre partie a pu commencer entre-temps : ne pas toucher à ses participants.
+		if not running or matchId ~= purgedMatch then
+			return
+		end
 		for _, participant in participants do
 			if not participant.finished then
 				setStatus(participant, "dead")
@@ -496,6 +501,9 @@ function MatchService.begin(config: StartConfig): boolean
 		return false
 	end
 	running = true
+	-- Le chargement de la carte cède la main : le chrono part d'ici (et non de 0, ce
+	-- qui déclencherait la Purge pendant le chargement). Il est remis à zéro au déploiement.
+	startTime = now()
 	matchId = Uid.new()
 	modeId = config.modeId
 	format = config.format

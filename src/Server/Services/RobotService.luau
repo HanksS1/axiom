@@ -207,6 +207,13 @@ local function face(robot: Robot, point: Vector3)
 	end
 end
 
+-- Distance au sol (les grands robots et les Mouches ont leur centre loin du sol :
+-- une distance 3D à un point posé au sol ne passerait jamais sous le seuil).
+local function flatDistance(a: Vector3, b: Vector3): number
+	local dx, dz = a.X - b.X, a.Z - b.Z
+	return math.sqrt(dx * dx + dz * dz)
+end
+
 -- Déplacement : direct si la voie est libre, sinon chemin calculé (limité dans le temps).
 local function moveTo(robot: Robot, point: Vector3)
 	if robot.stationary then
@@ -228,7 +235,9 @@ local function moveTo(robot: Robot, point: Vector3)
 	humanoid.AutoRotate = true
 	local time = now()
 	visionParams.FilterDescendantsInstances = { robotFolder() }
-	local clear = Workspace:Raycast(root.Position, point - root.Position, visionParams) == nil
+	-- Un obstacle touché tout près du but, c'est le but lui-même (le corps de la cible).
+	local hit = Workspace:Raycast(root.Position, point - root.Position, visionParams)
+	local clear = hit == nil or (hit.Position - point).Magnitude < 4
 	if clear then
 		robot.waypoints = {}
 		humanoid:MoveTo(point)
@@ -256,15 +265,13 @@ local function moveTo(robot: Robot, point: Vector3)
 		end)
 	end
 	local nextPoint = robot.waypoints[robot.waypointIndex]
-	if nextPoint then
-		if (nextPoint - root.Position).Magnitude < 3 then
-			robot.waypointIndex += 1
-			nextPoint = robot.waypoints[robot.waypointIndex]
-		end
-		if nextPoint then
-			humanoid:MoveTo(nextPoint)
-		end
+	if nextPoint and flatDistance(nextPoint, root.Position) < 3 then
+		robot.waypointIndex += 1
+		nextPoint = robot.waypoints[robot.waypointIndex]
 	end
+	-- Chemin pas encore calculé, épuisé ou introuvable : avancer droit vers le but
+	-- plutôt que de rester planté (le chemin est recalculé à intervalle régulier).
+	humanoid:MoveTo(nextPoint or point)
 end
 
 local function stop(robot: Robot)
@@ -502,7 +509,7 @@ local function update(robot: Robot, dt: number)
 	else
 		-- Patrouille (ou vague : rejoindre l'extraction et la tenir).
 		local destination = robot.wave or robot.destination
-		if destination == nil or (destination - fighter.root.Position).Magnitude < 4 then
+		if destination == nil or flatDistance(destination, fighter.root.Position) < 4 then
 			robot.destination = if robot.wave then robot.wave else patrolPoint(robot)
 			destination = robot.destination
 		end

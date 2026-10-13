@@ -630,18 +630,26 @@ function HubNpcs.spawn(parent: Instance, station: string, cframe: CFrame): Model
 	if def == nil then
 		return nil
 	end
-	local ok, model = pcall(function()
-		local description = Instance.new("HumanoidDescription")
-		description.HeadColor = def.skin
-		description.LeftArmColor = def.cloth
-		description.RightArmColor = def.cloth
-		description.TorsoColor = def.cloth
-		description.LeftLegColor = def.pants
-		description.RightLegColor = def.pants
-		return Players:CreateHumanoidModelFromDescription(description, Enum.HumanoidRigType.R15)
-	end)
+	-- La création d'avatar passe par le réseau : elle peut échouer ponctuellement.
+	local ok, model = false, nil :: any
+	for attempt = 1, 3 do
+		ok, model = pcall(function()
+			local description = Instance.new("HumanoidDescription")
+			description.HeadColor = def.skin
+			description.LeftArmColor = def.cloth
+			description.RightArmColor = def.cloth
+			description.TorsoColor = def.cloth
+			description.LeftLegColor = def.pants
+			description.RightLegColor = def.pants
+			return Players:CreateHumanoidModelFromDescription(description, Enum.HumanoidRigType.R15)
+		end)
+		if ok and model then
+			break
+		end
+		warn(`[HubNpcs] PNJ {def.id} non créé (essai {attempt}/3) : {model}`)
+		task.wait(2)
+	end
 	if not ok or model == nil then
-		warn(`[HubNpcs] PNJ {def.id} non créé : {model}`)
 		return nil
 	end
 	local npc = model :: Model
