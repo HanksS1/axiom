@@ -2,8 +2,9 @@
 --[[
 	ItemCard : carte d'objet (section 17.3, écran 4).
 
-	Nom, état (pastilles + nom : jamais la couleur seule), quantité, UP,
-	valeur, et une rangée de boutons d'action. Les actions marquées `hold`
+	Vignette 3D de l'objet, nom, état (pastilles + nom : jamais la couleur
+	seule), quantité, UP, valeur, et une rangée de boutons d'action. Sur un
+	panneau étroit (téléphone), la vignette s'efface pour laisser le texte. Les actions marquées `hold`
 	se déclenchent après un maintien (ramassage : 0,3 s), au doigt, à la
 	souris comme à la manette.
 ]]
@@ -18,7 +19,10 @@ local ItemRules = require(Shared.Items.ItemRules)
 local Types = require(Shared.Types)
 
 local Create = require(script.Parent.Create)
+local ItemIcon = require(script.Parent.ItemIcon)
 local Theme = require(script.Parent.Theme)
+
+local TweenService = game:GetService("TweenService")
 
 export type Action = {
 	label: string, -- texte déjà traduit
@@ -32,6 +36,10 @@ export type Translate = (key: string, params: { [string]: any }?) -> string
 local ItemCard = {}
 
 local CARD_HEIGHT = 64
+local ICON_SIZE = 52
+local TEXT_X = 12 -- sans vignette
+local ICON_TEXT_X = 70 -- avec vignette
+local NARROW = 380 -- en dessous, la carte n'affiche plus la vignette
 
 local function actionButton(action: Action, order: number, holdHint: string): TextButton
 	local button = Create("TextButton", {
@@ -188,7 +196,27 @@ function ItemCard.create(item: Types.ItemInstance, t: Translate, actions: { Acti
 		actionButton(action, index, holdHint).Parent = actionRow
 	end
 
-	return Create("Frame", {
+	local icon = ItemIcon.create(item.itemId, UDim2.fromOffset(ICON_SIZE, ICON_SIZE), condition)
+	icon.Position = UDim2.fromOffset(10, (CARD_HEIGHT - ICON_SIZE) / 2)
+	local nameLabel = Create("TextLabel", {
+		BackgroundTransparency = 1,
+		Font = Theme.fontText,
+		TextSize = 16,
+		TextColor3 = Theme.text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = ItemCard.title(item, t),
+	})
+	local detailLabel = Create("TextLabel", {
+		BackgroundTransparency = 1,
+		Font = Theme.fontNumbers,
+		TextSize = 13,
+		TextColor3 = Theme.textDim,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = table.concat(details, "  ·  "),
+	})
+	local card = Create("Frame", {
 		Name = item.uid,
 		LayoutOrder = order or 0,
 		Size = UDim2.new(1, 0, 0, CARD_HEIGHT),
@@ -202,31 +230,57 @@ function ItemCard.create(item: Types.ItemInstance, t: Translate, actions: { Acti
 			BorderSizePixel = 0,
 		}),
 		Stroke = Create("UIStroke", { Color = accent, Transparency = 0.6 }),
-		Name_ = Create("TextLabel", {
-			Position = UDim2.fromOffset(12, 6),
-			Size = UDim2.new(1, -200, 0, 20),
-			BackgroundTransparency = 1,
-			Font = Theme.fontText,
-			TextSize = 16,
-			TextColor3 = Theme.text,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-			Text = ItemCard.title(item, t),
-		}),
+		Icon = icon,
+		Name_ = nameLabel,
 		Pips = pips,
-		Details = Create("TextLabel", {
-			Position = UDim2.fromOffset(if condition then 90 else 12, 26),
-			Size = UDim2.new(1, -290, 0, 18),
-			BackgroundTransparency = 1,
-			Font = Theme.fontNumbers,
-			TextSize = 13,
-			TextColor3 = Theme.textDim,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-			Text = table.concat(details, "  ·  "),
-		}),
+		Details = detailLabel,
 		Actions = actionRow,
 	})
+
+	-- Mise en page : avec vignette, ou sans sur un panneau étroit.
+	local function layout()
+		local narrow = card.AbsoluteSize.X > 0 and card.AbsoluteSize.X < NARROW
+		local x = if narrow then TEXT_X else ICON_TEXT_X
+		icon.Visible = not narrow
+		nameLabel.Position = UDim2.fromOffset(x, 6)
+		nameLabel.Size = UDim2.new(1, -(x + 188), 0, 20)
+		pips.Position = UDim2.fromOffset(x, 30)
+		local detailX = if condition then x + 78 else x
+		detailLabel.Position = UDim2.fromOffset(detailX, 26)
+		detailLabel.Size = UDim2.new(1, -(detailX + 200), 0, 18)
+	end
+	layout()
+	card:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout)
+	card:SetAttribute("Accent", accent)
+	return card
+end
+
+--[[
+	Apparition d'une carte (ouverture d'une caisse) : les objets se révèlent un
+	par un, avec un éclair à la couleur de leur état. `order` : rang dans la liste.
+]]
+function ItemCard.reveal(card: Frame, order: number)
+	card.Visible = false
+	task.delay((order - 1) * 0.09, function()
+		if card.Parent == nil then
+			return
+		end
+		card.Visible = true
+		local accent = card:GetAttribute("Accent")
+		local flash = Create("Frame", {
+			Size = UDim2.fromScale(1, 1),
+			BackgroundColor3 = if typeof(accent) == "Color3" then accent else Theme.cyan,
+			BackgroundTransparency = 0.35,
+			BorderSizePixel = 0,
+			ZIndex = 3,
+			Parent = card,
+		})
+		local tween = TweenService:Create(flash, TweenInfo.new(0.3), { BackgroundTransparency = 1 })
+		tween.Completed:Once(function()
+			flash:Destroy()
+		end)
+		tween:Play()
+	end)
 end
 
 return ItemCard

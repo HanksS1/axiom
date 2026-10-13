@@ -24,6 +24,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local ItemModels = require(Shared.Visuals.ItemModels)
 local Guard = require(Shared.Util.Guard)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
 local ItemRules = require(Shared.Items.ItemRules)
@@ -108,6 +109,20 @@ local function objectPart(name: string, size: Vector3, cframe: CFrame, color: Co
 	return part
 end
 
+local ORANGE = Color3.fromRGB(255, 138, 0) -- accent des gadgets (ItemModels)
+local FRAME = Color3.fromRGB(24, 26, 31)
+
+-- Pièce d'habillage d'un gadget déployé (ni collision, ni tirs).
+local function detail(model: Model, name: string, size: Vector3, cframe: CFrame, color: Color3, material: EnumItem)
+	local part = objectPart(name, size, cframe, color, material)
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Parent = model
+	return part
+end
+
 local function deployWall(owner: Fighter, def: any, efficiency: number)
 	local root = owner.root
 	local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
@@ -124,16 +139,52 @@ local function deployWall(owner: Fighter, def: any, efficiency: number)
 		Enum.Material.DiamondPlate
 	)
 	wall.Parent = model
-	local strip = objectPart(
-		"Strip",
-		Vector3.new(width, 0.25, 0.85),
-		cframe * CFrame.new(0, height / 2 - 0.4, 0),
-		Color3.fromRGB(0, 229, 255),
-		Enum.Material.Neon
+	-- Montants, pieds et bandeaux orange : le même langage que le mur replié porté à la cuisse.
+	for _, side in { -1, 1 } do
+		local x = side * (width / 2 + 0.2)
+		detail(
+			model,
+			"Post",
+			Vector3.new(0.5, height + 0.3, 1.1),
+			cframe * CFrame.new(x, 0, 0),
+			FRAME,
+			Enum.Material.Metal
+		)
+		detail(
+			model,
+			"Foot",
+			Vector3.new(0.9, 0.3, 2.2),
+			cframe * CFrame.new(x, -height / 2 + 0.15, 0),
+			FRAME,
+			Enum.Material.Metal
+		)
+		detail(
+			model,
+			"Emitter",
+			Vector3.new(0.3, 0.3, 0.3),
+			cframe * CFrame.new(x, height / 2 + 0.3, 0),
+			ORANGE,
+			Enum.Material.Neon
+		)
+	end
+	for index, level in { 0.4, 0.5, 0.6 } do
+		detail(
+			model,
+			"Strip" .. index,
+			Vector3.new(width, 0.18, 0.86),
+			cframe * CFrame.new(0, height * (level - 0.5) + (index - 2) * height * 0.3, 0),
+			ORANGE,
+			Enum.Material.Neon
+		)
+	end
+	detail(
+		model,
+		"TopBar",
+		Vector3.new(width + 0.9, 0.3, 0.5),
+		cframe * CFrame.new(0, height / 2 + 0.05, 0),
+		FRAME,
+		Enum.Material.Metal
 	)
-	strip.CanCollide = false
-	strip.CanQuery = false
-	strip.Parent = model
 	model.PrimaryPart = wall
 	model.Parent = gadgetFolder()
 	local fighter = Fighter.newObject(model, wall, stat(def, "health", efficiency), Fighter.teamOf(owner))
@@ -164,8 +215,22 @@ local function deploySmoke(position: Vector3, def: any, efficiency: number)
 	cloud.Parent = gadgetFolder()
 	-- Lu par l'IA des robots (P4) : la fumée bloque leur vision.
 	CollectionService:AddTag(cloud, "Smoke")
+
+	-- Le fumigène lui-même, posé au sol au cœur du nuage.
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { gadgetFolder() }
+	params.RespectCanCollide = true
+	local hit = Workspace:Raycast(position + Vector3.new(0, 1, 0), Vector3.new(0, -14, 0), params)
+	local canister = Instance.new("Model")
+	canister.Name = "SmokeCanister"
+	if hit then
+		ItemModels.place("smoke_deployer", canister, CFrame.new(hit.Position + Vector3.new(0, 0.55, 0)))
+	end
+	canister.Parent = gadgetFolder()
 	task.delay(stat(def, "duration", efficiency), function()
 		cloud:Destroy()
+		canister:Destroy()
 	end)
 end
 
@@ -181,17 +246,10 @@ local function deployDrone(owner: Fighter, player: Player, def: any, efficiency:
 		Enum.Material.Metal
 	)
 	body.CanCollide = false
+	-- La pièce touchable reste, invisible : l'apparence est celle du drone des caisses, en grand.
+	body.Transparency = 1
 	body.Parent = model
-	local eye = objectPart(
-		"Eye",
-		Vector3.new(0.5, 0.5, 0.5),
-		CFrame.new(position - Vector3.new(0, 0.4, 0)),
-		Color3.fromRGB(0, 229, 255),
-		Enum.Material.Neon
-	)
-	eye.CanCollide = false
-	eye.CanQuery = false
-	eye.Parent = model
+	ItemModels.place("recon_drone", model, CFrame.new(position), { scale = 2 })
 	model.PrimaryPart = body
 	model.Parent = gadgetFolder()
 	local drone = Fighter.newObject(model, body, G.droneHealth, Fighter.teamOf(owner))

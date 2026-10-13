@@ -15,6 +15,7 @@
 	validée (distance, cadence, place dans le sac).
 ]]
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -26,6 +27,7 @@ local Guard = require(Shared.Util.Guard)
 local InventoryLogic = require(Shared.Items.InventoryLogic)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
 local ItemRules = require(Shared.Items.ItemRules)
+local ItemModels = require(Shared.Visuals.ItemModels)
 local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
 
@@ -189,6 +191,226 @@ local function destroyContainer(container: Container)
 	container.model:Destroy()
 end
 
+-- Pièce d'habillage d'un conteneur (ni collision, ni tirs).
+local function detail(
+	model: Model,
+	name: string,
+	size: Vector3,
+	cframe: CFrame,
+	color: Color3,
+	material: EnumItem
+): Part
+	local part = newPart(name, size, cframe, color, material)
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Parent = model
+	return part
+end
+
+local FRAME = Color3.fromRGB(24, 26, 31)
+local STEEL = Color3.fromRGB(112, 118, 128)
+
+--[[
+	Habillage d'une caisse : couvercle articulé (il se lève à l'ouverture), montants,
+	poignées, loquet, et un emblème propre à chaque type sur la face avant.
+]]
+local function dressCrate(
+	model: Model,
+	body: BasePart,
+	style: { color: Color3, accent: Color3, size: Vector3 },
+	crateType: string
+)
+	local sx, sy, sz = style.size.X, style.size.Y, style.size.Z
+	local at = body.CFrame
+	local front = -sz / 2 - 0.04
+	local lidColor = style.color:Lerp(Color3.new(), 0.3)
+
+	if crateType == "axiom_locker" then
+		-- Casier d'AXIOM : porte pleine (charnière à gauche), fente rouge qui grésille.
+		local door = detail(
+			model,
+			"Lid",
+			Vector3.new(sx - 0.3, sy - 0.5, 0.14),
+			at * CFrame.new(0, 0, front - 0.04),
+			lidColor,
+			Enum.Material.DiamondPlate
+		)
+		door:SetAttribute("Hinge", "side")
+		local eye = detail(
+			model,
+			"Eye",
+			Vector3.new(sx * 0.5, 0.14, 0.08),
+			at * CFrame.new(0, sy * 0.28, front - 0.14),
+			style.accent,
+			Enum.Material.Neon
+		)
+		CollectionService:AddTag(eye, "Flicker")
+		detail(
+			model,
+			"Vent",
+			Vector3.new(sx * 0.7, 0.2, sz * 0.7),
+			at * CFrame.new(0, sy / 2 + 0.1, 0),
+			FRAME,
+			Enum.Material.Metal
+		)
+		for _, side in { -1, 1 } do
+			detail(
+				model,
+				"Rail",
+				Vector3.new(0.14, sy, 0.3),
+				at * CFrame.new(side * (sx / 2 + 0.07), 0, 0),
+				FRAME,
+				Enum.Material.Metal
+			)
+		end
+		return
+	end
+
+	local lid = detail(
+		model,
+		"Lid",
+		Vector3.new(sx + 0.16, 0.24, sz + 0.16),
+		at * CFrame.new(0, sy / 2 + 0.12, 0),
+		lidColor,
+		Enum.Material.DiamondPlate
+	)
+	lid:SetAttribute("Hinge", "top")
+	for _, cornerX in { -1, 1 } do
+		for _, cornerZ in { -1, 1 } do
+			detail(
+				model,
+				"Corner",
+				Vector3.new(0.22, sy + 0.04, 0.22),
+				at * CFrame.new(cornerX * sx / 2, 0, cornerZ * sz / 2),
+				FRAME,
+				Enum.Material.Metal
+			)
+		end
+		detail(
+			model,
+			"Handle",
+			Vector3.new(0.12, 0.3, sz * 0.4),
+			at * CFrame.new(cornerX * (sx / 2 + 0.08), sy * 0.1, 0),
+			FRAME,
+			Enum.Material.Metal
+		)
+	end
+	detail(
+		model,
+		"Latch",
+		Vector3.new(0.5, 0.36, 0.12),
+		at * CFrame.new(0, sy * 0.36, front),
+		STEEL,
+		Enum.Material.Metal
+	)
+
+	-- Emblème : on reconnaît le type de caisse de loin.
+	local function mark(name: string, width: number, height: number, x: number, y: number, rotation: number?): Part
+		return detail(
+			model,
+			name,
+			Vector3.new(width, height, 0.06),
+			at * CFrame.new(x, y, front) * CFrame.Angles(0, 0, rotation or 0),
+			style.accent,
+			Enum.Material.Neon
+		)
+	end
+	local low = -sy * 0.12
+	if crateType == "medical" then
+		mark("CrossH", 0.9, 0.26, 0, low)
+		mark("CrossV", 0.26, 0.9, 0, low)
+	elseif crateType == "military" then
+		mark("ChevronL", 0.16, 0.9, -0.34, low, math.rad(-32))
+		mark("ChevronR", 0.16, 0.9, 0.34, low, math.rad(32))
+	elseif crateType == "tech" then
+		CollectionService:AddTag(mark("Screen", 1.3, 0.6, 0, low), "Flicker")
+	elseif crateType == "parts_bin" then
+		for index = -1, 1 do
+			detail(
+				model,
+				"Slat",
+				Vector3.new(sx * 0.7, 0.14, 0.08),
+				at * CFrame.new(0, low + index * 0.34, front),
+				FRAME,
+				Enum.Material.Metal
+			)
+		end
+		mark("Tag", 0.4, 0.2, sx * 0.3, sy * 0.22)
+	else
+		mark("CellA", 0.3, 0.5, -0.3, low)
+		mark("CellB", 0.3, 0.5, 0.3, low)
+	end
+end
+
+-- Ouvre le couvercle (ou la porte) d'une caisse.
+local function openLid(model: Model)
+	local lid = model:FindFirstChild("Lid")
+	local body = model.PrimaryPart
+	if lid == nil or not lid:IsA("BasePart") or body == nil then
+		return
+	end
+	local half = body.Size / 2
+	if lid:GetAttribute("Hinge") == "side" then
+		-- Porte : pivote vers l'extérieur autour de son bord gauche.
+		local hinge = body.CFrame * CFrame.new(-lid.Size.X / 2, 0, -half.Z - 0.08)
+		lid.CFrame = hinge * CFrame.Angles(0, math.rad(75), 0) * CFrame.new(lid.Size.X / 2, 0, 0)
+	else
+		-- Couvercle : se lève autour de son bord arrière.
+		local hinge = body.CFrame * CFrame.new(0, half.Y, half.Z)
+		lid.CFrame = hinge * CFrame.Angles(math.rad(62), 0, 0) * CFrame.new(0, lid.Size.Y / 2, -lid.Size.Z / 2)
+	end
+end
+
+-- Meilleur objet d'un tas : c'est lui qu'on montre posé au sol.
+local function bestItem(items: { ItemInstance }): ItemInstance?
+	local best: ItemInstance? = nil
+	local bestValue = -1
+	for _, item in items do
+		local value = ItemRules.value(item) + (item.condition or 0)
+		if value > bestValue then
+			best, bestValue = item, value
+		end
+	end
+	return best
+end
+
+-- Butin au sol : le meilleur objet du tas est posé là, visible (même modèle qu'en main).
+local function showGroundItem(container: Container)
+	local item = bestItem(container.items)
+	local shown = container.model:GetAttribute("ShownItem")
+	if item == nil or shown == item.itemId then
+		return
+	end
+	local existing = container.model:FindFirstChild("Display")
+	if existing then
+		existing:Destroy()
+	end
+	local blueprint = ItemModels.blueprint(item.itemId)
+	local body = container.model.PrimaryPart
+	if blueprint == nil or body == nil then
+		return
+	end
+	local display = Instance.new("Model")
+	display.Name = "Display"
+	local center, extent = ItemModels.bounds(blueprint)
+	local ground = body.Position - Vector3.new(0, body.Size.Y / 2, 0)
+	local info = ItemCatalog.get(item.itemId)
+	local turn = CFrame.Angles(0, random:NextNumber(0, math.pi * 2), 0)
+	local cframe
+	if info and (info.category == "ranged" or info.category == "melee") then
+		-- Une arme repose sur le flanc (son axe X devient la verticale).
+		cframe = CFrame.new(ground + Vector3.new(0, extent.X / 2 - center.X + 0.06, 0))
+			* turn
+			* CFrame.Angles(0, 0, math.rad(90))
+	else
+		cframe = CFrame.new(ground + Vector3.new(0, extent.Y / 2 - center.Y + 0.06, 0)) * turn
+	end
+	ItemModels.place(item.itemId, display, cframe)
+	display.Parent = container.model
+	container.model:SetAttribute("ShownItem", item.itemId)
+end
+
 -- Couleur d'un tas d'objets : l'état le plus élevé qu'il contient.
 local function bestConditionColor(items: { ItemInstance }): Color3
 	local best = 0
@@ -204,6 +426,9 @@ local function refreshVisual(container: Container)
 		local glow = container.model:FindFirstChild("Glow")
 		if glow and glow:IsA("BasePart") then
 			glow.Color = bestConditionColor(container.items)
+		end
+		if container.kind == "ground" then
+			showGroundItem(container)
 		end
 	end
 end
@@ -279,10 +504,11 @@ local function openCrate(container: Container)
 	container.prompt:SetAttribute("ActionKey", "prompt.search")
 	container.prompt.ActionText = "prompt.search"
 	container.model:SetAttribute("Opened", true)
-	local lid = container.model:FindFirstChild("Accent")
-	if lid and lid:IsA("BasePart") then
-		lid.Transparency = 0.7
+	local light = container.model:FindFirstChild("Accent")
+	if light and light:IsA("BasePart") then
+		light.Transparency = 0.7
 	end
+	openLid(container.model)
 	LootService.CrateOpened:Fire(container)
 end
 
@@ -426,19 +652,25 @@ function LootService.dropToGround(position: Vector3, items: { ItemInstance }): C
 		Enum.Material.Metal
 	)
 	body.CanCollide = false
+	-- Socle invisible (il porte l'invite) : c'est l'objet lui-même qu'on voit, sur un halo
+	-- à la couleur de son état.
+	body.Transparency = 1
 	body.Parent = model
 	local glow = newPart(
 		"Glow",
-		Vector3.new(1.3, 0.1, 1.3),
-		CFrame.new(ground + Vector3.new(0, 0.05, 0)),
+		Vector3.new(0.1, 2.2, 2.2),
+		CFrame.new(ground + Vector3.new(0, 0.05, 0)) * CFrame.Angles(0, 0, math.rad(90)),
 		bestConditionColor(items),
 		Enum.Material.Neon
 	)
+	glow.Shape = Enum.PartType.Cylinder
+	glow.Transparency = 0.35
 	glow.CanQuery = false
 	glow.Parent = model
 	model.PrimaryPart = body
 	local prompt = makePrompt(body, "prompt.pickup", "loot.ground", Pickup.holdTime)
 	local container = newContainer("ground", model, prompt, items)
+	showGroundItem(container)
 	register(container)
 	return container
 end
@@ -457,11 +689,33 @@ function LootService.spawnDeathBag(position: Vector3, items: { ItemInstance }, o
 		Color3.fromRGB(30, 30, 36),
 		Enum.Material.Fabric
 	)
+	-- Le sac de dépouille est un grand sac couché (même modèle que le sac des caisses) ;
+	-- la pièce d'origine reste, invisible, pour la collision et l'invite.
+	body.Transparency = 1
 	body.Parent = model
+	ItemModels.place(
+		"backpack_large",
+		model,
+		body.CFrame * CFrame.new(0, -0.25, 0) * CFrame.Angles(math.rad(90), 0, 0),
+		{
+			filter = function(spec)
+				return spec.name ~= "Body"
+			end,
+		}
+	)
+	local sack = newPart(
+		"Sack",
+		Vector3.new(1.8, 0.9, 2.0),
+		body.CFrame * CFrame.new(0, -0.25, 0),
+		Color3.fromRGB(30, 30, 36),
+		Enum.Material.Fabric
+	)
+	sack.CanQuery = false
+	sack.Parent = model
 	local glow = newPart(
 		"Glow",
-		Vector3.new(2.1, 0.2, 1.7),
-		body.CFrame * CFrame.new(0, 0.6, 0),
+		Vector3.new(2.1, 0.12, 2.3),
+		body.CFrame * CFrame.new(0, -0.68, 0),
 		bestConditionColor(items),
 		Enum.Material.Neon
 	)
@@ -502,6 +756,7 @@ function LootService.spawnCrate(cframe: CFrame, crateType: string): Container
 	accent.CanQuery = false
 	accent.Parent = model
 	model.PrimaryPart = body
+	dressCrate(model, body, style, crateType)
 	local prompt = makePrompt(body, "prompt.openCrate", "crate." .. crateType, def.openTime)
 	local container = newContainer("crate", model, prompt, {})
 	container.crateType = crateType

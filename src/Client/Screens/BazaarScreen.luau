@@ -26,6 +26,7 @@ local Shop = require(Shared.Monetization.Shop)
 local Types = require(Shared.Types)
 
 local Create = require(script.Parent.Parent.UI.Create)
+local ItemIcon = require(script.Parent.Parent.UI.ItemIcon)
 local Panel = require(script.Parent.Parent.UI.Panel)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -64,53 +65,12 @@ function BazaarScreen.rarityColor(rarity: string): Color3
 	return (M.rarityColors :: any)[rarity] or Theme.textDim
 end
 
--- Aperçu 3D : forme de l'arme (ou de la pièce d'armure) aux couleurs du skin, qui tourne.
-local spinning: { [Camera]: number } = {}
-local function preview(def: any, size: UDim2): ViewportFrame
-	local viewport = Create("ViewportFrame", {
-		Size = size,
-		BackgroundColor3 = Theme.background,
-		BackgroundTransparency = 0.2,
-		Ambient = Color3.fromRGB(160, 165, 180),
-		LightColor = def.accent,
-	})
-	local shape = Config.Visuals.weapons[def.target]
-	local partSize = if shape
-		then shape.size * (2.2 / math.max(shape.size.X, shape.size.Y, shape.size.Z))
-		else Vector3.new(1.4, 1.2, 1)
-	local body = Instance.new("Part")
-	body.Size = partSize
-	body.Color = def.color
-	pcall(function()
-		body.Material = (Enum.Material :: any)[def.material]
-	end)
-	body.CFrame = CFrame.new()
-	body.Parent = viewport
-	local accent = Instance.new("Part")
-	accent.Size = Vector3.new(partSize.X + 0.02, partSize.Y * 0.2, partSize.Z * 0.85)
-	accent.Color = def.accent
-	accent.Material = Enum.Material.Neon
-	accent.CFrame = CFrame.new(0, partSize.Y * 0.25, 0)
-	accent.Parent = viewport
-	local camera = Instance.new("Camera")
-	camera.FieldOfView = 40
-	camera.Parent = viewport
-	viewport.CurrentCamera = camera
-	spinning[camera] = math.random() * math.pi * 2
-	camera.Destroying:Connect(function()
-		spinning[camera] = nil
-	end)
-	return viewport
+-- Aperçu 3D : le vrai modèle de l'arme (ou de la pièce d'armure) aux couleurs du skin, qui tourne.
+local PREVIEW_ITEM: { [string]: string } = { backpack = "backpack_medium", helmet = "helmet", vest = "vest" }
+local function preview(def: any, size: UDim2, spin: boolean): Frame
+	local itemId = if def.category == "weapon" then def.target else PREVIEW_ITEM[def.category] or def.target
+	return ItemIcon.create(itemId, size, nil, def, spin)
 end
-
-RunService.RenderStepped:Connect(function(dt: number)
-	for camera, angle in spinning do
-		local nextAngle = angle + dt * 0.8
-		spinning[camera] = nextAngle
-		local position = Vector3.new(math.sin(nextAngle) * 5, 1.6, math.cos(nextAngle) * 5)
-		camera.CFrame = CFrame.lookAt(position, Vector3.zero)
-	end
-end)
 
 local function formatPercent(hundredths: number): string
 	return string.format("%d,%02d %%", math.floor(hundredths / 100), hundredths % 100)
@@ -190,7 +150,7 @@ function BazaarScreen.create(parent: Instance, t: Translate, hooks: Hooks): Scre
 			local owned = view.cosmeticsOwned[cosmeticId] == true
 			local price = Shop.directPrice(cosmeticId) or 0
 			local frame = card(120, def.rarity)
-			local viewport = preview(def, UDim2.fromOffset(108, 108))
+			local viewport = preview(def, UDim2.fromOffset(108, 108), true)
 			viewport.Position = UDim2.fromOffset(6, 6)
 			viewport.Parent = frame
 			text(frame, BazaarScreen.cosmeticName(t, cosmeticId), UDim2.fromOffset(124, 8), UDim2.new(1, -310, 0, 44), {
@@ -378,7 +338,7 @@ function BazaarScreen.create(parent: Instance, t: Translate, hooks: Hooks): Scre
 			local slot = Shop.slotOf(cosmeticId) :: string
 			local equipped = view.cosmeticsEquipped[slot] == cosmeticId
 			local frame = card(70, def.rarity)
-			local viewport = preview(def, UDim2.fromOffset(60, 60))
+			local viewport = preview(def, UDim2.fromOffset(60, 60), false)
 			viewport.Position = UDim2.fromOffset(5, 5)
 			viewport.Parent = frame
 			text(frame, BazaarScreen.cosmeticName(t, cosmeticId), UDim2.fromOffset(74, 6), UDim2.new(1, -260, 0, 30), {
