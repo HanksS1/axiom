@@ -52,6 +52,10 @@ local list: ScrollingFrame
 local footer: TextLabel
 local takeAllButton: TextButton
 local takingAll = 0 -- jeton de la prise en série en cours (0 = aucune)
+-- Caisses déjà vues : leur contenu ne se « révèle » qu'à la première ouverture.
+local seen: { [string]: boolean } = {}
+local seenCount = 0
+local revealNext = false
 local takeAllToken = 0
 
 local function localInventory(): InventoryLogic.Inventory
@@ -203,8 +207,13 @@ local function render()
 				end,
 			})
 		end
-		ItemCard.create(item, t, actions, index).Parent = list
+		local card = ItemCard.create(item, t, actions, index)
+		card.Parent = list
+		if revealNext then
+			ItemCard.reveal(card, index)
+		end
 	end
+	revealNext = false
 	if #view.items == 0 then
 		Create("TextLabel", {
 			Size = UDim2.new(1, 0, 0, 30),
@@ -250,6 +259,16 @@ local function onSync(payload: ContainerView)
 		return
 	end
 	local wasOpen = current ~= nil
+	if not seen[payload.id] then
+		-- Première ouverture : les objets obtenus apparaissent un par un.
+		if seenCount > 400 then
+			table.clear(seen)
+			seenCount = 0
+		end
+		seen[payload.id] = true
+		seenCount += 1
+		revealNext = true
+	end
 	current = payload
 	title.Text = titleFor(payload)
 	-- Rappel du geste, avec la touche de fermeture du périphérique utilisé.

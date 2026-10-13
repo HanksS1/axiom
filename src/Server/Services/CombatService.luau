@@ -165,6 +165,13 @@ local function publishPublic(fighter: Fighter)
 	character:SetAttribute("HelmetId", if fighter.helmet then fighter.helmet.itemId else nil)
 	character:SetAttribute("VestId", if fighter.vest then fighter.vest.itemId else nil)
 	character:SetAttribute("BackpackId", if backpack then backpack.itemId else nil)
+	-- Gadgets portés et consommable en cours d'utilisation (visibles sur le personnage).
+	local equipped = if fighter.bag then fighter.bag.equipped else nil
+	local gadget1 = if equipped then equipped.gadget1 else nil
+	local gadget2 = if equipped then equipped.gadget2 else nil
+	character:SetAttribute("Gadget1Id", if gadget1 then gadget1.itemId else nil)
+	character:SetAttribute("Gadget2Id", if gadget2 then gadget2.itemId else nil)
+	character:SetAttribute("UsingId", fighter.usingItemId)
 	if fighter.humanoid.Parent ~= nil then
 		fighter.humanoid.Health = math.max(if fighter.dead then 0 else 0.01, fighter.health)
 	end

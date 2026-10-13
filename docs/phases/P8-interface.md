@@ -44,6 +44,40 @@ Panneau de butin (caisse, sac de dépouille) :
 - un simple clic sur un bouton à maintenir affiche « Maintenir » sur le bouton ;
 - bouton « Tout prendre » : prend les objets un par un, au même rythme qu'à la main.
 
+## Apparence des objets (ajoutée après la P10)
+
+Chaque objet a maintenant un modèle, décrit une seule fois dans `Shared/Visuals/ItemModels.luau`
+et utilisé partout : arme tenue en main, vignette des cartes d'objets (caisse, sac, coffre,
+Marchand, Armurier, tri), aperçus du Holo-Bazar. Un objet a la même silhouette dans la caisse
+et en main.
+
+- **Armes redessinées** : 15 silhouettes distinctes (8 à 14 pièces) au lieu d'un bloc avec une bande.
+- **Un langage commun** : corps en métal sombre ; pièces secondaires selon l'origine
+  (« scrap » rouillé et rafistolé, « military » en acier propre, « axiom » en acier noir strié) ;
+  un seul accent néon par objet.
+- **L'accent d'une arme à distance est la couleur de sa cellule** (jaune légère, cyan standard,
+  blanche précision, rouge lourde), et le tracé du tir a la même couleur.
+- Consommables : la couleur dit l'effet (vert soin, cyan bouclier, orange vitesse). Gadgets en orange.
+- **Cartes d'objets** : vignette 3D à gauche, liseré à la couleur de l'état (les pastilles et le nom
+  de l'état restent : jamais la couleur seule). Image fixe, rendue une seule fois. Sur un panneau
+  étroit, la vignette s'efface pour laisser le texte.
+- **Ouverture d'une caisse** : les objets obtenus apparaissent un par un, avec un éclair à la
+  couleur de leur état (première ouverture seulement).
+- Prise en main corrigée : la poignée est dans la main, les armes de mêlée sont tenues par le manche.
+
+Le même modèle habille aussi l'objet **dans le monde** :
+
+| Où | Ce qu'on voit |
+|---|---|
+| Sur le personnage | casque, gilet (émetteur de bouclier cyan sur la poitrine) et sac à l'échelle du corps, aux couleurs du skin ; gadgets équipés (bottes aux pieds, grappin sur l'avant-bras, drone et mur aux cuisses, fumigène à la ceinture) ; consommable en main pendant son utilisation |
+| Gadgets déployés | drone de reconnaissance (le modèle des caisses, en grand), mur avec montants et bandeaux orange, fumigène posé au sol au cœur du nuage |
+| Butin au sol | le meilleur objet du tas, posé là, sur un halo à la couleur de son état |
+| Sac de dépouille | un grand sac couché, liseré à la couleur du meilleur état |
+| Caisses | couvercle articulé qui se lève à l'ouverture (porte pour le casier d'AXIOM), montants, poignées, et un emblème par type : croix rouge (médicale), chevrons (militaire), écran (technologique), lattes (pièces), cellules (ravitaillement) |
+
+Les gadgets équipés sont publiés par deux attributs du personnage (`Gadget1Id`, `Gadget2Id`), le
+consommable en cours par `UsingId`. Toutes ces pièces sont décoratives : ni collision, ni blocage des tirs.
+
 ## Comment tester dans Studio
 
 1. **Chargement** : logo néon qui grésille, messages d'AXIOM et astuces, jauge d'énergie.

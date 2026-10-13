@@ -25,6 +25,7 @@ local InventoryLogic = require(Shared.Items.InventoryLogic)
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local CombatService = require(script.Parent.CombatService)
+local ItemModels = require(Shared.Visuals.ItemModels)
 local DataService = require(script.Parent.DataService)
 local InventoryService = require(script.Parent.InventoryService)
 
@@ -37,7 +38,6 @@ local CharacterService = {}
 
 local rootJointC0: { [Model]: CFrame } = {}
 local skinOf: (character: Model, attribute: string) -> any?
-local materialOf: (name: string) -> EnumItem
 
 -- Rend une pièce « décorative » : ni collision, ni rayons, ni masse.
 local function makeDecorative(part: BasePart)
@@ -53,140 +53,239 @@ skinOf = function(character: Model, attribute: string): any?
 	return if type(id) == "string" then Config.Cosmetics.byId[id] else nil
 end
 
-materialOf = function(name: string): EnumItem
-	local ok, material = pcall(function()
-		return (Enum.Material :: any)[name]
-	end)
-	return if ok and material then material else Enum.Material.Metal
+-- Première pièce du personnage parmi `names` (R15, puis R6).
+local function bodyPart(character: Model, names: { string }): BasePart?
+	for _, name in names do
+		local part = character:FindFirstChild(name)
+		if part and part:IsA("BasePart") then
+			return part
+		end
+	end
+	return nil
 end
 
--- Arme tenue en main (greybox), mise à jour quand l'arme active change.
-local function updateWeaponVisual(character: Model)
-	local existing = character:FindFirstChild("WeaponVisual")
+-- Remplace le visuel `name` du personnage par les pièces posées par `fill` (aucune : rien).
+local function setVisual(character: Model, name: string, fill: ((model: Model) -> ())?)
+	local existing = character:FindFirstChild(name)
 	if existing then
 		existing:Destroy()
 	end
-	local weaponId = character:GetAttribute("WeaponId")
-	local hand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
-	if type(weaponId) ~= "string" or hand == nil or not hand:IsA("BasePart") then
-		return
-	end
-	local shape = Visuals.weapons[weaponId]
-	if shape == nil then
+	if fill == nil then
 		return
 	end
 	local model = Instance.new("Model")
-	model.Name = "WeaponVisual"
-	local skin = skinOf(character, "WeaponSkin")
-
-	local body = Instance.new("Part")
-	body.Name = "Body"
-	body.Size = shape.size
-	body.Color = if skin then skin.color else Visuals.bodyColor
-	body.Material = if skin then materialOf(skin.material) else Enum.Material.Metal
-	makeDecorative(body)
-	body.CFrame = hand.CFrame * shape.gripOffset
-	body.Parent = model
-
-	local accent = Instance.new("Part")
-	accent.Name = "Accent"
-	accent.Size = Vector3.new(shape.size.X + 0.02, shape.size.Y * 0.2, shape.size.Z * 0.8)
-	accent.Color = if skin then skin.accent else shape.accent
-	accent.Material = Enum.Material.Neon
-	makeDecorative(accent)
-	accent.CFrame = body.CFrame * CFrame.new(0, shape.size.Y * 0.25, 0)
-	accent.Parent = model
-
-	for _, part in { body, accent } do
-		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = hand
-		weld.Part1 = part
-		weld.Parent = part
+	model.Name = name
+	fill(model)
+	local body = model:FindFirstChild("Body")
+	if body and body:IsA("BasePart") then
+		model.PrimaryPart = body
 	end
-	model.PrimaryPart = body
-	model.Parent = character
+	if #model:GetChildren() > 0 then
+		model.Parent = character
+	else
+		model:Destroy()
+	end
 end
 
--- Casque, gilet et sac portés (greybox) : couleur par défaut ou skin équipé.
-local ARMOR_DEFAULT = Color3.fromRGB(58, 62, 70)
-local ARMOR_PIECES = {
-	{ attribute = "HelmetId", skin = "HelmetSkin", name = "HelmetVisual", parts = { "Head" } },
-	{ attribute = "VestId", skin = "VestSkin", name = "VestVisual", parts = { "UpperTorso", "Torso" } },
-	{ attribute = "BackpackId", skin = "BackpackSkin", name = "BackpackVisual", parts = { "UpperTorso", "Torso" } },
-}
-local BACKPACK_SIZES: { [string]: Vector3 } = {
-	backpack_small = Vector3.new(1.2, 1.3, 0.6),
-	backpack_medium = Vector3.new(1.5, 1.6, 0.75),
-	backpack_large = Vector3.new(1.8, 2.0, 0.9),
+-- Arme tenue en main (même modèle que les icônes : Shared/Visuals/ItemModels),
+-- mise à jour quand l'arme active ou son skin change.
+local function updateWeaponVisual(character: Model)
+	local weaponId = character:GetAttribute("WeaponId")
+	local hand = bodyPart(character, { "RightHand", "Right Arm" })
+	local shape = if type(weaponId) == "string" then Visuals.weapons[weaponId] else nil
+	if hand == nil or shape == nil then
+		setVisual(character, "WeaponVisual", nil)
+		return
+	end
+	setVisual(character, "WeaponVisual", function(model)
+		-- Le cœur de l'arme (« Body ») se place par rapport à la main ; tout le reste suit.
+		ItemModels.place(weaponId :: string, model, hand.CFrame * shape.gripOffset, {
+			skin = skinOf(character, "WeaponSkin"),
+			weldTo = hand,
+		})
+	end)
+end
+
+--[[
+	Casque, gilet et sac portés : les mêmes modèles que dans les caisses, mis à
+	l'échelle du personnage, aux couleurs du skin équipé.
+]]
+local function updateArmorVisual(character: Model)
+	local head = bodyPart(character, { "Head" })
+	local torso = bodyPart(character, { "UpperTorso", "Torso" })
+
+	local helmetId = character:GetAttribute("HelmetId")
+	setVisual(
+		character,
+		"HelmetVisual",
+		if type(helmetId) == "string" and head
+			then function(model)
+				local base = head :: BasePart
+				-- Le casque coiffe la tête : échelle sur sa plus petite dimension.
+				local scale = math.min(base.Size.X, base.Size.Y, base.Size.Z) * 1.12 / 1.25
+				ItemModels.place(helmetId, model, base.CFrame * CFrame.new(0, base.Size.Y * 0.12, 0), {
+					skin = skinOf(character, "HelmetSkin"),
+					scale = scale,
+					weldTo = base,
+				})
+			end
+			else nil
+	)
+
+	local vestId = character:GetAttribute("VestId")
+	local hasVest = type(vestId) == "string" and torso ~= nil
+	setVisual(
+		character,
+		"VestVisual",
+		if hasVest
+			then function(model)
+				local base = torso :: BasePart
+				ItemModels.place(vestId :: string, model, base.CFrame * CFrame.new(0, -base.Size.Y * 0.04, 0), {
+					skin = skinOf(character, "VestSkin"),
+					scale = base.Size.X / 2 * 1.02,
+					weldTo = base,
+				})
+			end
+			else nil
+	)
+
+	local backpackId = character:GetAttribute("BackpackId")
+	setVisual(
+		character,
+		"BackpackVisual",
+		if type(backpackId) == "string" and torso
+			then function(model)
+				local base = torso :: BasePart
+				local scale = base.Size.X / 2
+				local blueprint = ItemModels.blueprint(backpackId)
+				local depth = if blueprint then blueprint.parts[1].size.Z * scale else 0.75
+				-- Dans le dos (par-dessus le gilet), bretelles contre le corps.
+				local behind = base.Size.Z / 2 + depth / 2 + (if hasVest then 0.16 else 0.04)
+				ItemModels.place(
+					backpackId,
+					model,
+					base.CFrame * CFrame.new(0, 0, behind) * CFrame.Angles(0, math.pi, 0),
+					{
+						skin = skinOf(character, "BackpackSkin"),
+						scale = scale,
+						weldTo = base,
+					}
+				)
+			end
+			else nil
+	)
+end
+
+-- Emplacement de chaque gadget sur le corps : pièce porteuse, position, échelle.
+local GADGET_MOUNTS: { [string]: { parts: { string }, scale: number, offset: (base: BasePart) -> CFrame } } = {
+	-- Lanceur le long de l'avant-bras gauche, griffe vers la main.
+	grappling_hook = {
+		parts = { "LeftLowerArm", "Left Arm" },
+		scale = 0.7,
+		offset = function(base)
+			return CFrame.new(-(base.Size.X / 2 + 0.14), 0, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+		end,
+	},
+	-- Drone replié sur la cuisse droite.
+	recon_drone = {
+		parts = { "RightUpperLeg", "Right Leg" },
+		scale = 0.5,
+		offset = function(base)
+			return CFrame.new(base.Size.X / 2 + 0.14, 0, 0) * CFrame.Angles(0, 0, math.rad(-90))
+		end,
+	},
+	-- Panneaux du mur repliés sur la cuisse gauche.
+	deployable_wall = {
+		parts = { "LeftUpperLeg", "Left Leg" },
+		scale = 0.5,
+		offset = function(base)
+			return CFrame.new(-(base.Size.X / 2 + 0.14), 0, 0) * CFrame.Angles(0, math.rad(90), 0)
+		end,
+	},
+	-- Fumigène à la ceinture, à droite.
+	smoke_deployer = {
+		parts = { "LowerTorso", "Torso" },
+		scale = 0.5,
+		offset = function(base)
+			return CFrame.new(base.Size.X / 2 - 0.15, -0.05, -(base.Size.Z / 2 + 0.2))
+		end,
+	},
 }
 
-local function updateArmorVisual(character: Model)
-	for _, piece in ARMOR_PIECES do
-		local existing = character:FindFirstChild(piece.name)
-		if existing then
-			existing:Destroy()
-		end
-		local itemId = character:GetAttribute(piece.attribute)
-		if type(itemId) ~= "string" then
-			continue
-		end
-		local anchor: BasePart? = nil
-		for _, partName in piece.parts do
-			local candidate = character:FindFirstChild(partName)
-			if candidate and candidate:IsA("BasePart") then
-				anchor = candidate
-				break
+local function placeGadget(character: Model, model: Model, itemId: string)
+	if itemId == "jump_boots" then
+		-- Une botte par pied (les pieds bougent séparément).
+		for _, side in
+			{ { parts = { "LeftFoot", "Left Leg" }, sign = -1 }, { parts = { "RightFoot", "Right Leg" }, sign = 1 } }
+		do
+			local foot = bodyPart(character, side.parts)
+			if foot then
+				local isFoot = foot.Name == "LeftFoot" or foot.Name == "RightFoot"
+				-- R6 : au bas de la jambe.
+				local at = if isFoot then CFrame.new(0, 0.04, 0) else CFrame.new(0, -foot.Size.Y / 2 + 0.2, 0)
+				ItemModels.place(itemId, model, foot.CFrame * at, {
+					scale = foot.Size.X * 1.12 / 0.5,
+					weldTo = foot,
+					shift = Vector3.new(-side.sign * 0.4, 0, 0),
+					filter = function(spec)
+						return spec.cframe.Position.X * side.sign > 0
+					end,
+				})
 			end
 		end
-		if anchor == nil then
-			continue
-		end
-		local base = anchor :: BasePart
-		local size, offset
-		if piece.name == "HelmetVisual" then
-			size = Vector3.new(base.Size.X * 1.12, base.Size.Y * 0.55, base.Size.Z * 1.12)
-			offset = CFrame.new(0, base.Size.Y * 0.3, 0)
-		elseif piece.name == "VestVisual" then
-			size = Vector3.new(base.Size.X * 1.06, base.Size.Y * 0.85, base.Size.Z * 1.2)
-			offset = CFrame.new(0, -base.Size.Y * 0.05, 0)
-		else
-			size = BACKPACK_SIZES[itemId] or BACKPACK_SIZES.backpack_small
-			offset = CFrame.new(0, 0, base.Size.Z / 2 + size.Z / 2)
-		end
-		local skin = skinOf(character, piece.skin)
-		local model = Instance.new("Model")
-		model.Name = piece.name
-		local body = Instance.new("Part")
-		body.Name = "Body"
-		body.Size = size
-		body.CFrame = base.CFrame * offset
-		body.Color = if skin then skin.color else ARMOR_DEFAULT
-		body.Material = if skin then materialOf(skin.material) else Enum.Material.Fabric
-		makeDecorative(body)
-		body.Parent = model
-		local stripe = Instance.new("Part")
-		stripe.Name = "Accent"
-		stripe.Size = Vector3.new(size.X + 0.02, math.min(0.15, size.Y * 0.15), size.Z + 0.02)
-		stripe.CFrame = body.CFrame
-		stripe.Color = if skin then skin.accent else Color3.fromRGB(90, 96, 106)
-		stripe.Material = if skin then Enum.Material.Neon else Enum.Material.Metal
-		makeDecorative(stripe)
-		stripe.Parent = model
-		for _, part in { body, stripe } do
-			local weld = Instance.new("WeldConstraint")
-			weld.Part0 = base
-			weld.Part1 = part
-			weld.Parent = part
-		end
-		model.PrimaryPart = body
-		model.Parent = character
+		return
 	end
+	local mount = GADGET_MOUNTS[itemId]
+	local base = if mount then bodyPart(character, mount.parts) else nil
+	if mount and base then
+		ItemModels.place(itemId, model, base.CFrame * mount.offset(base), { scale = mount.scale, weldTo = base })
+	end
+end
+
+-- Gadgets équipés, visibles sur le personnage (on sait ce que porte un adversaire).
+local function updateGadgetVisual(character: Model)
+	for index = 1, 2 do
+		local itemId = character:GetAttribute(`Gadget{index}Id`)
+		setVisual(
+			character,
+			`Gadget{index}Visual`,
+			if type(itemId) == "string"
+				then function(model)
+					placeGadget(character, model, itemId)
+				end
+				else nil
+		)
+	end
+end
+
+-- Consommable en cours d'utilisation, dans la main gauche.
+local function updateUsingVisual(character: Model)
+	local itemId = character:GetAttribute("UsingId")
+	local hand = bodyPart(character, { "LeftHand", "Left Arm" })
+	setVisual(
+		character,
+		"UsingVisual",
+		if type(itemId) == "string" and hand
+			then function(model)
+				local base = hand :: BasePart
+				local low = if base.Name == "LeftHand" then 0 else -base.Size.Y / 2
+				ItemModels.place(
+					itemId,
+					model,
+					base.CFrame * CFrame.new(0, low - 0.1, -0.3),
+					{ scale = 0.8, weldTo = base }
+				)
+			end
+			else nil
+	)
 end
 
 -- Reliage des visuels aux attributs publiés par CombatService.
 local function watchVisuals(character: Model, onWeaponChanged: (() -> ())?)
 	updateWeaponVisual(character)
 	updateArmorVisual(character)
+	updateGadgetVisual(character)
+	updateUsingVisual(character)
 	character:GetAttributeChangedSignal("WeaponId"):Connect(function()
 		if onWeaponChanged then
 			onWeaponChanged()
@@ -196,14 +295,19 @@ local function watchVisuals(character: Model, onWeaponChanged: (() -> ())?)
 	character:GetAttributeChangedSignal("WeaponSkin"):Connect(function()
 		updateWeaponVisual(character)
 	end)
-	for _, piece in ARMOR_PIECES do
-		character:GetAttributeChangedSignal(piece.attribute):Connect(function()
-			updateArmorVisual(character)
-		end)
-		character:GetAttributeChangedSignal(piece.skin):Connect(function()
+	for _, attribute in { "HelmetId", "HelmetSkin", "VestId", "VestSkin", "BackpackId", "BackpackSkin" } do
+		character:GetAttributeChangedSignal(attribute):Connect(function()
 			updateArmorVisual(character)
 		end)
 	end
+	for _, attribute in { "Gadget1Id", "Gadget2Id" } do
+		character:GetAttributeChangedSignal(attribute):Connect(function()
+			updateGadgetVisual(character)
+		end)
+	end
+	character:GetAttributeChangedSignal("UsingId"):Connect(function()
+		updateUsingVisual(character)
+	end)
 end
 
 --[[
