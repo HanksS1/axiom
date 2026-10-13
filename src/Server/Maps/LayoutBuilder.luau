@@ -592,6 +592,16 @@ function Builder.deploySpawn(self: Builder, position: Vector3)
 	self:marker("DeploySpawn", position + Vector3.new(0, 3, 0))
 end
 
+-- Point de départ du mode solo (réparti sur toute la carte), tourné vers le centre.
+function Builder.soloSpawn(self: Builder, position: Vector3)
+	local at = position + Vector3.new(0, 3, 0)
+	local toward = Vector3.new(0, at.Y, 0)
+	table.insert(self.layout.markers, {
+		tag = "SoloSpawn",
+		cframe = if (toward - at).Magnitude > 1 then CFrame.lookAt(at, toward) else CFrame.new(at),
+	})
+end
+
 function Builder.extraction(self: Builder, position: Vector3, nameKey: string)
 	self:marker("ExtractionPoint", position + Vector3.new(0, 0.2, 0), { NameKey = nameKey })
 end

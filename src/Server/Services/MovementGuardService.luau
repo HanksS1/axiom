@@ -16,6 +16,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
@@ -170,6 +171,15 @@ end
 function MovementGuardService.start()
 	Players.PlayerRemoving:Connect(function(player)
 		tracks[player] = nil
+	end)
+	-- Repoussement (Gantelet à impulsion) : le vol plané de la victime est toléré.
+	CombatService.Knockback:Connect(function(fighter, velocity, duration)
+		local player = fighter.player
+		if player then
+			local horizontal = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
+			local rise = velocity.Y * velocity.Y / (2 * Workspace.Gravity) + 3
+			MovementGuardService.grantAllowance(player, horizontal * 1.2, duration + 0.6, rise)
+		end
 	end)
 	for _, player in Players:GetPlayers() do
 		player.CharacterAdded:Connect(function()

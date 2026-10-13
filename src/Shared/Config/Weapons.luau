@@ -7,8 +7,12 @@
 
 	Conventions :
 	- `fireRate` = nombre d'activations par seconde (tirs, ou rafales pour
-	  une arme à rafale). Pour un rayon continu, la cadence n'a pas de sens :
-	  les dégâts sont exprimés par seconde (`damagePerSecond`).
+	  une arme à rafale). Un rayon continu n'a pas de cadence : `damage`,
+	  `heat.perSecond` et `cellCost.everySeconds` sont exprimés par seconde et
+	  appliqués par « tics » de `beamTick` seconde tant que la détente est tenue.
+	- `projectileSpeed` : projectile lent simulé par le serveur (le client
+	  n'envoie qu'une direction) ; `arcGravity` : tir en cloche ;
+	  `splashRadius` : dégâts en zone à l'impact.
 	- Armes à chargeur : 1 cellule = 1 projectile tiré (la recharge prélève
 	  les cellules du sac). Une rafale de 3 consomme donc 3 cellules.
 	- Armes à surchauffe : pas de chargeur, les cellules sont prélevées
@@ -30,6 +34,7 @@ export type RangedDef = {
 	burstCount: number, -- projectiles par rafale (1 si pas de rafale)
 	burstInterval: number, -- secondes entre deux projectiles d'une rafale
 	fireRate: number,
+	beamTick: number?, -- rayon continu : secondes entre deux tics
 	effectiveRange: number,
 	capacity: number?, -- nil = arme à surchauffe sans chargeur
 	reloadTime: number?,
@@ -250,6 +255,7 @@ local ranged: { [string]: RangedDef } = {
 		burstCount = 1,
 		burstInterval = 0,
 		fireRate = 0,
+		beamTick = 0.1,
 		effectiveRange = 50,
 		heat = { perSecond = 25 },
 		cellCost = { cells = 1, everySeconds = 0.5 },

@@ -30,6 +30,7 @@ local order = {
 	"NameplateController",
 	"DeployController",
 	"MapEffectsController",
+	"HintController",
 	"TouchControlsController",
 	"SettingsController",
 	"DevPanelController",

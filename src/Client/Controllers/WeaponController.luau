@@ -7,8 +7,14 @@
 	valide et calcule seul les dégâts. L'état des munitions est prédit
 	localement avec la même logique que le serveur (WeaponLogic), puis
 	corrigé à chaque message CombatState.
+
+	- Rayon continu (Canon à rayons X) : un tir par tic tant que la détente
+	  est tenue ; le rayon traverse les couverts légers (tag LightCover).
+	- Projectiles lents (Lance-clous, Court-Circuit) : le client n'envoie
+	  qu'une direction, le serveur fait voler le projectile.
 ]]
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -19,6 +25,7 @@ local Config = require(Shared.Config)
 local Damage = require(Shared.Combat.Damage)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
 local Movement = require(Shared.Combat.Movement)
+local Projectiles = require(Shared.Combat.Projectiles)
 local Signal = require(Shared.Util.Signal)
 local WeaponLogic = require(Shared.Combat.WeaponLogic)
 
@@ -182,6 +189,22 @@ local function characterOf(part: Instance): Model?
 	return nil
 end
 
+-- Rayon d'un tir. `passCover` : traverse les couverts légers (Canon à rayons X).
+local MAX_COVERS = 4
+local function castShot(origin: Vector3, direction: Vector3, range: number, passCover: boolean): RaycastResult?
+	local from, remaining = origin, range
+	for _ = 1, MAX_COVERS + 1 do
+		local result = Workspace:Raycast(from, direction * remaining, shotParams)
+		if result == nil or not passCover or not CollectionService:HasTag(result.Instance, "LightCover") then
+			return result
+		end
+		shotParams:AddToFilter(result.Instance)
+		remaining -= result.Distance
+		from = result.Position
+	end
+	return nil
+end
+
 local function muzzlePosition(character: Model, fallback: Vector3): Vector3
 	local visual = character:FindFirstChild("WeaponVisual")
 	local body = if visual then visual:FindFirstChild("Body") else nil
@@ -228,12 +251,26 @@ local function fireRanged()
 	local spread = currentSpread()
 	local range = Damage.maxRange(def.effectiveRange)
 
+	if def.projectileSpeed then
+		-- Projectile lent : le serveur le fait voler et décide de l'impact. Ici, seulement
+		-- la direction (en cloche vers le point visé pour le Court-Circuit) et l'image.
+		local aim = if def.arcGravity
+			then Projectiles.ballisticDirection(origin, aimPoint, def.projectileSpeed, def.arcGravity)
+			else baseDirection
+		local direction = spreadDirection(aim, spread)
+		EffectsController.playProjectile(rangedId :: string, origin, direction * def.projectileSpeed, character)
+		ClientNet.fire("FireWeapon", { t = now, origin = origin, direction = direction, hits = {} })
+		WeaponController.Fired:Fire()
+		return
+	end
+
+	local passCover = def.lightCoverDamageMultiplier ~= nil
 	local hits = {}
 	local endpoints = {}
 	for _ = 1, bullets do
 		for _ = 1, def.pellets do
 			local direction = spreadDirection(baseDirection, spread)
-			local result = Workspace:Raycast(origin, direction * range, shotParams)
+			local result = castShot(origin, direction, range, passCover)
 			local endpoint = if result then result.Position else origin + direction * range
 			table.insert(endpoints, endpoint)
 			if result and result.Instance:IsA("BasePart") then
@@ -322,7 +359,8 @@ local function update()
 		return
 	end
 	if activeSlot == "ranged" and rangedDef then
-		if rangedDef.fireMode == "auto" or triggerPending then
+		-- Automatique et rayon continu : tant que la détente est tenue.
+		if rangedDef.fireMode == "auto" or rangedDef.fireMode == "beam" or triggerPending then
 			fireRanged()
 		end
 	elseif activeSlot == "melee" and meleeDef then

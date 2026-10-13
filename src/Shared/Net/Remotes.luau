@@ -41,6 +41,9 @@ local Remotes: { [string]: RemoteDef } = {
 	ParryResult = { kind = "event", toServer = false }, -- parade réussie / garde brisée
 	ShotFired = { kind = "unreliable", toServer = false }, -- tracés des tirs (autres joueurs)
 	MeleeSwing = { kind = "unreliable", toServer = false }, -- animation de coup (autres joueurs)
+	Knockback = { kind = "event", toServer = false }, -- repoussement (victime du Gantelet à impulsion)
+	ProjectileFired = { kind = "unreliable", toServer = false }, -- projectile lent en vol (autres joueurs)
+	ProjectileImpact = { kind = "event", toServer = false }, -- impact ou explosion d'un projectile
 
 	-- Loot et inventaire
 	ContainerSync = { kind = "event", toServer = false }, -- contenu d'un conteneur consulté
