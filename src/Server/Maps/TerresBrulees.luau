@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Les Terres Brûlées, désert irradié (section 12.3) — greybox.
+	Les Terres Brûlées, désert irradié (section 12.3).
 
 	- Le Cratère 🔥 (centre) : point d'impact en terrasses, très irradié,
 	  Gardien au fond (Ver de Silice).
@@ -12,7 +12,9 @@
 	- Extractions : piste d'atterrissage, station-service, sommet du canyon.
 ]]
 
+local Dress = require(script.Parent.Dress)
 local LayoutBuilder = require(script.Parent.LayoutBuilder)
+local Props = require(script.Parent.Props)
 
 local C = LayoutBuilder.colors
 local SIZE = 800
@@ -272,5 +274,144 @@ return function(rng: LayoutBuilder.Rng): LayoutBuilder.Layout
 			b:crate(point, "supply")
 		end
 	end
+
+	-- Habillage ------------------------------------------------------------------
+	Dress.reserve(b)
+	-- Le cratère est un trou : rien au niveau du sol au-dessus (les décors du
+	-- cratère sont posés plus bas, sur les terrasses).
+	b:keepOut(0, 0, 146, -0.5)
+	b:keepOut(0, 0, 15, -32, -8) -- le Ver de Silice surgit au fond
+	for x = 175, 325, 30 do
+		b:keepOut(x, 290, 19) -- piste d'atterrissage dégagée
+	end
+
+	-- Le Cratère : éclats de silice vitrifiée, fûts, fissures luminescentes.
+	local function terrace(list: { string }, count: number, inner: number, outer: number, y: number)
+		local placed, attempts = 0, 0
+		while placed < count and attempts < count * 14 do
+			attempts += 1
+			local x, z = rng:NextNumber(-outer, outer), rng:NextNumber(-outer, outer)
+			if math.max(math.abs(x), math.abs(z)) >= inner then
+				if Props.place(b, list[rng:NextInteger(1, #list)], x, y, z, rng:NextNumber(0, 6), rng) then
+					placed += 1
+				end
+			end
+		end
+	end
+	terrace({ "shards", "boulder", "glowCrack", "radBarrels" }, 14, 18, 54, -30)
+	terrace({ "shards", "boulder", "glowCrack", "radBarrels" }, 12, 63, 77, -20)
+	terrace({ "boulder", "glowCrack", "radBarrels" }, 12, 83, 97, -10)
+	Dress.glow(b, "CraterCore", Vector3.new(0, -29.6, 0), Vector3.new(14, 0.2, 14), HAZE, 60, 2, true, true)
+	Dress.particles(b, "CraterMotes", Vector3.new(0, -28, 0), "motes", Vector3.new(60, 0.4, 60))
+
+	-- Poches irradiées : fûts qui fuient et fissures (on les repère de loin).
+	for index, pocket in { Vector3.new(180, 0, -205), Vector3.new(265, 0, -110), Vector3.new(-60, 0, -290) } do
+		Props.place(b, "radBarrels", pocket.X + 7, 0, pocket.Z - 6, index, rng)
+		Props.place(b, "glowCrack", pocket.X - 8, 0, pocket.Z + 7, index * 2, rng)
+		Props.place(b, "shards", pocket.X - 6, 0, pocket.Z - 9, index * 3, rng)
+		Dress.particles(b, "PocketMotes" .. index, pocket + Vector3.new(0, 1, 0), "motes", Vector3.new(24, 0.4, 24))
+	end
+
+	-- Route du convoi : chaussée craquelée d'est en ouest, épaves.
+	Dress.groundStrip(b, "Highway", 0, -160, 772, 22, Color3.fromRGB(58, 56, 56), "Asphalt", 0.04)
+	for x = -360, 360, 40 do
+		Dress.groundStrip(b, "HighwayDash" .. x, x, -160, 14, 0.7, Color3.fromRGB(176, 160, 110), "SmoothPlastic", 0.1)
+	end
+	Dress.along(
+		b,
+		rng,
+		{ "car", "car", "van", "bus", "tankWreck", "barrierRow", "tires" },
+		13,
+		-370,
+		-160,
+		130,
+		-160,
+		9,
+		0.5
+	)
+	Dress.scatter(
+		b,
+		rng,
+		{ "tires", "barrels", "crates", "tent", "fireBarrel", "rubbleSmall", "sandbags", "car" },
+		22,
+		{ x0 = 140, x1 = 300, z0 = -240, z1 = -84 },
+		0
+	)
+
+	-- Base Kestrel : sacs de sable, tentes, matériel, projecteurs.
+	Dress.scatter(b, rng, {
+		"sandbags",
+		"sandbags",
+		"crates",
+		"tent",
+		"tankWreck",
+		"barrels",
+		"generator",
+		"floodlight",
+		"container",
+		"solarArray",
+		"antennaMast",
+	}, 24, { x0 = base.X - 64, x1 = base.X + 64, z0 = base.Z - 54, z1 = base.Z + 54 }, 0, "grid")
+	Dress.interiors(b, rng, { bunker1, bunker2, tower }, { "lockers", "crates", "desk", "cabinet", "workbench" }, 3)
+	Dress.roofs(b, rng, { bunker1, bunker2 }, { "antennaMast", "vent", "sandbags" }, 2)
+
+	-- Station-service : enseigne, épaves aux pompes.
+	Dress.glow(b, "GasSign", Vector3.new(-280, 13.4, -242), Vector3.new(18, 2, 0.4), C.red, 34, 1.4, true)
+	Dress.interiors(b, rng, { shop }, { "shelf", "counter", "vending" }, 3)
+	Dress.scatter(
+		b,
+		rng,
+		{ "car", "van", "tires", "barrels", "roadSign" },
+		7,
+		{ x0 = -330, x1 = -240, z0 = -300, z1 = -196 },
+		0
+	)
+
+	-- Piste : épave d'avion, fûts.
+	Props.place(b, "planeWreck", 118, 0, 246, 0.7, rng)
+	Dress.scatter(
+		b,
+		rng,
+		{ "barrels", "crates", "container", "tires", "floodlight" },
+		9,
+		{ x0 = 150, x1 = 360, z0 = 228, z1 = 262 },
+		0
+	)
+
+	-- Ligne à haute tension abandonnée (certains pylônes sont tombés).
+	for index, z in { -340, -232, 146, 250, 348 } do
+		Props.place(b, if index % 2 == 0 then "pylonDown" else "pylon", -146, 0, z, 0.1 * index, rng)
+	end
+
+	-- Relief : pitons, strates et dunes cassent les lignes de tir du désert.
+	Dress.spawnCover(b, rng, { "boulder", "sandbags", "car", "tires" })
+	Dress.scatter(b, rng, { "spire" }, 12, { x0 = -372, x1 = 372, z0 = -372, z1 = 372 }, 0)
+	Dress.scatter(b, rng, { "dune", "dune", "strata" }, 34, { x0 = -360, x1 = 360, z0 = -360, z1 = 360 }, 0)
+	Dress.scatter(b, rng, { "rock", "rock", "boulder" }, 46, { x0 = -376, x1 = 376, z0 = -376, z1 = 376 }, 0)
+	Dress.scatter(b, rng, {
+		"deadTree",
+		"deadTree",
+		"deadTree",
+		"bones",
+		"boulder",
+		"tires",
+		"car",
+		"solarArray",
+		"pipeline",
+		"barrels",
+	}, 120, { x0 = -378, x1 = 378, z0 = -378, z1 = 378 }, 0)
+
+	-- Vent de sable.
+	for index, point in LayoutBuilder.freePoints(rng, 12, 340, {}, 120) do
+		Dress.particles(b, "Dust" .. index, point + Vector3.new(0, 2, 0), "dust", Vector3.new(30, 0.4, 30))
+	end
+
+	-- Horizon : falaises du canyon.
+	Dress.skyline(b, rng, SIZE, {
+		colors = { C.rock, Color3.fromRGB(150, 118, 86), Color3.fromRGB(126, 98, 74) },
+		material = "Sandstone",
+		height = { min = 30, max = 84 },
+		width = { min = 24, max = 60 },
+	})
 	return b:finish()
 end

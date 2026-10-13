@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Forge-7, usine de robots (section 12.2) — greybox.
+	Forge-7, usine de robots (section 12.2).
 
 	- Chaîne d'assemblage 🔥 (grand hall central) : Exécuteurs en cours de
 	  fabrication qui s'activent à l'approche, Gardien = bras robotique géant
@@ -12,7 +12,9 @@
 	- Extractions : quai de chargement, monte-charge, toit de la cheminée.
 ]]
 
+local Dress = require(script.Parent.Dress)
 local LayoutBuilder = require(script.Parent.LayoutBuilder)
+local Props = require(script.Parent.Props)
 
 local C = LayoutBuilder.colors
 local SIZE = 800
@@ -157,7 +159,7 @@ return function(rng: LayoutBuilder.Rng): LayoutBuilder.Layout
 	b:riskZone(Vector3.new(-230, 8, 6), 10, false)
 
 	-- Entrepôt de pièces (est) ------------------------------------------------------
-	b:building({
+	local warehouse = b:building({
 		x = 265,
 		z = -20,
 		w = 130,
@@ -269,5 +271,199 @@ return function(rng: LayoutBuilder.Rng): LayoutBuilder.Layout
 			b:crate(point, "supply")
 		end
 	end
+
+	-- Habillage ------------------------------------------------------------------
+	Dress.reserve(b)
+	b:keepOut(0, 30, 13) -- le bras du Gardien a besoin d'air
+	b:keepOut(135, 0, 9) -- sortie de la chaîne de production
+	b:keepOut(-140, 30, 8) -- panneau de contrôle
+
+	-- Grand hall : toiture (verrière ouverte au-dessus de la chaîne), passerelles hautes
+	-- le long des murs nord et sud, lampes suspendues aux poutres.
+	b:slab("HallRoofS", -161, -111, 161, -22, hallH + 4, C.darkConcrete, "Metal")
+	b:slab("HallRoofN", -161, 22, 161, 111, hallH + 4, C.darkConcrete, "Metal")
+	for _, side in { -1, 1 } do
+		local name = if side < 0 then "S" else "N"
+		local wallZ, railZ, rampZ = side * 109.4, side * 101.2, side * 97.5
+		b:slab(
+			"Catwalk" .. name,
+			-150,
+			math.min(wallZ, side * 101),
+			150,
+			math.max(wallZ, side * 101),
+			18,
+			C.metal,
+			"DiamondPlate"
+		)
+		b:block("CatwalkRail" .. name, 0, railZ, 276, 0.4, 3, C.orange, "Metal", { base = 18 })
+		for _, endSide in { -1, 1 } do
+			local tag = name .. (if endSide < 0 then "W" else "E")
+			b:slab(
+				"CatwalkLanding" .. tag,
+				endSide * 150,
+				math.min(side * 101, side * 94),
+				endSide * 139,
+				math.max(side * 101, side * 94),
+				18,
+				C.metal,
+				"DiamondPlate"
+			)
+			b:ramp(
+				"CatwalkRamp" .. tag,
+				Vector3.new(endSide * 99, 0, rampZ),
+				Vector3.new(endSide * 139.5, 18, rampZ),
+				6,
+				C.metal,
+				"DiamondPlate"
+			)
+			b:keepOut(endSide * 93, rampZ, 6, -1, 9) -- pied de la rampe
+		end
+		for x = -120, 120, 60 do
+			if b:isFree(x, 0, side * 105, 1, 16) then
+				b:block("CatwalkPost" .. name .. x, x, side * 105, 1, 1, 17, C.metal, "Metal")
+			end
+		end
+	end
+	for index = 1, 7 do
+		local x = -150 + (index - 1) * 50
+		for _, z in { -66, 66 } do
+			b:part(
+				"HallLampCable" .. index .. z,
+				Vector3.new(0.15, 8, 0.15),
+				CFrame.new(x, hallH - 4, z),
+				C.metal,
+				"Metal",
+				{
+					collide = false,
+					query = false,
+				}
+			)
+			Dress.glow(
+				b,
+				"HallLamp" .. index .. z,
+				Vector3.new(x, hallH - 8.3, z),
+				Vector3.new(2.4, 0.5, 2.4),
+				Color3.fromRGB(255, 214, 160),
+				52,
+				1.5,
+				(index + z) % 3 == 0
+			)
+		end
+	end
+	Dress.scatter(b, rng, {
+		"machine",
+		"machine",
+		"press",
+		"pod",
+		"pod",
+		"pallet",
+		"crates",
+		"pipeRack",
+		"forklift",
+		"controlDesk",
+		"workbench",
+		"spool",
+		"barrels",
+		"railCart",
+	}, 100, { x0 = -152, x1 = 152, z0 = -92, z1 = 92 }, 0, "grid")
+
+	-- Fonderie : creusets, braises et lueur des coulées.
+	for index, glow in
+		{
+			Vector3.new(-296, 3, -20),
+			Vector3.new(-264, 3, 10),
+			Vector3.new(-296, 3, 40),
+			Vector3.new(-264, 3, 92),
+			Vector3.new(-296, 3, 92),
+		}
+	do
+		b:part("MoltenGlow" .. index, Vector3.new(6, 0.3, 6), CFrame.new(glow), MOLTEN, "Neon", {
+			collide = false,
+			query = false,
+			transparency = 1,
+			emitter = "embers",
+			light = { color = MOLTEN, range = 44, brightness = 2, flicker = false, emergency = true },
+		})
+	end
+	Dress.scatter(
+		b,
+		rng,
+		{ "crucible", "crucible", "tank", "pipeRack", "barrels", "pallet", "railCart", "generator", "machine" },
+		18,
+		{ x0 = -326, x1 = -204, z0 = -56, z1 = 116 },
+		0,
+		"grid"
+	)
+
+	-- Entrepôt : rayonnages, palettes, chariots ; plafonniers.
+	Dress.interiors(
+		b,
+		rng,
+		{ warehouse },
+		{ "shelf", "shelf", "pallet", "pallet", "crates", "forklift", "lockers", "workbench" },
+		44
+	)
+	for index, x in { 225, 265, 305 } do
+		for _, z in { -70, -20, 30 } do
+			Dress.glow(
+				b,
+				"WarehouseLamp" .. index .. z,
+				Vector3.new(x, 18.4, z),
+				Vector3.new(3, 0.3, 3),
+				Color3.fromRGB(255, 226, 180),
+				40,
+				1.3,
+				(index + z) % 2 == 0
+			)
+		end
+	end
+	Dress.interiors(b, rng, { chimney }, { "lockers", "desk", "cabinet", "crates", "workbench" }, 3)
+	Dress.roofs(b, rng, { chimney }, { "vent", "acUnit" }, 2)
+
+	-- Cheminées qui fument encore.
+	for _, stack in
+		{
+			Vector3.new(-352, 0, 160),
+			Vector3.new(-352, 0, -104),
+			Vector3.new(196, 0, 150),
+			Vector3.new(232, 0, 152),
+			Vector3.new(-186, 0, -150),
+		}
+	do
+		Props.place(b, "chimney", stack.X, 0, stack.Z, 0, rng)
+	end
+
+	-- Cour : conteneurs, cuves, tuyauteries, projecteurs.
+	Dress.spawnCover(b, rng, { "container", "barrier", "pallet", "barrierRow" })
+	Dress.scatter(b, rng, { "floodlight" }, 16, { x0 = -370, x1 = 370, z0 = -370, z1 = 370 }, 0, "grid")
+	Dress.ring(b, rng, {
+		"container",
+		"containerStack",
+		"containerStack",
+		"tank",
+		"pipeRack",
+		"spool",
+		"pallet",
+		"barrels",
+		"generator",
+		"forklift",
+		"sheetFence",
+		"tires",
+		"van",
+		"fireBarrel",
+		"railCart",
+		"rubble",
+		"crates",
+	}, 240, 112, 380)
+
+	-- Horizon : ateliers et silos au pied de l'enceinte.
+	Dress.skyline(b, rng, SIZE, {
+		colors = { Color3.fromRGB(70, 62, 56), Color3.fromRGB(88, 70, 56), Color3.fromRGB(54, 52, 52) },
+		material = "Brick",
+		height = { min = 26, max = 78 },
+		width = { min = 30, max = 62 },
+		glow = { C.orange, MOLTEN },
+		glowChance = 0.3,
+	})
 	return b:finish()
 end

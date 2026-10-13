@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Néo-Lumen, ville en ruine (section 12.1) — greybox.
+	Néo-Lumen, ville en ruine (section 12.1).
 
 	- Tour Helix 🔥 (centre) : gratte-ciel de 7 niveaux à moitié effondré,
 	  loot vertical (le meilleur au sommet), Gardien sur le toit (Titan
@@ -14,7 +14,9 @@
 	  ouvrent un passage).
 ]]
 
+local Dress = require(script.Parent.Dress)
 local LayoutBuilder = require(script.Parent.LayoutBuilder)
+local Props = require(script.Parent.Props)
 
 local C = LayoutBuilder.colors
 local SIZE = 800
@@ -283,7 +285,7 @@ return function(rng: LayoutBuilder.Rng): LayoutBuilder.Layout
 		{ x = -110, z = 60, r = 30 },
 		{ x = 110, z = -60, r = 30 },
 	}
-	b:cityGrid(rng, {
+	local ruins = b:cityGrid(rng, {
 		from = -320,
 		to = 320,
 		step = 80,
@@ -301,6 +303,9 @@ return function(rng: LayoutBuilder.Rng): LayoutBuilder.Layout
 	local barriers: { LayoutBuilder.Reserved } = table.clone(reserved)
 	table.insert(barriers, { x = -40, z = -120, r = 20 })
 	table.insert(barriers, { x = 120, z = 200, r = 20 })
+	-- Décombres au pied de la tour Helix (une caisse de rue tombait dedans).
+	table.insert(barriers, { x = 32, z = 18, r = 20 })
+	table.insert(barriers, { x = -30, z = -24, r = 20 })
 	local crossings = LayoutBuilder.shuffle(rng, LayoutBuilder.intersections(-320, 320, 80, barriers))
 	for index = 1, 6 do
 		b:accelerator(crossings[index])
@@ -311,5 +316,202 @@ return function(rng: LayoutBuilder.Rng): LayoutBuilder.Layout
 	for index = 15, 26 do
 		b:crate(crossings[index] + Vector3.new(6, 0, 6), "supply")
 	end
+
+	-- Habillage ------------------------------------------------------------------
+	Dress.reserve(b)
+	-- Rien sur l'emprise des effondrements (les décombres y tomberont).
+	for _, site in collapses do
+		b:keepOut(site.center.X, site.center.Z, math.max(site.size.X, site.size.Z) / 2 + 4)
+	end
+
+	-- Chaussée : marquage des rues, trottoirs au pied des immeubles.
+	for street = -280, 280, 80 do
+		Dress.groundStrip(b, "RoadLineX" .. street, street, 0, 0.6, 640, Color3.fromRGB(150, 140, 90), "SmoothPlastic")
+		Dress.groundStrip(b, "RoadLineZ" .. street, 0, street, 640, 0.6, Color3.fromRGB(150, 140, 90), "SmoothPlastic")
+	end
+	for index, ruin in ruins do
+		Dress.groundStrip(
+			b,
+			"Sidewalk" .. index,
+			ruin.x,
+			ruin.z,
+			ruin.w + 12,
+			ruin.d + 12,
+			Color3.fromRGB(86, 86, 94),
+			"Pavement",
+			0.03
+		)
+	end
+
+	-- Tour Helix : holo-publicités géantes sur les façades, néons d'angle.
+	for index, holo in
+		{
+			{ position = Vector3.new(-20.9, 62, 0), size = Vector3.new(0.3, 34, 22), color = C.magenta },
+			{ position = Vector3.new(0, 44, 20.9), size = Vector3.new(24, 20, 0.3), color = C.cyan },
+			{ position = Vector3.new(20.9, 78, -4), size = Vector3.new(0.3, 16, 26), color = C.orange },
+		}
+	do
+		b:part("HelixHolo" .. index, holo.size, CFrame.new(holo.position), holo.color, "Neon", {
+			collide = false,
+			query = false,
+			transparency = 0.45,
+			tags = { "Flicker" },
+			light = { color = holo.color, range = 50, brightness = 1.4, flicker = true },
+		})
+	end
+	for index, corner in { Vector3.new(-20.5, 45, 20.5), Vector3.new(20.5, 45, -20.5), Vector3.new(-20.5, 45, -20.5) } do
+		b:part("HelixNeon" .. index + 1, Vector3.new(0.4, 90, 0.4), CFrame.new(corner), C.cyan, "Neon", {
+			collide = false,
+			query = false,
+			tags = { "Flicker" },
+		})
+	end
+
+	-- Galerie Prisma : vitrines (couverts légers) et enseignes d'arcade.
+	for index, offset in { -44, -22, 22, 44 } do
+		b:part(
+			"PrismaGlass" .. index,
+			Vector3.new(14, 9, 0.3),
+			CFrame.new(210 + offset, 4.5, -170 - 20),
+			Color3.fromRGB(150, 190, 205),
+			"Glass",
+			{ transparency = 0.5, tags = { "LightCover" } }
+		)
+		Dress.glow(
+			b,
+			"PrismaLamp" .. index,
+			Vector3.new(210 + offset, 12.6, -170 + 6),
+			Vector3.new(6, 0.3, 1),
+			if index % 2 == 0 then C.magenta else C.cyan,
+			34,
+			1.3,
+			index % 2 == 0
+		)
+	end
+
+	-- Place centrale : arbres morts, kiosques, statue renversée.
+	for _, corner in
+		{ Vector3.new(-34, 0, -34), Vector3.new(34, 0, -34), Vector3.new(-34, 0, 34), Vector3.new(34, 0, 34) }
+	do
+		Props.place(b, "planter", 120 + corner.X, 0.4, 150 + corner.Z, 0, rng)
+	end
+	Props.place(b, "kiosk", 84, 0.4, 150, math.rad(90), rng)
+	Props.place(b, "kiosk", 158, 0.4, 150, math.rad(-90), rng)
+	b:block("StatuePlinth", 96, 111, 7, 7, 4, C.concrete, "Marble", { base = 0.4 })
+	b:part(
+		"StatueFallen",
+		Vector3.new(3, 12, 3),
+		CFrame.new(105, 2.4, 112) * CFrame.Angles(0, 0.3, math.rad(78)),
+		C.concrete,
+		"Marble"
+	)
+
+	-- Métro : rame déraillée à la sortie du tunnel, rails, éclairage de secours.
+	Props.put(b, "bus", 300, 0, 352, 0.06, rng)
+	for _, side in { -3, 3 } do
+		Dress.groundStrip(b, "MetroRail" .. side, 300 + side, 338, 0.5, 96, Color3.fromRGB(110, 96, 86), "Metal", 0.1)
+	end
+	Dress.glow(b, "MetroLampA", Vector3.new(300, 11.6, 298), Vector3.new(4, 0.3, 1), C.orange, 30, 1.4, true)
+	Dress.glow(b, "MetroLampB", Vector3.new(300, 11.6, 322), Vector3.new(4, 0.3, 1), C.orange, 30, 1.2, false, true)
+
+	-- Hôpital : ambulances abandonnées devant l'entrée.
+	Props.place(b, "van", -196, 0, -128, 0.4, rng)
+	Props.place(b, "van", -168, 0, -160, 1.3, rng)
+
+	-- Rues : épaves le long des voies (couverts tous les 20 à 30 studs), lampadaires aux carrefours.
+	local wrecks = { "car", "car", "car", "van", "bus", "barrierRow", "rubble", "dumpster" }
+	for street = -280, 280, 80 do
+		Dress.along(b, rng, wrecks, 12, street, -312, street, 312, 11, 0.4)
+		Dress.along(b, rng, wrecks, 12, -312, street, 312, street, 11, 0.4)
+	end
+	for _, crossing in LayoutBuilder.intersections(-320, 320, 80, {}) do
+		local sx = if rng:NextNumber() < 0.5 then -17 else 17
+		local sz = if rng:NextNumber() < 0.5 then -17 else 17
+		Props.place(
+			b,
+			if rng:NextNumber() < 0.4 then "lamp" else "lampDead",
+			crossing.X + sx,
+			0,
+			crossing.Z + sz,
+			rng:NextInteger(0, 3) * math.pi / 2,
+			rng
+		)
+	end
+
+	-- Intérieurs : chaque étage a ses couverts.
+	Dress.interiors(b, rng, { helix }, { "desk", "partition", "rubbleSmall", "cabinet", "lockers", "sofa" }, 5)
+	Dress.interiors(
+		b,
+		rng,
+		{ galerie },
+		{ "counter", "shelf", "vending", "partition", "sofa", "planter", "crates" },
+		14
+	)
+	Dress.interiors(b, rng, { hospital }, { "bed", "bed", "cabinet", "desk", "partition", "lockers", "vending" }, 8)
+	Dress.interiors(
+		b,
+		rng,
+		ruins,
+		{ "sofa", "tableSet", "desk", "cabinet", "rubbleSmall", "partition", "lockers", "crates", "shelf" },
+		3
+	)
+	Dress.interiors(b, rng, { heliport }, { "desk", "lockers", "crates", "cabinet" }, 3)
+
+	-- Toits : acrotères et équipements (les toits se disputent au grappin et aux bottes).
+	Dress.roofs(b, rng, ruins, { "acUnit", "vent", "waterTank", "antennaMast" }, 2)
+	Dress.roofs(b, rng, { galerie, hospital }, { "acUnit", "acUnit", "vent", "waterTank", "antennaMast" }, 6)
+	Dress.roofs(b, rng, { helix, heliport }, { "acUnit", "vent", "antennaMast" }, 3)
+
+	-- Trottoirs, cours et abords.
+	Dress.spawnCover(b, rng, { "barrier", "car", "rubble", "dumpster" })
+	Dress.around(
+		b,
+		rng,
+		ruins,
+		{ "dumpster", "crates", "barrels", "sheetFence", "tent", "tires", "rubbleSmall", "fireBarrel", "sandbags" },
+		4
+	)
+	Dress.around(
+		b,
+		rng,
+		{ galerie, hospital, helix },
+		{ "dumpster", "crates", "sheetFence", "kiosk", "busStop", "van" },
+		8
+	)
+	Dress.scatter(b, rng, {
+		"barrels",
+		"crates",
+		"fireBarrel",
+		"sheetFence",
+		"roadSign",
+		"tires",
+		"rubbleSmall",
+		"rubble",
+		"busStop",
+		"kiosk",
+		"billboard",
+		"planter",
+		"sandbags",
+		"tent",
+		"barrier",
+	}, 230, { x0 = -330, x1 = 330, z0 = -330, z1 = 330 }, 0, "grid")
+	Dress.ring(
+		b,
+		rng,
+		{ "rubble", "car", "van", "barrierRow", "sheetFence", "billboard", "container", "tent" },
+		60,
+		334,
+		380
+	)
+
+	-- Horizon : immeubles éventrés au pied de l'enceinte.
+	Dress.skyline(b, rng, SIZE, {
+		colors = { Color3.fromRGB(58, 56, 70), Color3.fromRGB(70, 68, 84), Color3.fromRGB(46, 46, 58) },
+		material = "Concrete",
+		height = { min = 34, max = 112 },
+		width = { min = 26, max = 56 },
+		glow = { C.magenta, C.cyan, C.orange },
+		glowChance = 0.4,
+	})
 	return b:finish()
 end
