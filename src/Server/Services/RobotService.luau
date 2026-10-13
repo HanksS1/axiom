@@ -295,7 +295,7 @@ local function shoot(robot: Robot, target: Fighter)
 	local hit = random:NextNumber() < m.robots.accuracy
 	local endpoint = target.root.Position
 	if hit then
-		CombatService.applyDamage(target, damage, robot.fighter, { sourcePosition = origin })
+		CombatService.rangedHit(target, damage, robot.fighter, { sourcePosition = origin })
 	else
 		endpoint += Vector3.new(
 			random:NextNumber(-1, 1) * AI.missSpread,

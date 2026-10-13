@@ -12,6 +12,9 @@
 	- saveNow         : force une sauvegarde
 	- equipRifle / equipPistol : équipe le Fusil de Sentinelle / le pistolet
 	                    maison (état Bon) avec des cellules, puis fait réapparaître
+	- equipSpecial    : équipe tour à tour les armes spéciales (Canon à rayons X + Sabre
+	                    laser Neuf, Court-Circuit + Gantelet, Lance-clous + Marteau,
+	                    Mitrailleuse + Lame vibrante), puis fait réapparaître
 	- equipArmor      : équipe gilet et casque (état = amount, 4 par défaut)
 	- respawn         : fait réapparaître le personnage
 	- startSolo / startDuo <mode> : lance une partie (1 Facile, 2 Moyen, 3 Difficile)
@@ -52,6 +55,7 @@ local COMMANDS = {
 	"saveNow",
 	"equipRifle",
 	"equipPistol",
+	"equipSpecial",
 	"equipArmor",
 	"respawn",
 	"finishTutorial",
@@ -77,15 +81,29 @@ local function randomItemId(): string
 	return ids[random:NextInteger(1, #ids)]
 end
 
+-- Armes spéciales proposées tour à tour par `equipSpecial` (le Sabre en état Neuf :
+-- c'est dans cet état seulement qu'il renvoie les tirs).
+local SPECIALS: { { ranged: string, melee: string, meleeCondition: number? } } = {
+	{ ranged = "xray_cannon", melee = "laser_saber", meleeCondition = Config.Conditions.PRISTINE },
+	{ ranged = "short_circuit", melee = "pulse_gauntlet" },
+	{ ranged = "mag_nailer", melee = "hydraulic_hammer" },
+	{ ranged = "bastion_minigun", melee = "vibro_blade" },
+}
+
 -- Équipe une arme à distance (Bon état) et ajoute des piles de cellules adaptées.
-local function equipRanged(player: Player, itemId: string)
+-- `meleeId` : remplace aussi l'arme de mêlée (sinon, une barre à mine s'il n'y en a pas).
+local function equipRanged(player: Player, itemId: string, meleeId: string?, meleeCondition: number?)
 	local info = ItemCatalog.get(itemId)
 	if info == nil then
 		return
 	end
 	local updated = DataService.update(player, function(profile)
 		profile.loadout.ranged = ItemFactory.create(itemId, { condition = Config.Conditions.GOOD })
-		if profile.loadout.melee == nil then
+		if meleeId then
+			profile.loadout.melee = ItemFactory.create(meleeId, {
+				condition = meleeCondition or Config.Conditions.GOOD,
+			})
+		elseif profile.loadout.melee == nil then
 			profile.loadout.melee = ItemFactory.create("shock_crowbar", { condition = Config.Conditions.GOOD })
 		end
 		for _ = 1, 3 do
@@ -146,6 +164,12 @@ local handlers: { [string]: (player: Player, amount: number?) -> () } = {
 	end,
 	equipPistol = function(player)
 		equipRanged(player, "scrap_laser_pistol")
+	end,
+	equipSpecial = function(player)
+		local index = ((player:GetAttribute("DevSpecial") :: number?) or 0) % #SPECIALS + 1
+		player:SetAttribute("DevSpecial", index)
+		local set = SPECIALS[index]
+		equipRanged(player, set.ranged, set.melee, set.meleeCondition)
 	end,
 	equipArmor = function(player, amount)
 		local condition = math.clamp(amount or Config.Conditions.GOOD, Config.Conditions.MIN, Config.Conditions.MAX)

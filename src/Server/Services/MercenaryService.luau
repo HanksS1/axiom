@@ -293,7 +293,11 @@ local function shoot(merc: Mercenary, target: Fighter, distance: number, time: n
 		end
 	end
 	if total > 0 then
-		CombatService.applyDamage(target, total, fighter, { sourcePosition = origin, isHead = head })
+		CombatService.rangedHit(target, total, fighter, {
+			sourcePosition = origin,
+			isHead = head,
+			itemId = ranged.item.itemId,
+		})
 	end
 	-- Tracés : quelques points suffisent (plombs d'un fusil à pompe).
 	while #endpoints > 4 do

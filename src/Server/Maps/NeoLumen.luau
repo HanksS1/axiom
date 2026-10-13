@@ -513,5 +513,9 @@ return function(rng: LayoutBuilder.Rng): LayoutBuilder.Layout
 		glow = { C.magenta, C.cyan, C.orange },
 		glowChance = 0.4,
 	})
+
+	-- Points de départ du mode solo : 16, répartis sur toute la carte (en dernier,
+	-- pour tenir compte des décors).
+	Dress.soloSpawns(b, rng, SIZE)
 	return b:finish()
 end

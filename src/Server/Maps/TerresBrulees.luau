@@ -413,5 +413,9 @@ return function(rng: LayoutBuilder.Rng): LayoutBuilder.Layout
 		height = { min = 30, max = 84 },
 		width = { min = 24, max = 60 },
 	})
+
+	-- Points de départ du mode solo : 16, répartis sur toute la carte (en dernier,
+	-- pour tenir compte des décors).
+	Dress.soloSpawns(b, rng, SIZE)
 	return b:finish()
 end

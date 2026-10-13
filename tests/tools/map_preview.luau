@@ -5,7 +5,8 @@
 
 	Pièces solides en couleur (plus claires en hauteur), décor sans collision
 	en transparence, lumières en jaune, repères en pastilles :
-	D = départ, X = extraction, A = Accélérateur, R = patrouille, caisses en vert.
+	D = départ duo (bordure), S = départ solo, X = extraction, A = Accélérateur,
+	R = patrouille, caisses en vert.
 ]]
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -24,6 +25,7 @@ end
 local HALF = Config.Maps.size / 2
 local MARKERS = {
 	DeploySpawn = { "#ffffff", "D", 7 },
+	SoloSpawn = { "#ffe04d", "S", 6 },
 	ExtractionPoint = { "#ff8a00", "X", 11 },
 	AcceleratorSpot = { "#00e5ff", "A", 6 },
 	RobotSpawn = { "#ff3b3b", "R", 5 },

@@ -135,6 +135,7 @@ return {
 	["touch.crouch"] = "CROUCH",
 	["touch.sprint"] = "SPRINT",
 	["dev.equipRifle"] = "Sentinel Rifle",
+	["dev.equipSpecial"] = "Special weapons",
 	["dev.equipPistol"] = "Scrap Pistol",
 	["dev.equipArmor"] = "Vest + helmet",
 	["dev.respawn"] = "Respawn",

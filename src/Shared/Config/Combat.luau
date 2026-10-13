@@ -104,6 +104,18 @@ return Freeze.deep({
 		maxAngle = 75, -- demi-angle du cône devant l'attaquant (degrés)
 	},
 
+	-- Projectiles lents simulés par le serveur (Lance-clous, Court-Circuit).
+	projectiles = {
+		maxLifetime = 6, -- secondes de vol au maximum
+		maxActive = 8, -- projectiles en vol par tireur
+		splashBodyRadius = 1.5, -- rayon du corps ajouté au rayon de l'explosion
+	},
+
+	-- Repoussement (Gantelet à impulsion) : la distance vient de l'arme.
+	knockback = {
+		duration = 0.4, -- durée du vol plané (secondes)
+	},
+
 	-- Contrôle de mouvement côté serveur (section 19.4).
 	movementGuard = {
 		interval = 0.25, -- secondes entre deux contrôles

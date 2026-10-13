@@ -49,12 +49,19 @@ export type RangedHit = {
 	isHead: boolean,
 	helmet: Types.ItemInstance?,
 	targetKind: TargetKind,
+	throughCover: boolean?, -- le tir a traversé un couvert léger (Canon à rayons X)
 }
 
--- Dégâts d'un projectile d'arme à distance (avant bouclier).
+-- Dégâts d'un projectile d'arme à distance (avant bouclier). Rayon continu : dégâts d'un tic.
 function Damage.ranged(hit: RangedHit): number
 	local def = hit.def
 	local damage = def.damage * ItemRules.efficiency(hit.condition) * Damage.falloff(def.effectiveRange, hit.distance)
+	if def.beamTick then
+		damage *= def.beamTick -- `damage` est exprimé par seconde
+	end
+	if hit.throughCover then
+		damage *= def.lightCoverDamageMultiplier or 0
+	end
 	if hit.isHead and def.headshots and (hit.targetKind == "player" or hit.targetKind == "bot") then
 		damage *= ItemRules.headMultiplier(hit.helmet)
 	end
@@ -133,6 +140,24 @@ function Damage.parryMultiplier(outcome: ParryOutcome): number
 		return 1 - Combat.parry.meleeFrontalReduction
 	end
 	return 1
+end
+
+export type ReflectInput = {
+	parrying: boolean,
+	parryStartedAt: number,
+	now: number,
+	frontal: boolean,
+	reflects: boolean, -- l'arme de mêlée renvoie les tirs (Sabre laser de fortune)
+	condition: number, -- état de l'arme de mêlée
+}
+
+-- Un tir laser est-il renvoyé vers le tireur ? (6.8 : sabre en état Neuf, parade parfaite, de face)
+function Damage.reflectsShot(input: ReflectInput): boolean
+	return input.reflects
+		and input.condition >= Config.Conditions.PRISTINE
+		and input.parrying
+		and input.frontal
+		and input.now - input.parryStartedAt <= Combat.parry.perfectWindow
 end
 
 -- L'attaquant est-il face au défenseur ? (angle entre le regard du défenseur

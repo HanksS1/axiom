@@ -9,6 +9,7 @@ return function(T, H)
 	local Damage = H.require("ReplicatedStorage/Shared/Combat/Damage")
 	local WeaponLogic = H.require("ReplicatedStorage/Shared/Combat/WeaponLogic")
 	local Movement = H.require("ReplicatedStorage/Shared/Combat/Movement")
+	local Projectiles = H.require("ReplicatedStorage/Shared/Combat/Projectiles")
 	local HitValidator = H.require("ServerScriptService/Server/Combat/HitValidator")
 	local Fighter = H.require("ServerScriptService/Server/Combat/Fighter")
 
@@ -43,7 +44,8 @@ return function(T, H)
 
 		it("pas de multiplicateur de tête pour le rayon et les explosions", function()
 			local hit = { def = W.xray_cannon, condition = 4, distance = 5, isHead = true, targetKind = "player" }
-			expect(Damage.ranged(hit)).toBeNear(60)
+			-- Rayon continu : 60 dégâts par seconde, appliqués par tics.
+			expect(Damage.ranged(hit)).toBeNear(60 * W.xray_cannon.beamTick)
 			hit.def = W.short_circuit
 			expect(Damage.ranged(hit)).toBeNear(70)
 			hit.targetKind = "robot"
@@ -75,6 +77,162 @@ return function(T, H)
 			local shots = math.ceil(170 / rifle.damage)
 			local ttk = (shots - 1) / rifle.fireRate
 			expect(ttk > 0.6 and ttk < 1.6).toBe(true)
+		end)
+	end)
+
+	describe("Armes spéciales", function()
+		it("Canon à rayons X : 60 dégâts/s, moitié à travers un couvert léger", function()
+			local def = W.xray_cannon
+			local hit = { def = def, condition = 4, distance = 10, isHead = false, targetKind = "player" }
+			local perSecond = Damage.ranged(hit) / WeaponLogic.fireInterval(def)
+			expect(perSecond).toBeNear(60)
+			hit.throughCover = true
+			expect(Damage.ranged(hit) / WeaponLogic.fireInterval(def)).toBeNear(30)
+			-- Une arme qui ne traverse pas les couverts ne fait aucun dégât à travers.
+			expect(Damage.ranged({
+				def = W.sentinel_rifle,
+				condition = 4,
+				distance = 10,
+				isHead = false,
+				targetKind = "player",
+				throughCover = true,
+			})).toBe(0)
+		end)
+
+		it("Canon à rayons X : +25 de chaleur/s, 1 cellule / 0,5 s, surchauffe en 4 s", function()
+			local def = W.xray_cannon
+			local s = WeaponLogic.new(def)
+			expect(WeaponLogic.fireInterval(def)).toBeNear(0.1)
+			local time, cells, ticks = 0, 0, 0
+			-- Une seconde de rayon.
+			for _ = 1, 10 do
+				expect(WeaponLogic.canFire(def, s, time, 100)).toBe(true)
+				cells += WeaponLogic.fire(def, s, time).cellsConsumed
+				time += def.beamTick
+				ticks += 1
+			end
+			expect(s.heat).toBeNear(25)
+			expect(cells).toBe(2)
+			-- Trop tôt entre deux tics : refusé (plus de tir « gratuit » sans cadence).
+			local ok, why = WeaponLogic.canFire(def, s, time - def.beamTick + 0.01, 100)
+			expect(ok).toBe(false)
+			expect(why).toBe("cooldown")
+			while true do
+				local result = WeaponLogic.fire(def, s, time)
+				time += def.beamTick
+				ticks += 1
+				if result.overheated then
+					break
+				end
+			end
+			expect(ticks).toBe(40) -- 4 secondes
+			-- Sans cellule : pas de rayon.
+			local empty = WeaponLogic.new(def)
+			local allowed, block = WeaponLogic.canFire(def, empty, 0, 0)
+			expect(allowed).toBe(false)
+			expect(block).toBe("no_cells")
+		end)
+
+		it("Sabre laser : renvoi seulement en état Neuf, de face, dans la fenêtre de parade parfaite", function()
+			local base =
+				{ parrying = true, parryStartedAt = 10, now = 10.2, frontal = true, reflects = true, condition = 5 }
+			expect(Damage.reflectsShot(base)).toBe(true)
+			for key, value in { condition = 4, frontal = false, parrying = false, reflects = false, now = 10.3 } do
+				local changed = table.clone(base)
+				changed[key] = value
+				expect(Damage.reflectsShot(changed)).toBe(false)
+			end
+		end)
+
+		-- Monde de test : un sol à y = 0 et, en option, un mur vertical à z = wallZ.
+		local function world(wallZ)
+			return function(_projectile, from, displacement)
+				local best
+				if displacement.Y < 0 and from.Y > 0 then
+					local t = from.Y / -displacement.Y
+					if t <= 1 then
+						best = t
+					end
+				end
+				if wallZ and displacement.Z < 0 and from.Z > wallZ then
+					local t = (from.Z - wallZ) / -displacement.Z
+					if t <= 1 and (best == nil or t < best) then
+						best = t
+					end
+				end
+				if best then
+					return from + displacement * best, "obstacle"
+				end
+				return nil, nil
+			end
+		end
+
+		local function fly(projectile, cast)
+			local list = { projectile }
+			local impacts = {}
+			local time = 0
+			while #list > 0 and time < 20 do
+				time += 1 / 60
+				Projectiles.step(list, 1 / 60, time, cast, function(_p, position, instance)
+					table.insert(impacts, { position = position, instance = instance, time = time })
+				end)
+			end
+			return impacts
+		end
+
+		it("Lance-clous : projectile droit à 250 studs/s, arrêté par le premier obstacle", function()
+			local def = W.mag_nailer
+			local origin = Vector3.new(0, 5, 0)
+			local p = Projectiles.new(origin, Vector3.new(0, 0, -def.projectileSpeed), 0, 300, 6, nil)
+			local impacts = fly(p, world(-100))
+			expect(#impacts).toBe(1)
+			expect(impacts[1].position.Z).toBeNear(-100, 0.01)
+			expect(impacts[1].instance).toBe("obstacle")
+			expect(impacts[1].time).toBeNear(100 / 250, 0.03)
+			-- Sans obstacle : il s'éteint au bout de sa portée, sans rien toucher.
+			local lost = fly(Projectiles.new(origin, Vector3.new(0, 0, -250), 0, 300, 6, nil), function()
+				return nil, nil
+			end)
+			expect(#lost).toBe(1)
+			expect(lost[1].instance).toBeNil()
+			expect((lost[1].position - origin).Magnitude >= 300).toBe(true)
+		end)
+
+		it("Court-Circuit : tir en cloche qui retombe sur le point visé", function()
+			local def = W.short_circuit
+			local origin = Vector3.new(0, 5, 0)
+			for _, target in { Vector3.new(0, 0, -40), Vector3.new(30, 0, -60), Vector3.new(-10, 0, -100) } do
+				local direction = Projectiles.ballisticDirection(origin, target, def.projectileSpeed, def.arcGravity)
+				expect(direction.Magnitude).toBeNear(1)
+				local p = Projectiles.new(origin, direction * def.projectileSpeed, def.arcGravity, 210, 6, nil)
+				local impacts = fly(p, world(nil))
+				expect(#impacts).toBe(1)
+				expect((impacts[1].position - target).Magnitude < 1.5).toBe(true)
+			end
+			-- Hors de portée (v² / g = 135 studs) : tir à 45°.
+			local far =
+				Projectiles.ballisticDirection(origin, Vector3.new(0, 5, -400), def.projectileSpeed, def.arcGravity)
+			expect(far.Y).toBeNear(math.sin(math.rad(45)), 0.01)
+		end)
+
+		it("un à-coup du serveur ne fait pas traverser un mur", function()
+			local list = { Projectiles.new(Vector3.new(0, 5, 0), Vector3.new(0, 0, -250), 0, 300, 6, nil) }
+			local hit
+			Projectiles.step(list, 0.5, 0, world(-60), function(_p, position)
+				hit = position
+			end)
+			expect(#list).toBe(0)
+			expect(hit.Z).toBeNear(-60, 0.01)
+		end)
+
+		it("durée de vie dépassée : le projectile disparaît", function()
+			local list = { Projectiles.new(Vector3.new(0, 5, 0), Vector3.new(0, 0, -1), 0, 300, 2, nil) }
+			local ended = 0
+			Projectiles.step(list, 1 / 60, 3, world(nil), function()
+				ended += 1
+			end)
+			expect(#list).toBe(0)
+			expect(ended).toBe(1)
 		end)
 	end)
 
