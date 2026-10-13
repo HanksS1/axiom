@@ -23,7 +23,8 @@
 | **Terres Brûlées** | Cratère 🔥 (terrasses), base Kestrel (tourelles), caravane-cimetière | Ver de Silice (s'enfouit, surgit sous sa cible) | piste d'atterrissage, station-service, sommet du canyon | radiation : -5 bouclier/s puis -3 PV/s ; le meilleur loot est dans les zones irradiées |
 | **Noyau Zéro** | Cœur serveur 🔥, salles de refroidissement (brouillard), centre de contrôle | Projection d'AXIOM (devient intangible, se déplace par à-coups) | toit des antennes, tunnel de câbles, quai de livraison | coupures de courant de 20 s toutes les 2 à 3 min |
 
-Chaque carte : 8 points de départ en bordure, 3 extractions, 6 Accélérateurs, 55 à 65 caisses.
+Chaque carte : 8 points de départ doubles en bordure (duo) et 16 répartis (solo), 3 extractions,
+6 Accélérateurs, 55 à 65 caisses.
 Les tests vérifient ces nombres, et que chaque caisse, extraction, Accélérateur et point de départ
 est posé sur un sol, hors d'un mur (deux vraies erreurs de placement ont ainsi été corrigées).
 
@@ -59,6 +60,16 @@ un habillage généré par le code.
 
 Outils : `lune run tests/tools/map_stats.luau` (compteurs) et
 `lune run tests/tools/map_preview.luau [dossier]` (plan vu de dessus de chaque carte, en SVG).
+
+## Points de départ (modifié après la P10, à la demande de l'auteur)
+
+Le document prévoyait 8 points de départ en bordure, ce qui superposait deux ennemis en solo.
+
+- **Solo** : 16 points `SoloSpawn`, un par case d'un quadrillage 4 × 4 de la carte : les joueurs
+  apparaissent partout, y compris au cœur de la carte. Chaque point est sur un sol libre, à plus
+  de 45 studs d'une extraction et du bord d'une zone à risque, hors radiation et métal en fusion.
+- **Duo** : les 8 points `DeploySpawn` en bordure, une équipe de deux par point.
+- 16 combattants dans les deux cas (mercenaires IA compris) : un point par équipe, jamais partagé.
 
 ## Comment tester dans Studio
 

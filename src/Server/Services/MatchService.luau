@@ -654,8 +654,16 @@ function MatchService.begin(config: StartConfig): boolean
 	CombatService.setDeathHandler(onDeath)
 	Players.CharacterAutoLoads = false
 
-	-- Déploiement : chaque équipe sur un point de départ différent, en bordure.
+	-- Déploiement : une équipe par point de départ. Solo : 16 points répartis sur toute
+	-- la carte ; duo : 8 points doubles en bordure (16 combattants dans les deux cas,
+	-- mercenaires IA compris). L'arène de test n'a que des points de bordure.
 	local spawns = MapService.deploySpawns()
+	if format == "solo" then
+		local solo = MapService.soloSpawns()
+		if #solo > 0 then
+			spawns = solo
+		end
+	end
 	for index = #spawns, 2, -1 do
 		local swap = random:NextInteger(1, index)
 		spawns[index], spawns[swap] = spawns[swap], spawns[index]

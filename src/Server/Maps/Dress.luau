@@ -218,6 +218,88 @@ function Dress.spawnCover(b: Builder, rng: Rng, list: { string })
 	end
 end
 
+--[[
+	Points de départ du mode solo : `perSide` × `perSide` points (16 par
+	défaut), un par case d'un quadrillage de la carte, pour que les 16 joueurs
+	apparaissent partout et non plus seulement en bordure. Chaque point est
+	sur un sol libre, loin des zones à risque, des extractions, des zones
+	dangereuses et des autres points. À appeler en DERNIER (après les décors).
+]]
+function Dress.soloSpawns(b: Builder, rng: Rng, size: number, perSide: number?): number
+	local side = perSide or 4
+	local half = size / 2 - 30
+	local cell = half * 2 / side
+	local placed: { Vector3 } = {}
+
+	local function allowed(x: number, z: number, spacing: number): boolean
+		if not b:isFree(x, 0, z, 4, 7) then
+			return false
+		end
+		for _, marker in b.layout.markers do
+			local p = marker.cframe.Position
+			local distance = math.sqrt((p.X - x) ^ 2 + (p.Z - z) ^ 2)
+			if marker.tag == "RiskZone" then
+				local radius = if marker.attributes then marker.attributes.Radius else nil
+				if distance < (radius or 20) + 45 then
+					return false
+				end
+			elseif marker.tag == "ExtractionPoint" and distance < 45 then
+				return false
+			elseif marker.tag == "RobotSpawn" and distance < 35 then
+				return false
+			end
+		end
+		for _, hazard in b.layout.hazards do
+			local dx, dz = math.abs(x - hazard.center.X), math.abs(z - hazard.center.Z)
+			if hazard.radius then
+				if dx * dx + dz * dz < (hazard.radius + 12) ^ 2 then
+					return false
+				end
+			elseif hazard.size and dx < hazard.size.X / 2 + 12 and dz < hazard.size.Z / 2 + 12 then
+				return false
+			end
+		end
+		for _, other in placed do
+			if (other.X - x) ^ 2 + (other.Z - z) ^ 2 < spacing * spacing then
+				return false
+			end
+		end
+		return true
+	end
+
+	local function try(x0: number, x1: number, z0: number, z1: number, spacing: number, attempts: number): boolean
+		for _ = 1, attempts do
+			local x, z = math.floor(rng:NextNumber(x0, x1)), math.floor(rng:NextNumber(z0, z1))
+			if allowed(x, z, spacing) then
+				table.insert(placed, Vector3.new(x, 0, z))
+				b:soloSpawn(Vector3.new(x, 0, z))
+				return true
+			end
+		end
+		return false
+	end
+
+	local missing = 0
+	for ix = 0, side - 1 do
+		for iz = 0, side - 1 do
+			local x0, z0 = -half + ix * cell, -half + iz * cell
+			-- Au cœur de la case d'abord (points bien espacés), puis toute la case.
+			local margin = cell * 0.2
+			if
+				not try(x0 + margin, x0 + cell - margin, z0 + margin, z0 + cell - margin, 110, 60)
+				and not try(x0, x0 + cell, z0, z0 + cell, 80, 120)
+			then
+				missing += 1
+			end
+		end
+	end
+	-- Case entièrement occupée (cratère, grand bâtiment) : le point se pose ailleurs.
+	for _ = 1, missing do
+		local _ = try(-half, half, -half, half, 80, 400) or try(-half, half, -half, half, 50, 400)
+	end
+	return #placed
+end
+
 export type Skyline = {
 	colors: { Color3 },
 	material: string,

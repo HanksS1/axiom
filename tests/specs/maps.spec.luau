@@ -69,25 +69,70 @@ return function(T, H)
 				table.insert(byTag[marker.tag], marker)
 			end
 
-			it("repères : 8 départs, 3 extractions, 6 Accélérateurs, 2 ou 3 zones à risque", function()
-				expect(#byTag.DeploySpawn).toBe(8)
-				expect(#byTag.ExtractionPoint).toBe(3)
-				expect(#byTag.AcceleratorSpot).toBe(6)
-				local zones, main = #byTag.RiskZone, 0
-				for _, zone in byTag.RiskZone do
-					if zone.attributes.Main then
-						main += 1
+			it(
+				"repères : 8 départs doubles (duo), 3 extractions, 6 Accélérateurs, 2 ou 3 zones à risque",
+				function()
+					expect(#byTag.DeploySpawn).toBe(8)
+					expect(#byTag.ExtractionPoint).toBe(3)
+					expect(#byTag.AcceleratorSpot).toBe(6)
+					local zones, main = #byTag.RiskZone, 0
+					for _, zone in byTag.RiskZone do
+						if zone.attributes.Main then
+							main += 1
+						end
+					end
+					expect(zones >= 2 and zones <= 3).toBe(true)
+					expect(main).toBe(1)
+					local names = {}
+					for _, marker in byTag.ExtractionPoint do
+						local key = marker.attributes.NameKey
+						expect(type(key)).toBe("string")
+						expect(names[key]).toBeNil()
+						names[key] = true
 					end
 				end
-				expect(zones >= 2 and zones <= 3).toBe(true)
-				expect(main).toBe(1)
-				local names = {}
-				for _, marker in byTag.ExtractionPoint do
-					local key = marker.attributes.NameKey
-					expect(type(key)).toBe("string")
-					expect(names[key]).toBeNil()
-					names[key] = true
+			)
+
+			it("solo : 16 points de départ répartis sur toute la carte", function()
+				local solo = byTag.SoloSpawn or {}
+				expect(#solo).toBe(16)
+				local inner, quadrants = 0, {}
+				for index, marker in solo do
+					local p = marker.cframe.Position
+					if math.max(math.abs(p.X), math.abs(p.Z)) < 200 then
+						inner += 1
+					end
+					quadrants[(if p.X < 0 then "w" else "e") .. (if p.Z < 0 then "s" else "n")] = true
+					-- Espacés les uns des autres.
+					for other = index + 1, #solo do
+						local q = solo[other].cframe.Position
+						if (Vector3.new(p.X, 0, p.Z) - Vector3.new(q.X, 0, q.Z)).Magnitude < 50 then
+							error(`points de départ trop proches : {p} et {q}`)
+						end
+					end
+					-- Loin des extractions et hors des zones à risque.
+					for _, extraction in byTag.ExtractionPoint do
+						local e = extraction.cframe.Position
+						expect((Vector3.new(p.X, 0, p.Z) - Vector3.new(e.X, 0, e.Z)).Magnitude >= 45).toBe(true)
+					end
+					for _, zone in byTag.RiskZone do
+						local z = zone.cframe.Position
+						local distance = (Vector3.new(p.X, 0, p.Z) - Vector3.new(z.X, 0, z.Z)).Magnitude
+						expect(distance >= zone.attributes.Radius + 45).toBe(true)
+					end
+					-- Hors des zones dangereuses (radiation, métal en fusion).
+					for _, hazard in layout.hazards do
+						local dx, dz = math.abs(p.X - hazard.center.X), math.abs(p.Z - hazard.center.Z)
+						if hazard.radius then
+							expect(math.sqrt(dx * dx + dz * dz) > hazard.radius).toBe(true)
+						else
+							expect(dx > hazard.size.X / 2 or dz > hazard.size.Z / 2).toBe(true)
+						end
+					end
 				end
+				-- Pas seulement en bordure : des points au cœur de la carte, dans les 4 quarts.
+				expect(inner >= 3).toBe(true)
+				expect(quadrants.ws and quadrants.wn and quadrants.es and quadrants.en).toBe(true)
 			end)
 
 			it("environ 60 caisses de types connus", function()
@@ -115,11 +160,11 @@ return function(T, H)
 
 			it("caisses, extractions, Accélérateurs et départs posés sur un sol libre", function()
 				local problems = {}
-				for _, tag in { "CrateSpawn", "ExtractionPoint", "AcceleratorSpot", "DeploySpawn" } do
+				for _, tag in { "CrateSpawn", "ExtractionPoint", "AcceleratorSpot", "DeploySpawn", "SoloSpawn" } do
 					for _, marker in byTag[tag] do
 						local p = marker.cframe.Position
 						local y = p.Y
-						if tag == "DeploySpawn" then
+						if tag == "DeploySpawn" or tag == "SoloSpawn" then
 							y -= 3
 						elseif tag ~= "CrateSpawn" then
 							y -= 0.2
@@ -184,11 +229,13 @@ return function(T, H)
 
 			it("aucune pièce solide ne recouvre un repère (décors tournés compris)", function()
 				local problems = {}
-				for _, tag in { "CrateSpawn", "ExtractionPoint", "AcceleratorSpot", "DeploySpawn", "RobotSpawn" } do
+				for _, tag in
+					{ "CrateSpawn", "ExtractionPoint", "AcceleratorSpot", "DeploySpawn", "SoloSpawn", "RobotSpawn" }
+				do
 					for _, marker in byTag[tag] or {} do
 						local p = marker.cframe.Position
 						local y = p.Y
-						if tag == "DeploySpawn" then
+						if tag == "DeploySpawn" or tag == "SoloSpawn" then
 							y -= 3
 						elseif tag == "RobotSpawn" then
 							y -= 1
@@ -326,7 +373,9 @@ return function(T, H)
 					end
 				end
 				local problems = {}
-				for _, tag in { "CrateSpawn", "ExtractionPoint", "AcceleratorSpot", "DeploySpawn", "RobotSpawn" } do
+				for _, tag in
+					{ "CrateSpawn", "ExtractionPoint", "AcceleratorSpot", "DeploySpawn", "SoloSpawn", "RobotSpawn" }
+				do
 					for _, marker in byTag[tag] or {} do
 						local p = marker.cframe.Position
 						-- Repères au niveau du sol seulement (étages, toits et cratère : par les rampes).

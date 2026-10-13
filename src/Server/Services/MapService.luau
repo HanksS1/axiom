@@ -6,7 +6,10 @@
 
 	| Tag               | Rôle                                   | Attributs                      |
 	|-------------------|----------------------------------------|--------------------------------|
-	| DeploySpawn       | 8 points de départ en bordure          |                                |
+	| DeploySpawn       | 8 points de départ doubles en bordure  |                                |
+	|                   | (mode duo : une équipe par point)      |                                |
+	| SoloSpawn         | 16 points de départ répartis sur toute |                                |
+	|                   | la carte (mode solo)                   |                                |
 	| ExtractionPoint   | 3 points d'extraction                  | NameKey (texte traduit)        |
 	| AcceleratorSpot   | 6 emplacements d'Accélérateur (duo)    |                                |
 	| CrateSpawn        | emplacement de caisse                  | CrateType (supply, military…)  |
@@ -65,6 +68,11 @@ end
 
 function MapService.deploySpawns(): { Marker }
 	return collect("DeploySpawn")
+end
+
+-- Points de départ du mode solo (vide : la carte n'en a pas, utiliser `deploySpawns`).
+function MapService.soloSpawns(): { Marker }
+	return collect("SoloSpawn")
 end
 
 function MapService.extractionPoints(): { Marker }
