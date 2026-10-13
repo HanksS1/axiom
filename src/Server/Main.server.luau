@@ -40,21 +40,38 @@ local order = {
 	"DevService",
 }
 
+-- Un service en échec est signalé, mais n'empêche pas les suivants de démarrer
+-- (sinon une seule erreur prive le serveur du Terminus, des parties, etc.).
+local failures = 0
+local function guarded(name: string, step: string, fn: () -> ())
+	local ok, message = xpcall(fn, debug.traceback)
+	if not ok then
+		failures += 1
+		warn(`[Axiom] ÉCHEC {step} de {name} : {message}`)
+	end
+end
+
 ServerNet.init()
 
-local loaded = {}
+local loaded: { { name: string, service: any } } = {}
 for _, name in order do
-	local module = Services:FindFirstChild(name)
-	assert(module and module:IsA("ModuleScript"), `service introuvable : {name}`)
-	local service = require(module) :: any
-	service.init()
-	table.insert(loaded, service)
+	guarded(name, "init", function()
+		local module = Services:FindFirstChild(name)
+		assert(module and module:IsA("ModuleScript"), `service introuvable : {name}`)
+		local service = require(module) :: any
+		service.init()
+		table.insert(loaded, { name = name, service = service })
+	end)
 end
 
-ServerNet.assertAllHandled()
+guarded("ServerNet", "contrôle des remotes", ServerNet.assertAllHandled)
 
-for _, service in loaded do
-	service.start()
+for _, entry in loaded do
+	guarded(entry.name, "start", entry.service.start)
 end
 
-print("[Axiom] serveur prêt")
+if failures == 0 then
+	print("[Axiom] serveur prêt")
+else
+	warn(`[Axiom] serveur démarré avec {failures} échec(s) : voir les messages « ÉCHEC » ci-dessus`)
+end

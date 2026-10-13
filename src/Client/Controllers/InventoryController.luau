@@ -290,7 +290,9 @@ function InventoryController.start()
 			Text = "✕",
 		}),
 		Body = body,
-	})(panel:FindFirstChild("Close") :: TextButton).Activated:Connect(function()
+	})
+	local close = panel:FindFirstChild("Close") :: TextButton
+	close.Activated:Connect(function()
 		InventoryController.setOpen(false)
 	end)
 

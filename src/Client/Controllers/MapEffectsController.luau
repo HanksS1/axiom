@@ -133,7 +133,20 @@ local function setBlackout(on: boolean)
 		}
 		TweenService:Create(Lighting, info, DARK):Play()
 		refreshLights()
+		-- Éclairage sur secteur : éteint. Les lumières de secours restent.
+		for _, light in CollectionService:GetTagged("PowerLight") do
+			if light:IsA("Light") then
+				light:SetAttribute("PoweredOff", true)
+				light.Enabled = false
+			end
+		end
 	else
+		for _, light in CollectionService:GetTagged("PowerLight") do
+			if light:IsA("Light") then
+				light:SetAttribute("PoweredOff", nil)
+				light.Enabled = true
+			end
+		end
 		if saved then
 			TweenService:Create(Lighting, info, saved :: any):Play()
 			saved = nil

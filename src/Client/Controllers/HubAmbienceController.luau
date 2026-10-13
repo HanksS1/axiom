@@ -1,7 +1,9 @@
 --!strict
 --[[
 	HubAmbienceController : la vie du Terminus, jouée côté client (aucun coût
-	serveur). Actif seulement quand la caméra est près du Terminus.
+	serveur). Actif seulement quand la caméra est près du Terminus ; sur une
+	carte de partie, seuls les néons qui grésillent et les gerbes d'étincelles
+	tournent (mêmes tags, posés par MapRenderer).
 
 	- Néons et lumières qui grésillent, gyrophares, lampes qui se balancent,
 	  drones de maintenance, rongeurs mécaniques, hologrammes instables,
@@ -244,24 +246,49 @@ local function flickerStep(time: number)
 			end
 			instance.Transparency = if off then math.min(1, data.baseTransparency + 0.65) else data.baseTransparency
 		elseif instance:IsA("Light") then
-			instance.Enabled = not off
+			-- Coupure de courant (Noyau Zéro) : une lumière éteinte le reste.
+			instance.Enabled = not off and instance:GetAttribute("PoweredOff") ~= true
 		end
 	end
 	local _ = time
 end
 
-local function step(dt: number)
+local function sparkStep()
+	local clock = os.clock()
+	for instance, entry in tracked.SparkBurst do
+		if clock >= entry.data.nextAt then
+			entry.data.nextAt = clock + random:NextNumber(1.2, 3.5)
+			for _, child in instance:GetChildren() do
+				if child:IsA("ParticleEmitter") then
+					child:Emit(random:NextInteger(12, 26))
+				end
+			end
+		end
+	end
+end
+
+-- La caméra est-elle près du Terminus ?
+local function nearTerminus(): boolean
 	local root = terminus()
 	local camera = Workspace.CurrentCamera
 	if root == nil or camera == nil then
-		return
+		return false
 	end
 	local anchor = root:FindFirstChild("Structure")
 	local platform = if anchor then anchor:FindFirstChild("Platform") else nil
 	if platform == nil or not platform:IsA("BasePart") then
-		return
+		return false
 	end
-	if (camera.CFrame.Position - platform.Position).Magnitude > ACTIVE_DISTANCE then
+	return (camera.CFrame.Position - platform.Position).Magnitude <= ACTIVE_DISTANCE
+end
+
+local function step(dt: number)
+	if not nearTerminus() then
+		-- Carte de partie : néons défaillants et étincelles seulement.
+		if Workspace:FindFirstChild("Map") then
+			flickerStep(os.clock())
+			sparkStep()
+		end
 		return
 	end
 	local time = os.clock()
@@ -369,17 +396,7 @@ local function step(dt: number)
 				else math.clamp(base + math.sin(time * 6 + entry.phase) * 0.08, 0, 1)
 		end
 	end
-	local clock = os.clock()
-	for instance, entry in tracked.SparkBurst do
-		if clock >= entry.data.nextAt then
-			entry.data.nextAt = clock + random:NextNumber(1.2, 3.5)
-			for _, child in instance:GetChildren() do
-				if child:IsA("ParticleEmitter") then
-					child:Emit(random:NextInteger(12, 26))
-				end
-			end
-		end
-	end
+	sparkStep()
 
 	-- PNJ.
 	local character = player.Character

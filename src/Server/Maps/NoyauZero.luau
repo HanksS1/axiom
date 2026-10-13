@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Noyau Zéro, data center abandonné (section 12.4) — greybox.
+	Noyau Zéro, data center abandonné (section 12.4).
 
 	- Cœur serveur 🔥 (centre) : salle d'AXIOM, baies de serveurs, Gardien =
 	  projection d'AXIOM dans un corps robotique.
@@ -12,6 +12,7 @@
 	- Extractions : toit des antennes, tunnel de câbles, quai de livraison.
 ]]
 
+local Dress = require(script.Parent.Dress)
 local LayoutBuilder = require(script.Parent.LayoutBuilder)
 
 local C = LayoutBuilder.colors
@@ -28,7 +29,7 @@ return function(rng: LayoutBuilder.Rng): LayoutBuilder.Layout
 	b:borderSpawns(SIZE, 25)
 
 	-- Cœur serveur 🔥 ---------------------------------------------------------------
-	b:building({
+	local core = b:building({
 		x = 0,
 		z = 0,
 		w = 120,
@@ -222,7 +223,7 @@ return function(rng: LayoutBuilder.Rng): LayoutBuilder.Layout
 		{ x = -300, z = -309, r = 30 },
 		{ x = 300, z = -305, r = 35 },
 	}
-	b:cityGrid(rng, {
+	local annexes = b:cityGrid(rng, {
 		from = -315,
 		to = 315,
 		step = 90,
@@ -263,5 +264,174 @@ return function(rng: LayoutBuilder.Rng): LayoutBuilder.Layout
 			b:block("Barrier" .. index, point.X - 8, point.Z, 2, 10, 4, C.darkConcrete, "Concrete")
 		end
 	end
+
+	-- Habillage ------------------------------------------------------------------
+	Dress.reserve(b)
+	b:keepOut(0, 0, 13) -- la Projection d'AXIOM a besoin d'air
+
+	-- Cœur serveur : rangées de baies (couverts), plafonniers froids, chemins de câbles,
+	-- balises de secours aux portes (elles restent allumées pendant les coupures).
+	for _, x in { -40, 0, 40 } do
+		for _, z in { -40, 0, 40 } do
+			Dress.glow(
+				b,
+				`CoreLamp{x}_{z}`,
+				Vector3.new(x, 28.6, z),
+				Vector3.new(6, 0.3, 1.4),
+				Color3.fromRGB(190, 220, 255),
+				48,
+				1.5,
+				(x + z) % 80 == 0
+			)
+		end
+	end
+	for index, z in { -46, -16, 16, 46 } do
+		b:part("CableTray" .. index, Vector3.new(112, 0.6, 2.4), CFrame.new(0, 22, z), SERVER, "Metal", {
+			collide = false,
+			query = false,
+		})
+	end
+	for index, door in
+		{ Vector3.new(30, 0, -56), Vector3.new(30, 0, 56), Vector3.new(56, 0, 8), Vector3.new(-56, 0, 8) }
+	do
+		Dress.glow(
+			b,
+			"CoreExit" .. index,
+			door + Vector3.new(0, 11, 0),
+			Vector3.new(3, 0.6, 0.6),
+			C.red,
+			26,
+			1.6,
+			false,
+			true
+		)
+	end
+	Dress.interiors(b, rng, { core }, {
+		"rackRow",
+		"rackRow",
+		"rackRow",
+		"rack",
+		"coolingUnit",
+		"terminal",
+		"controlDesk",
+		"crates",
+	}, 40)
+
+	-- Couloirs : éclairage de secours et quelques caisses pour s'abriter.
+	for _, span in { { 66, 174 }, { -169, -66 } } do
+		for x = span[1] + 14, span[2] - 10, 30 do
+			Dress.glow(
+				b,
+				"CorridorLamp" .. x,
+				Vector3.new(x, 11.6, 0),
+				Vector3.new(3, 0.3, 1),
+				C.green,
+				26,
+				1.2,
+				false,
+				true
+			)
+		end
+		Dress.scatter(
+			b,
+			rng,
+			{ "crates", "cabinet", "barrels" },
+			4,
+			{ x0 = span[1], x1 = span[2], z0 = -6, z1 = 6 },
+			0,
+			"grid"
+		)
+	end
+
+	-- Refroidissement : groupes froids, cuves, tuyauteries.
+	Dress.interiors(
+		b,
+		rng,
+		{ cooling },
+		{ "coolingUnit", "coolingUnit", "tank", "pipeRack", "barrels", "terminal" },
+		12
+	)
+	for index, lamp in { Vector3.new(-244, 14.6, 0), Vector3.new(-196, 14.6, 0) } do
+		Dress.glow(b, "CoolingLamp" .. index, lamp, Vector3.new(4, 0.3, 1.2), C.cyan, 36, 1.2, true)
+	end
+
+	-- Centre de contrôle : pupitres, terminaux, cloisons vitrées.
+	Dress.interiors(
+		b,
+		rng,
+		{ control },
+		{ "controlDesk", "controlDesk", "desk", "terminal", "cabinet", "partition", "rack" },
+		9
+	)
+	for index, lamp in { Vector3.new(200, 12.6, 0), Vector3.new(240, 12.6, 0), Vector3.new(220, 26.6, 0) } do
+		Dress.glow(
+			b,
+			"ControlLamp" .. index,
+			lamp,
+			Vector3.new(4, 0.3, 1.2),
+			Color3.fromRGB(190, 220, 255),
+			36,
+			1.3,
+			index == 2
+		)
+	end
+
+	-- Annexes : salles de baies et bureaux, équipements de toiture.
+	Dress.interiors(
+		b,
+		rng,
+		annexes,
+		{ "rackRow", "rack", "desk", "cabinet", "controlDesk", "lockers", "terminal", "crates" },
+		3
+	)
+	Dress.interiors(b, rng, { antenna }, { "rack", "desk", "lockers", "terminal" }, 3)
+	Dress.roofs(b, rng, annexes, { "acUnit", "vent", "dish", "antennaMast" }, 2)
+	Dress.roofs(b, rng, { core }, { "acUnit", "acUnit", "vent", "dish", "antennaMast", "coolingUnit" }, 14)
+	Dress.roofs(b, rng, { cooling, control, antenna }, { "acUnit", "vent", "dish" }, 3)
+
+	Dress.around(
+		b,
+		rng,
+		annexes,
+		{ "crates", "generator", "spool", "sheetFence", "barrels", "bollards", "transformer" },
+		3
+	)
+
+	-- Campus : projecteurs (sur secteur), balises de secours, postes de garde, transformateurs.
+	Dress.spawnCover(b, rng, { "barrier", "crates", "barrierRow", "car" })
+	Dress.scatter(b, rng, { "floodlight" }, 20, { x0 = -372, x1 = 372, z0 = -372, z1 = 372 }, 0, "grid")
+	Dress.scatter(b, rng, { "beacon" }, 14, { x0 = -372, x1 = 372, z0 = -372, z1 = 372 }, 0)
+	Dress.scatter(b, rng, {
+		"transformer",
+		"transformer",
+		"dish",
+		"dataPod",
+		"dataPod",
+		"dataPod",
+		"spool",
+		"bollards",
+		"booth",
+		"car",
+		"van",
+		"sheetFence",
+		"barrier",
+		"barrierRow",
+		"generator",
+		"crates",
+		"lampDead",
+		"container",
+		"coolingUnit",
+		"tank",
+	}, 230, { x0 = -376, x1 = 376, z0 = -376, z1 = 376 }, 0, "grid")
+
+	-- Horizon : blocs techniques aveugles, liserés lumineux.
+	Dress.skyline(b, rng, SIZE, {
+		colors = { Color3.fromRGB(34, 38, 50), Color3.fromRGB(44, 50, 64), Color3.fromRGB(26, 28, 38) },
+		material = "Metal",
+		height = { min = 28, max = 86 },
+		width = { min = 30, max = 64 },
+		glow = { C.cyan, C.red, C.green },
+		glowChance = 0.5,
+	})
 	return b:finish()
 end

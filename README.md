@@ -94,7 +94,7 @@ tests/
 | P4 : Robots | ✅ terminée (à valider dans Studio) |
 | P5 : Hub et économie | ✅ terminée (à valider dans Studio) |
 | P6 : Matchmaking | ✅ terminée (à valider dans Studio et en ligne) |
-| P7 : Cartes | ✅ terminée en greybox (à valider dans Studio) |
+| P7 : Cartes | ✅ terminée, habillage généré par le code (à valider dans Studio) |
 | P8 : Interface | ✅ terminée (à valider dans Studio) |
 | P9 : Monétisation | ✅ terminée (identifiants de produits à renseigner) |
 | P10 : Progression et finitions | ✅ terminée (sons à renseigner, à valider dans Studio) |

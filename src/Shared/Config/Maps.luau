@@ -21,6 +21,20 @@ export type Lighting = {
 	fogEnd: number,
 }
 
+-- Ambiance : brume atmosphérique, halo des néons, étalonnage des couleurs.
+export type Mood = {
+	density: number,
+	offset: number,
+	color: Color3,
+	decay: Color3,
+	glare: number,
+	haze: number,
+	bloom: number,
+	contrast: number,
+	saturation: number,
+	tint: Color3,
+}
+
 export type GuardianDef = {
 	robotId: string,
 	nameKey: string,
@@ -40,6 +54,19 @@ local maps = {
 			clockTime = 18.6,
 			fogColor = Color3.fromRGB(90, 70, 120),
 			fogEnd = 900,
+		},
+		-- Crépuscule violet, poussière en suspension, néons qui bavent.
+		mood = {
+			density = 0.36,
+			offset = 0.2,
+			color = Color3.fromRGB(150, 120, 170),
+			decay = Color3.fromRGB(70, 50, 90),
+			glare = 0.2,
+			haze = 2.2,
+			bloom = 0.9,
+			contrast = 0.12,
+			saturation = -0.08,
+			tint = Color3.fromRGB(240, 228, 255),
 		},
 		guardian = {
 			robotId = "warden",
@@ -72,6 +99,19 @@ local maps = {
 			clockTime = 16.5,
 			fogColor = Color3.fromRGB(80, 50, 30),
 			fogEnd = 800,
+		},
+		-- Fumées d'usine, lueur orangée des coulées.
+		mood = {
+			density = 0.42,
+			offset = 0.1,
+			color = Color3.fromRGB(170, 120, 80),
+			decay = Color3.fromRGB(90, 50, 30),
+			glare = 0.1,
+			haze = 2.6,
+			bloom = 1.0,
+			contrast = 0.16,
+			saturation = -0.12,
+			tint = Color3.fromRGB(255, 236, 214),
 		},
 		guardian = {
 			robotId = "warden",
@@ -111,6 +151,19 @@ local maps = {
 			fogColor = Color3.fromRGB(190, 170, 110),
 			fogEnd = 700,
 		},
+		-- Soleil blanc, voile de sable, teinte maladive.
+		mood = {
+			density = 0.4,
+			offset = 0.35,
+			color = Color3.fromRGB(214, 196, 140),
+			decay = Color3.fromRGB(150, 140, 80),
+			glare = 0.5,
+			haze = 2.4,
+			bloom = 0.6,
+			contrast = 0.1,
+			saturation = -0.18,
+			tint = Color3.fromRGB(255, 250, 226),
+		},
 		guardian = {
 			robotId = "warden",
 			nameKey = "guardian.silica_worm",
@@ -145,6 +198,19 @@ local maps = {
 			clockTime = 0.5,
 			fogColor = Color3.fromRGB(20, 25, 40),
 			fogEnd = 600,
+		},
+		-- Nuit froide : seuls les néons et les projecteurs éclairent.
+		mood = {
+			density = 0.3,
+			offset = 0,
+			color = Color3.fromRGB(60, 80, 120),
+			decay = Color3.fromRGB(20, 30, 50),
+			glare = 0,
+			haze = 1.6,
+			bloom = 1.2,
+			contrast = 0.18,
+			saturation = -0.05,
+			tint = Color3.fromRGB(222, 236, 255),
 		},
 		guardian = {
 			robotId = "warden",

@@ -115,6 +115,46 @@ local function applyLighting(settings: any)
 	Lighting.FogEnd = settings.fogEnd
 end
 
+-- Ambiance de la carte : brume atmosphérique, halo des néons, étalonnage des couleurs.
+local MOOD = { "MapAtmosphere", "MapBloom", "MapColor" }
+
+local function clearMood()
+	for _, name in MOOD do
+		local existing = Lighting:FindFirstChild(name)
+		if existing then
+			existing:Destroy()
+		end
+	end
+end
+
+local function applyMood(mood: any?)
+	clearMood()
+	if mood == nil then
+		return
+	end
+	local atmosphere = Instance.new("Atmosphere")
+	atmosphere.Name = "MapAtmosphere"
+	atmosphere.Density = mood.density
+	atmosphere.Offset = mood.offset
+	atmosphere.Color = mood.color
+	atmosphere.Decay = mood.decay
+	atmosphere.Glare = mood.glare
+	atmosphere.Haze = mood.haze
+	atmosphere.Parent = Lighting
+	local bloom = Instance.new("BloomEffect")
+	bloom.Name = "MapBloom"
+	bloom.Intensity = mood.bloom
+	bloom.Size = 24
+	bloom.Threshold = 1.6
+	bloom.Parent = Lighting
+	local color = Instance.new("ColorCorrectionEffect")
+	color.Name = "MapColor"
+	color.Contrast = mood.contrast
+	color.Saturation = mood.saturation
+	color.TintColor = mood.tint
+	color.Parent = Lighting
+end
+
 function MapRuntimeService.unload()
 	MapRuntimeService.stop()
 	local existing = root
@@ -128,6 +168,7 @@ function MapRuntimeService.unload()
 		applyLighting(savedLighting)
 		savedLighting = nil
 	end
+	clearMood()
 	-- Retour aux repères de l'arène de test (bac à sable), s'il y en a une.
 	MapService.setRoot(Workspace:FindFirstChild("Arena"))
 end
@@ -143,7 +184,8 @@ function MapRuntimeService.load(mapId: string): boolean
 		return false
 	end
 	MapRuntimeService.unload()
-	local built = build(Random.new(def.seed))
+	-- Générateur propre aux cartes : même carte dans Studio et dans les tests.
+	local built = build(LayoutBuilder.random(def.seed))
 	savedLighting = {
 		ambient = Lighting.Ambient,
 		outdoorAmbient = Lighting.OutdoorAmbient,
@@ -153,6 +195,7 @@ function MapRuntimeService.load(mapId: string): boolean
 		fogEnd = Lighting.FogEnd,
 	}
 	applyLighting(def.lighting)
+	applyMood(def.mood)
 	local folder = MapRenderer.render(built, Workspace, Maps.origin, mapId)
 	root = folder
 	layout = built

@@ -66,15 +66,15 @@ return Freeze.deep({
 	crates = crates,
 
 	noyauxPacks = {
-		small = { order = 1, robux = 80, noyaux = 100, productId = 0 },
-		medium = { order = 2, robux = 400, noyaux = 550, productId = 0 },
-		large = { order = 3, robux = 800, noyaux = 1200, productId = 0 },
-		huge = { order = 4, robux = 1700, noyaux = 2700, productId = 0 },
+		small = { order = 1, robux = 80, noyaux = 100, productId = 3718226486 },
+		medium = { order = 2, robux = 400, noyaux = 550, productId = 3718226650 },
+		large = { order = 3, robux = 800, noyaux = 1200, productId = 3718226747 },
+		huge = { order = 4, robux = 1700, noyaux = 2700, productId = 3718226827 },
 	},
 
 	vaultExtension = {
 		robux = 199,
-		gamePassId = 0,
+		gamePassId = 2030534275,
 	},
 
 	-- Nombre de reçus mémorisés dans le profil pour l'idempotence.
