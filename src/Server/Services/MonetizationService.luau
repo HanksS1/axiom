@@ -28,6 +28,7 @@ local Shop = require(Shared.Monetization.Shop)
 local Types = require(Shared.Types)
 
 local TransactionLog = require(script.Parent.Parent.Economy.TransactionLog)
+local CrateGifts = require(script.Parent.Parent.Economy.CrateGifts)
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
 local CharacterService = require(script.Parent.CharacterService)
 local DataService = require(script.Parent.DataService)
@@ -201,19 +202,25 @@ local function buy(player: Player, cosmeticId: string)
 end
 
 local function openCrate(player: Player, crateId: string)
-	if not paidRandomAllowed(player) then
-		fail(player, "restricted")
-		return
-	end
 	if not Shop.oddsValid(crateId) then
 		fail(player, "unknown")
+		return
+	end
+	-- Une caisse OFFERTE (administrateur) ne s'achète pas : elle reste ouvrable
+	-- même là où les objets aléatoires payants sont interdits.
+	local profileNow = DataService.getProfile(player)
+	local gifted = profileNow ~= nil and CrateGifts.count(profileNow, crateId) > 0
+	if not gifted and not paidRandomAllowed(player) then
+		fail(player, "restricted")
 		return
 	end
 	local crate = M.crates[crateId]
 	local reason: string? = nil
 	local result: { [string]: any }? = nil
+	local usedGift = false
 	local ok = DataService.update(player, function(profile)
-		if profile.noyaux < crate.price then
+		usedGift = CrateGifts.consume(profile, crateId)
+		if not usedGift and profile.noyaux < crate.price then
 			reason = "not_enough_noyaux"
 			return false
 		end
@@ -224,7 +231,9 @@ local function openCrate(player: Player, crateId: string)
 			reason = "unknown"
 			return false
 		end
-		profile.noyaux -= crate.price
+		if not usedGift then
+			profile.noyaux -= crate.price
+		end
 		profile.pity[crateId] = nextPity
 		local duplicate = profile.cosmeticsOwned[cosmeticId] == true
 		local refund = 0
@@ -245,6 +254,7 @@ local function openCrate(player: Player, crateId: string)
 			refund = refund,
 			guaranteed = Shop.guaranteeNext(crateId, pity),
 			firstTime = firstTime,
+			gifted = usedGift,
 		}
 		return true
 	end)

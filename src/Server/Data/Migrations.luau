@@ -51,6 +51,10 @@ local steps: { [number]: (data: any) -> () } = {
 		-- Aides ponctuelles déjà montrées (première caisse du Holo-Bazar…).
 		data.guidesSeen = data.guidesSeen or {}
 	end,
+	[5] = function(data)
+		-- Caisses offertes par un administrateur (Config.Admin).
+		data.crateTokens = data.crateTokens or {}
+	end,
 }
 
 local function isInteger(value: any): boolean
@@ -192,6 +196,17 @@ function Migrations.sanitize(data: any, now: number): (Profile, Report)
 		for guide, shown in data.guidesSeen do
 			if type(guide) == "string" and #guide <= 32 and shown == true then
 				profile.guidesSeen[guide] = true
+			end
+		end
+	end
+	if type(data.crateTokens) == "table" then
+		for _, kind in Config.Admin.giftCrates do
+			local count = data.crateTokens[kind]
+			if count ~= nil then
+				local clean = clampInteger(count, 0, Config.Admin.maxStock, 0, report)
+				if clean > 0 then
+					profile.crateTokens[kind] = clean
+				end
 			end
 		end
 	end

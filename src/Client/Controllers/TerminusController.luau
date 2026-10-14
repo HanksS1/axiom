@@ -114,7 +114,8 @@ local function renderCrate()
 	if view == nil then
 		return
 	end
-	local stored = view.freeCrate.stored
+	-- Caisses accumulées + caisses gratuites offertes par un administrateur.
+	local stored = view.freeCrate.stored + ((view.crateTokens or {}).free or 0)
 	local nextGrant = view.freeCrate.nextGrantUnix
 	local text: string
 	if stored > 0 then
@@ -202,7 +203,8 @@ end
 
 local function openCrate()
 	local view = ProfileController.get()
-	if crateOpening or view == nil or view.freeCrate.stored <= 0 then
+	local available = if view then view.freeCrate.stored + ((view.crateTokens or {}).free or 0) else 0
+	if crateOpening or view == nil or available <= 0 then
 		ClientNet.fire("OpenFreeCrate") -- le serveur explique le refus
 		return
 	end
