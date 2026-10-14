@@ -34,7 +34,7 @@ d'équipement tombe). Tout se règle dans `Config/Loot.luau` (`kitShare`, `varia
 2. Maintenir **E** (manette : X ; mobile : bouton d'interaction) pour ouvrir.
 3. Panneau de droite : **Prendre** / **Équiper** (un clic), **Tout prendre** (bouton ou E). Sac plein :
    **Échanger** propose de choisir l'objet à laisser.
-4. **Tab** (manette : Select ; mobile : SAC) : panneau du sac — Ranger / Jeter /
+4. **I** (manette : Select ; mobile : SAC) : panneau du sac — Ranger / Jeter /
    Équiper / Utiliser. Jauge « Sac x/y » au-dessus de la barre rapide.
 5. **3 / 4 / 5** : soins, batterie de bouclier, Surcharge (manette : croix bas
    pour choisir, maintenir pour utiliser).
@@ -43,6 +43,19 @@ d'équipement tombe). Tout se règle dans `Config/Loot.luau` (`kitShare`, `varia
 7. Arène = bac à sable, **ni risque ni gain** : aucune caisse, aucun sac de dépouille,
    aucun objet au sol (LootService en mode bac à sable hors partie). Mort dans l'arène :
    réapparition sur place après `Dev.arenaRespawnDelay` (3,5 s), équipement intact.
+
+## Retours de test (inventaire, munitions)
+
+- **Touche du sac : I** (et non plus Tab). Roblox réserve Tab à la liste des joueurs : l'appui
+  n'atteignait jamais le jeu, le sac semblait ne pas s'ouvrir. Tab ne peut plus être choisie
+  dans les paramètres.
+- **« Tout prendre » ne surcharge jamais le sac** : règle pure `InventoryLogic.takeAll` (testée).
+  Le plus précieux d'abord ; l'équipement va dans son emplacement s'il est vide ; ce qui ne tient
+  pas reste dans le conteneur, et le joueur en est prévenu (« Sac plein : N objet(s) laissé(s) »).
+- **Munitions** : chaque carte d'arme à distance indique sa cellule (« Munitions : Cellule
+  légère »), chaque carte de cellule les armes qui l'utilisent ; le HUD affiche la cellule à côté
+  de la réserve. Chez le Marchand, l'onglet Acheter commence par « Munitions de vos armes »
+  (cellules des armes équipées, au coffre ou dans le sac).
 
 ## Sécurité
 

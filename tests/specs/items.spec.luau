@@ -149,4 +149,52 @@ return function(T, H)
 			)
 		end)
 	end)
+
+	describe("Munitions et « Tout prendre »", function()
+		local InventoryLogic = H.require("ReplicatedStorage/Shared/Items/InventoryLogic")
+		local Config = H.require("ReplicatedStorage/Shared/Config")
+
+		it("chaque arme à distance a sa cellule ; chaque cellule sert au moins une arme", function()
+			for id in Config.Weapons.ranged do
+				local cell = ItemRules.ammoOf(id)
+				expect(cell ~= nil).toBe(true)
+				expect(table.find(ItemRules.weaponsUsing(cell), id) ~= nil).toBe(true)
+			end
+			expect(ItemRules.ammoOf("shock_crowbar")).toBeNil()
+			expect(ItemRules.ammoOf("cell_light")).toBeNil()
+			for cellId in Config.Cells do
+				if type(Config.Cells[cellId]) == "table" and Config.Cells[cellId].stackSize then
+					expect(#ItemRules.weaponsUsing(cellId) >= 1).toBe(true)
+				end
+			end
+		end)
+
+		it("tout prendre ne surcharge jamais le sac : ce qui ne tient pas reste dans le conteneur", function()
+			-- Poches seulement (aucun sac porté), déjà presque pleines.
+			local inventory = InventoryLogic.new({ ranged = item("scrap_laser_pistol", 1) }, {
+				item("nanite_injector", nil, { stack = 1 }),
+			})
+			local crate = {
+				item("needle", 3),
+				item("vigil_pistol", 4),
+				item("vest", 2),
+				item("shield_battery", nil, { stack = 1 }),
+				item("cell_light", nil, { stack = 30 }),
+				item("backpack_small", 1),
+				item("nanite_injector", nil, { stack = 2 }),
+			}
+			local taken, kept = InventoryLogic.takeAll(inventory, crate)
+			expect(#taken + #kept).toBe(#crate)
+			expect(#kept > 0).toBe(true)
+			expect(InventoryLogic.used(inventory) <= InventoryLogic.capacity(inventory)).toBe(true)
+			-- Le gilet va dans son emplacement vide, l'arme à distance (emplacement occupé) non.
+			expect(inventory.equipped.vest ~= nil).toBe(true)
+			-- Un conteneur vide ne change rien.
+			local before = InventoryLogic.used(inventory)
+			local none, left = InventoryLogic.takeAll(inventory, {})
+			expect(#none).toBe(0)
+			expect(#left).toBe(0)
+			expect(InventoryLogic.used(inventory)).toBe(before)
+		end)
+	end)
 end

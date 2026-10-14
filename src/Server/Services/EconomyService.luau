@@ -25,9 +25,11 @@ local EconomyRules = require(script.Parent.Parent.Economy.EconomyRules)
 local TransactionLog = require(script.Parent.Parent.Economy.TransactionLog)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
+local CharacterService = require(script.Parent.CharacterService)
 local DataService = require(script.Parent.DataService)
 local MatchService = require(script.Parent.MatchService)
 local QueueService = require(script.Parent.QueueService)
+local RangeService = require(script.Parent.RangeService)
 
 local EconomyService = {}
 
@@ -76,6 +78,12 @@ local function transact(
 		return false, nil
 	end
 	TransactionLog.record(player, kind, detail)
+	-- L'équipement porté au Terminus suit le profil tout de suite (arme en main…).
+	-- Une séance au stand de tir (arme prêtée) est d'abord close proprement.
+	if RangeService.isInSession(player) then
+		RangeService.stop(player)
+	end
+	CharacterService.refreshLoadout(player)
 	return true, detail
 end
 

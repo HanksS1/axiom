@@ -136,6 +136,36 @@ function InventoryLogic.store(inventory: Inventory, item: ItemInstance): (boolea
 	return true, nil
 end
 
+--[[
+	« Tout prendre » : range ce qui tient, le plus précieux d'abord. Un objet
+	d'équipement va dans son emplacement s'il est vide ; sinon il doit tenir dans
+	le sac. Ce qui ne tient pas est rendu dans `kept` (il reste dans le conteneur) :
+	le sac n'est JAMAIS surchargé (une pile peut être prise en partie).
+	Retourne (objets pris, objets laissés). Modifie `inventory`.
+]]
+function InventoryLogic.takeAll(inventory: Inventory, items: { ItemInstance }): ({ ItemInstance }, { ItemInstance })
+	local sorted = table.clone(items)
+	table.sort(sorted, function(a, b)
+		return ItemRules.value(a) > ItemRules.value(b)
+	end)
+	local taken: { ItemInstance } = {}
+	local kept: { ItemInstance } = {}
+	for _, item in sorted do
+		local info = ItemCatalog.get(item.itemId)
+		local slot = InventoryLogic.slotFor(inventory, item.itemId)
+		local done = false
+		if info and info.hasCondition and slot ~= nil and (inventory.equipped :: any)[slot] == nil then
+			done = InventoryLogic.equipFromOutside(inventory, item, slot) == true
+		end
+		if not done then
+			local stored, leftover = InventoryLogic.store(inventory, item)
+			done = stored and leftover == nil
+		end
+		table.insert(if done then taken else kept, item)
+	end
+	return taken, kept
+end
+
 function InventoryLogic.removeFromBag(inventory: Inventory, uid: string): ItemInstance?
 	local item, index = InventoryLogic.findInBag(inventory, uid)
 	if item and index then

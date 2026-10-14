@@ -37,6 +37,15 @@
   serveur au-delà de 1 000 crédits.
 - Journal des transactions (DataStore dédié, une clé par joueur et par jour).
 
+## Équipement porté au Terminus
+
+Hors partie, le personnage porte une copie de l'équipement du profil. Elle n'était faite qu'à
+l'apparition : une arme équipée au coffre (ou achetée puis équipée) n'apparaissait en main qu'à
+la partie suivante. Désormais chaque opération réussie au Terminus (coffre, Marchand, Armurier,
+Assureur…) remet l'équipement porté à jour (`CharacterService.refreshLoadout`, appelé par
+`EconomyService`) : l'arme est en main tout de suite, avec son skin. Une séance au stand de tir
+en cours est d'abord close proprement (l'arme prêtée est rendue).
+
 ## Économie : second retour de test
 
 **Assurance à 0 crédit.** Le coût est calculé (`SE × costShare`), et le kit de base gratuit vaut 0 :

@@ -641,33 +641,20 @@ function LootService.takeAll(player: Player, container: Container): number
 	if fighter == nil or bag == nil or not Fighter.isAlive(fighter) then
 		return 0
 	end
-	local sorted = table.clone(container.items)
-	table.sort(sorted, function(a, b)
-		return ItemRules.value(a) > ItemRules.value(b)
-	end)
-	local taken: { ItemInstance } = {}
-	for _, item in sorted do
-		local info = ItemCatalog.get(item.itemId)
-		local slot: Types.SlotName? = InventoryLogic.slotFor(bag, item.itemId) :: any
-		local done = false
-		if info and info.hasCondition and slot ~= nil and (bag.equipped :: any)[slot] == nil then
-			done = InventoryLogic.equipFromOutside(bag, item, slot) == true
-		end
-		if not done then
-			local stored, leftover = InventoryLogic.store(bag, item)
-			done = stored and leftover == nil
-		end
-		if done then
-			local index = table.find(container.items, item)
-			if index then
-				table.remove(container.items, index)
-			end
-			table.insert(taken, item)
+	-- Ce qui ne tient pas reste dans le conteneur : le sac n'est jamais surchargé.
+	local taken, kept = InventoryLogic.takeAll(bag, container.items)
+	for _, item in taken do
+		local index = table.find(container.items, item)
+		if index then
+			table.remove(container.items, index)
 		end
 	end
 	if #taken == 0 then
 		ServerNet.notify(player, "inventory.failure.bag_full")
 		return 0
+	end
+	if #kept > 0 then
+		ServerNet.notify(player, "loot.someLeft", { count = #kept })
 	end
 	CombatService.equipmentChanged(fighter)
 	if fighter.onInventoryChanged then

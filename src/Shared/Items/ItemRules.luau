@@ -120,6 +120,33 @@ function ItemRules.up(item: ItemInstance): number
 	return if info then info.up else 0
 end
 
+-- Cellule utilisée par une arme à distance (nil pour tout autre objet).
+function ItemRules.ammoOf(itemId: string): string?
+	local info = ItemCatalog.get(itemId)
+	if info and info.category == "ranged" and type(info.def.cell) == "string" then
+		return info.def.cell
+	end
+	return nil
+end
+
+-- Armes qui utilisent une cellule, de la moins chère à la plus chère.
+function ItemRules.weaponsUsing(cellId: string): { string }
+	local list = {}
+	for id, info in ItemCatalog.all() do
+		if info.category == "ranged" and info.def.cell == cellId then
+			table.insert(list, id)
+		end
+	end
+	table.sort(list, function(a, b)
+		local infoA, infoB = ItemCatalog.get(a) :: any, ItemCatalog.get(b) :: any
+		if infoA.baseValue ~= infoB.baseValue then
+			return infoA.baseValue < infoB.baseValue
+		end
+		return a < b
+	end)
+	return list
+end
+
 function ItemRules.totalUp(items: { ItemInstance }): number
 	local total = 0
 	for _, item in items do

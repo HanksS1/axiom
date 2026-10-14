@@ -3,7 +3,7 @@
 	InventoryController : sac porté en partie (section 8, écran 17.3).
 
 	- Reçoit l'état du sac (InventorySync) et l'expose au HUD.
-	- Panneau du sac (Tab / Select manette / bouton sac mobile) :
+	- Panneau du sac (I / Select manette / bouton sac mobile) :
 	  emplacements équipés et contenu, actions Équiper / Ranger / Jeter / Utiliser.
 	- Consommables rapides : 3 = soins, 4 = batterie, 5 = Surcharge
 	  (manette : croix bas pour choisir, maintenir pour utiliser).
