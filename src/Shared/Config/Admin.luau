@@ -15,8 +15,10 @@
 local Freeze = require(script.Parent.Parent.Util.Freeze)
 
 return Freeze.deep({
-	-- Identifiants Roblox des administrateurs (nombres), par exemple { 123456789 }.
-	userIds = {} :: { number },
+	-- Identifiants Roblox des administrateurs (nombres).
+	userIds = {
+		8037310136, -- Antoine (auteur du jeu)
+	} :: { number },
 	-- Groupe Roblox (0 = aucun) et rang minimal pour être administrateur.
 	groupId = 0,
 	minGroupRank = 255,
