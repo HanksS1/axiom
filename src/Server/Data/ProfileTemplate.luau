@@ -15,7 +15,7 @@ local Types = require(Shared.Types)
 local ProfileTemplate = {}
 
 -- Version courante du format de profil (doit correspondre à la dernière migration).
-ProfileTemplate.VERSION = 4
+ProfileTemplate.VERSION = 5
 
 function ProfileTemplate.defaultSettings(): { [string]: any }
 	local settings = {}
@@ -61,6 +61,8 @@ function ProfileTemplate.new(now: number): Types.Profile
 		tutorialDone = false,
 		-- Aides ponctuelles déjà montrées (« cosmetics » : première caisse du Holo-Bazar).
 		guidesSeen = {},
+		-- Caisses offertes par un administrateur, en attente (type → nombre).
+		crateTokens = {},
 		settings = ProfileTemplate.defaultSettings(),
 		processedReceipts = {},
 		receiptOrder = {},

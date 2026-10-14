@@ -70,6 +70,30 @@ Un joueur ne comprenait ni ce qu'il gagnait ni pourquoi « Équiper » ne change
   (`guidesSeen.cosmetics`, profil v4) ; le serveur la signale dans le résultat de la caisse
   (`firstTime`), aucune requête de plus.
 
+## Caisses offertes par un administrateur (giveaway)
+
+Un administrateur peut offrir à un joueur présent sur le serveur des caisses gratuites ou des
+caisses du Holo-Bazar (Rouille, Néon, Prototype), 1 à 20 à la fois.
+
+- **Qui est administrateur** : `Config/Admin.luau` → `userIds` (identifiants Roblox), ou un
+  groupe Roblox (`groupId`, rang minimal `minGroupRank`). Dans Roblox Studio seulement, tout
+  joueur l'est (`everyoneInStudio`) pour pouvoir tester ; sans effet en ligne. C'est le
+  **serveur** qui décide (`AdminService`) ; l'attribut `IsAdmin` ne sert qu'à afficher le
+  bouton, et chaque demande est revérifiée. Une demande d'un non-administrateur est signalée.
+- **Panneau** : bouton « ADMIN » (à droite de l'écran, administrateurs seulement) → joueur,
+  type de caisse, quantité → « Offrir ».
+- **Côté joueur** : notification « Cadeau : 3 Caisse(s) Néon ! » ; au Holo-Bazar, le bouton de
+  la caisse devient « Ouvrir · offerte (3) » (mêmes probabilités et même garantie qu'une caisse
+  achetée, sans payer) ; les caisses gratuites offertes s'ajoutent au compteur du bouton de la
+  caisse gratuite (utilisées après les caisses accumulées). Un joueur pour qui les caisses
+  payantes sont interdites (PolicyService) peut quand même ouvrir les caisses offertes.
+- **Stockage** : `profile.crateTokens` (profil v5, migration testée), sauvegarde immédiate après
+  un cadeau, limite de 999 par type. Chaque cadeau est journalisé (`TransactionLog`,
+  « admin.gift ») chez le joueur et chez l'administrateur.
+- **Limite actuelle** : le joueur doit être sur le même serveur que l'administrateur (le
+  Terminus). Offrir à un joueur hors ligne ou sur un autre serveur demanderait MessagingService
+  et une écriture dans la sauvegarde d'un autre joueur : à faire plus tard si besoin.
+
 ## Comment tester dans Studio
 
 1. Menu ☰ → **Holo-Bazar** (ou « + » à côté des Noyaux).

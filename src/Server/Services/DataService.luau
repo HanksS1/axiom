@@ -130,6 +130,7 @@ function DataService.buildView(profile: Profile): Types.ProfileView
 		bestScoreByMode = profile.bestScoreByMode,
 		tutorialDone = profile.tutorialDone,
 		guidesSeen = profile.guidesSeen,
+		crateTokens = profile.crateTokens,
 		settings = profile.settings,
 		pity = profile.pity,
 		cosmeticsOwned = profile.cosmeticsOwned,

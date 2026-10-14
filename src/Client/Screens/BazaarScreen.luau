@@ -210,7 +210,16 @@ function BazaarScreen.create(parent: Instance, t: Translate, hooks: Hooks): Scre
 	end
 
 	local function renderCrates(view: Types.ProfileView)
-		if Players.LocalPlayer:GetAttribute("PaidRandomItemsRestricted") ~= false then
+		local tokens = view.crateTokens or {}
+		-- Caisses payantes interdites pour ce joueur : seules ses caisses OFFERTES restent.
+		local restricted = Players.LocalPlayer:GetAttribute("PaidRandomItemsRestricted") ~= false
+		local anyGift = false
+		for crateId in M.crates :: { [string]: any } do
+			if (tokens[crateId] or 0) > 0 then
+				anyGift = true
+			end
+		end
+		if restricted and not anyGift then
 			text(list, t("shop.cratesRestricted"), UDim2.new(), UDim2.new(1, -8, 0, 60), {
 				LayoutOrder = nextOrder(),
 				TextColor3 = Theme.textDim,
@@ -232,6 +241,10 @@ function BazaarScreen.create(parent: Instance, t: Translate, hooks: Hooks): Scre
 			return M.crates[a].price < M.crates[b].price
 		end)
 		for _, crateId in crateIds do
+			local gifts = tokens[crateId] or 0
+			if restricted and gifts <= 0 then
+				continue
+			end
 			local crate = M.crates[crateId]
 			local pity = view.pity[crateId] or 0
 			local odds = Shop.displayHundredths(Shop.effectiveOdds(crateId, pity))
@@ -264,9 +277,12 @@ function BazaarScreen.create(parent: Instance, t: Translate, hooks: Hooks): Scre
 				TextColor3 = Theme.textDim,
 				TextSize = 13,
 			})
+			-- Caisse offerte (administrateur) : ouverte d'abord, sans payer.
 			local open = Panel.button(
-				t("shop.openCrate", { noyaux = crate.price }),
-				if view.noyaux >= crate.price then Theme.magenta else Theme.textDim,
+				if gifts > 0
+					then t("shop.openGift", { count = gifts })
+					else t("shop.openCrate", { noyaux = crate.price }),
+				if gifts > 0 then Theme.green elseif view.noyaux >= crate.price then Theme.magenta else Theme.textDim,
 				200
 			)
 			open.AnchorPoint = Vector2.new(1, 0)

@@ -87,6 +87,8 @@ local Remotes: { [string]: RemoteDef } = {
 	CosmeticCrateOpen = { kind = "event", toServer = true },
 	CosmeticCrateResult = { kind = "event", toServer = false },
 	EquipCosmetic = { kind = "event", toServer = true },
+	-- Administration : offrir des caisses à un joueur (refusé si l'appelant n'est pas administrateur)
+	AdminGiftCrates = { kind = "event", toServer = true },
 
 	-- Cartes (P7) : grondements, effondrements, Gardien qui surgit… (effets visuels)
 	MapEvent = { kind = "event", toServer = false },

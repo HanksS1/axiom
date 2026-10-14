@@ -32,6 +32,7 @@ local Config = {
 	Visuals = require(script.Visuals),
 	Audio = require(script.Audio),
 	Dev = require(script.Dev),
+	Admin = require(script.Admin),
 }
 
 return table.freeze(Config)

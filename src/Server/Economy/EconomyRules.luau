@@ -21,6 +21,8 @@ local ItemRules = require(Shared.Items.ItemRules)
 local Pricing = require(Shared.Economy.Pricing)
 local Types = require(Shared.Types)
 
+local CrateGifts = require(script.Parent.CrateGifts)
+
 type Profile = Types.Profile
 type ItemInstance = Types.ItemInstance
 
@@ -387,14 +389,16 @@ function EconomyRules.openFreeCrate(
 ): (boolean, string?, CrateReward?)
 	EconomyRules.accrueFreeCrate(profile, now)
 	local def = Config.Economy.freeCrate
-	if profile.freeCrate.stored <= 0 then
+	if profile.freeCrate.stored > 0 then
+		local wasFull = profile.freeCrate.stored >= def.maxStored
+		profile.freeCrate.stored -= 1
+		if wasFull then
+			-- Le minuteur repart quand une place se libère.
+			profile.freeCrate.lastGrantUnix = now
+		end
+	elseif not CrateGifts.consume(profile, "free") then
+		-- Ni caisse accumulée, ni caisse offerte par un administrateur.
 		return false, "no_crate", nil
-	end
-	local wasFull = profile.freeCrate.stored >= def.maxStored
-	profile.freeCrate.stored -= 1
-	if wasFull then
-		-- Le minuteur repart quand une place se libère.
-		profile.freeCrate.lastGrantUnix = now
 	end
 	if rng:NextNumber() >= def.creditsChance and profile.tempItem == nil then
 		local itemId = def.tempItemPool[rng:NextInteger(1, #def.tempItemPool)]

@@ -25,6 +25,7 @@ local order = {
 	"GadgetController",
 	"TerminusController",
 	"BazaarController",
+	"AdminController",
 	"RangeController",
 	"TutorialController",
 	"AudioController",
