@@ -79,6 +79,7 @@ local boostUntil = 0
 local lastMeleeAt = -math.huge
 local parrying = false
 local triggerPending = false -- un appui de détente non encore consommé (semi-auto, rafale, mêlée)
+local triggerAt = 0 -- moment de cet appui (il expire après Combat.movement.triggerBuffer)
 local fireReadyAt = 0 -- après un sprint : délai avant de pouvoir tirer
 
 local shotParams = RaycastParams.new()
@@ -227,6 +228,10 @@ local function fireRanged()
 	if not canFire then
 		if block == "empty" then
 			WeaponController.reload() -- recharge automatique à vide
+		end
+		-- Rechargement, surchauffe, sans cellules, à vide : l'appui est oublié
+		-- (seule la cadence le garde en attente).
+		if not WeaponLogic.keepsTrigger(block) then
 			triggerPending = false
 		end
 		return
@@ -346,6 +351,10 @@ local function update()
 	if character and character:GetAttribute("Using") == true then
 		return
 	end
+	-- Un appui trop ancien (panneau ouvert, consommable en cours, cadence lente) n'est plus tiré.
+	if triggerPending and os.clock() - triggerAt > Combat.movement.triggerBuffer then
+		triggerPending = false
+	end
 	local wantsFire = InputController.isHeld("fire") or triggerPending
 	if not wantsFire or parrying then
 		return
@@ -387,6 +396,8 @@ function WeaponController.switchTo(slot: "ranged" | "melee")
 		return
 	end
 	activeSlot = slot
+	-- Le rechargement est annulé, et un appui fait avec l'autre arme ne tire pas avec celle-ci.
+	triggerPending = false
 	if rangedState then
 		WeaponLogic.cancelReload(rangedState)
 	end
@@ -446,6 +457,7 @@ function WeaponController.start()
 	InputController.ActionBegan:Connect(function(action)
 		if action == "fire" then
 			triggerPending = true
+			triggerAt = os.clock()
 		elseif action == "switch" then
 			WeaponController.switchTo(if activeSlot == "ranged" then "melee" else "ranged")
 		elseif action == "weapon1" then

@@ -70,6 +70,18 @@ return function(T, H)
 			expect(Pricing.insuranceCost("standard", 1000)).toBe(180)
 			expect(Pricing.insuranceCost("premium", 1000)).toBe(300)
 			expect(Pricing.insuranceCost("gold", 1000)).toBeNil()
+			-- SE nul (kit de base) : prix plancher, jamais 0, hiérarchie des formules conservée.
+			local tiers = H.require("ReplicatedStorage/Shared/Config").Economy.insurance.tiers
+			expect(Pricing.insuranceCost("basic", 0)).toBe(tiers.basic.minCost)
+			expect(Pricing.insuranceCost("standard", 0)).toBe(tiers.standard.minCost)
+			expect(Pricing.insuranceCost("premium", 0)).toBe(tiers.premium.minCost)
+			expect(tiers.basic.minCost > 0).toBe(true)
+			expect(tiers.basic.minCost < tiers.standard.minCost).toBe(true)
+			expect(tiers.standard.minCost < tiers.premium.minCost).toBe(true)
+			-- Kit acheté au Marchand : la part du SE dépasse le plancher.
+			for id, tier in tiers do
+				expect(Pricing.insuranceCost(id, 745) > tier.minCost).toBe(true)
+			end
 		end)
 	end)
 

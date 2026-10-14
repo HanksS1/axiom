@@ -2,7 +2,7 @@
 --[[
 	RobotService : les robots d'AXIOM (section 10).
 
-	- Population initiale : de 20 à 28 robots (60 % en garnison dans les
+	- Population initiale : de 16 à 22 robots (60 % en garnison dans les
 	  zones à risque, 40 % en patrouilles légères), un Gardien dans la zone
 	  principale. Pas de réapparition (sauf vague d'alerte et mécaniques de carte).
 	- IA côté serveur, 8 mises à jour par seconde (étalées), logique coupée
@@ -17,7 +17,7 @@
 	- Détecteur du joueur : attributs Alert (soupçon, recherche, combat) et
 	  Aggro (UserId du joueur remarqué ou visé), lus par le client.
 	- Loot à la destruction (LootGenerator.robot), points de score.
-	- Vague d'alerte à 12:00 : 6 à 10 robots convergent vers les extractions.
+	- Vague d'alerte à 12:00 : 5 à 8 robots convergent vers les extractions.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -75,6 +75,8 @@ type Robot = {
 	surfaceAt: Vector3?, -- Gardien enfoui : point d'émergence annoncé
 	partState: { [BasePart]: { transparency: number, query: boolean } }?,
 	windupUntil: number, -- annonce d'attaque en cours (0 = aucune)
+	faceTarget: CFrame?, -- tourelle ancrée : orientation visée (tournée en continu par la boucle)
+	awake: boolean, -- un joueur est assez proche pour que le robot agisse
 	shownAlert: string?, -- dernières valeurs publiées (attributs du modèle)
 	shownAggro: number?,
 }
@@ -202,21 +204,38 @@ local function nearestPlayerDistance(position: Vector3): number
 	return best
 end
 
+-- Contrainte d'orientation du robot (voir RobotFactory).
+local function facing(robot: Robot): AlignOrientation?
+	local orient = robot.fighter.root:FindFirstChild("Facing")
+	return if orient and orient:IsA("AlignOrientation") then orient else nil
+end
+
+--[[
+	Tourne le robot vers un point, en continu (jamais par paliers) :
+	- robots mobiles : consigne de l'AlignOrientation (résolue à chaque image) ;
+	- robots ancrés (tourelles, bras de Forge-7) : cap visé, appliqué progressivement
+	  par la boucle du serveur (une contrainte ne fait pas tourner une pièce ancrée).
+]]
 local function face(robot: Robot, point: Vector3)
 	local root = robot.fighter.root
 	local flat = Vector3.new(point.X, root.Position.Y, point.Z)
 	if (flat - root.Position).Magnitude < 0.1 then
 		return
 	end
-	if robot.def.flying then
-		local orient = root:FindFirstChild("Facing")
-		if orient and orient:IsA("AlignOrientation") then
-			orient.CFrame = CFrame.lookAt(root.Position, flat).Rotation
-		end
-	else
-		robot.fighter.humanoid.AutoRotate = false
-		root.CFrame = CFrame.lookAt(root.Position, flat)
+	local rotation = CFrame.lookAt(root.Position, flat).Rotation
+	if robot.stationary then
+		robot.faceTarget = rotation
+		return
 	end
+	local orient = facing(robot)
+	if orient == nil then
+		return
+	end
+	if not robot.def.flying then
+		robot.fighter.humanoid.AutoRotate = false
+		orient.Enabled = true
+	end
+	orient.CFrame = rotation
 end
 
 -- Distance au sol (les grands robots et les Mouches ont leur centre loin du sol :
@@ -235,16 +254,19 @@ local function moveTo(robot: Robot, point: Vector3)
 	if robot.def.flying then
 		local hover = root:FindFirstChild("Hover")
 		if hover and hover:IsA("AlignPosition") then
+			-- Consigne = le point visé ; la contrainte plafonne la vitesse (MaxVelocity).
 			local altitude = groundAt(point).Y + 8
-			local target = Vector3.new(point.X, altitude, point.Z)
-			local offset = target - root.Position
-			local step = math.min(offset.Magnitude, robot.def.speed / AI.updateRate * 1.5)
-			hover.Position = if offset.Magnitude > 0.1 then root.Position + offset.Unit * step else target
+			hover.Position = Vector3.new(point.X, altitude, point.Z)
 		end
 		return
 	end
 	local humanoid = robot.fighter.humanoid
+	-- En marche, le Humanoid s'oriente lui-même dans le sens du déplacement.
 	humanoid.AutoRotate = true
+	local orient = facing(robot)
+	if orient then
+		orient.Enabled = false
+	end
 	local time = now()
 	visionParams.FilterDescendantsInstances = { robotFolder() }
 	-- Un obstacle touché tout près du but, c'est le but lui-même (le corps de la cible).
@@ -596,7 +618,8 @@ local function update(robot: Robot, dt: number)
 		return
 	end
 	-- Sommeil : aucun joueur à moins de 150 studs.
-	if nearestPlayerDistance(fighter.root.Position) > AI.sleepDistance and robot.wave == nil then
+	robot.awake = nearestPlayerDistance(fighter.root.Position) <= AI.sleepDistance or robot.wave ~= nil
+	if not robot.awake then
 		stop(robot)
 		return
 	end
@@ -761,6 +784,8 @@ function RobotService.spawn(robotId: string, position: Vector3, garrison: boolea
 		surfaceAt = nil,
 		partState = nil,
 		windupUntil = 0,
+		faceTarget = nil,
+		awake = false,
 		shownAlert = nil,
 		shownAggro = nil,
 	}
@@ -958,7 +983,7 @@ function RobotService.setVisionMultiplier(multiplier: number)
 	visionMultiplier = math.clamp(multiplier, 0.1, 1)
 end
 
--- Vague d'alerte (12:00) : 6 à 10 robots convergent vers les extractions.
+-- Vague d'alerte (12:00) : 5 à 8 robots convergent vers les extractions.
 function RobotService.alertWave()
 	local wave = Config.Match.alertWave
 	local count = math.min(random:NextInteger(wave.minRobots, wave.maxRobots), Density.hardCap - aliveCount())
@@ -1040,11 +1065,32 @@ function RobotService.init()
 	end)
 end
 
+-- Tourelle ancrée : rotation progressive vers son cap (à chaque image, seulement éveillée).
+local function turnStationary(robot: Robot, dt: number)
+	local target = robot.faceTarget
+	if target == nil or not robot.awake or not Fighter.isAlive(robot.fighter) then
+		return
+	end
+	local root = robot.fighter.root
+	local current = root.CFrame.Rotation
+	local _, angle = (current:Inverse() * target):ToAxisAngle()
+	if math.abs(angle) < math.rad(0.5) then
+		robot.faceTarget = nil
+		root.CFrame = CFrame.new(root.Position) * target
+		return
+	end
+	local alpha = math.min(1, dt * AI.turnResponsiveness, AI.turnRate * dt / math.abs(angle))
+	root.CFrame = CFrame.new(root.Position) * current:Lerp(target, alpha)
+end
+
 function RobotService.start()
 	local interval = 1 / AI.updateRate
-	RunService.Heartbeat:Connect(function()
+	RunService.Heartbeat:Connect(function(dt: number)
 		local time = now()
 		for _, robot in robots do
+			if robot.stationary and robot.faceTarget then
+				turnStationary(robot, dt)
+			end
 			if time >= robot.nextUpdate then
 				robot.nextUpdate = time + interval
 				local ok, err = try(update, robot, interval)

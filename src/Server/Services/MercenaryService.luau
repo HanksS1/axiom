@@ -136,7 +136,12 @@ local function moveTo(merc: Mercenary, point: Vector3)
 	local fighter = merc.fighter
 	local root = fighter.root
 	local humanoid = fighter.humanoid
+	-- En marche, le Humanoid s'oriente lui-même dans le sens du déplacement.
 	humanoid.AutoRotate = true
+	local orient = root:FindFirstChild("Facing")
+	if orient and orient:IsA("AlignOrientation") then
+		orient.Enabled = false
+	end
 	rayParams.FilterDescendantsInstances = { mercFolder() }
 	local offset = point - root.Position
 	if Workspace:Raycast(root.Position, offset, rayParams) == nil then
@@ -174,12 +179,16 @@ local function stop(merc: Mercenary)
 	merc.fighter.humanoid:MoveTo(merc.fighter.root.Position)
 end
 
+-- Tourne le mercenaire vers un point, en continu (contrainte d'orientation, comme
+-- les robots) : jamais d'écriture directe du CFrame, qui le ferait tourner par paliers.
 local function face(merc: Mercenary, point: Vector3)
 	local root = merc.fighter.root
 	local flat = Vector3.new(point.X, root.Position.Y, point.Z)
-	if (flat - root.Position).Magnitude > 0.1 then
+	local orient = root:FindFirstChild("Facing")
+	if (flat - root.Position).Magnitude > 0.1 and orient and orient:IsA("AlignOrientation") then
 		merc.fighter.humanoid.AutoRotate = false
-		root.CFrame = CFrame.lookAt(root.Position, flat)
+		orient.CFrame = CFrame.lookAt(root.Position, flat).Rotation
+		orient.Enabled = true
 	end
 end
 
@@ -643,6 +652,20 @@ local function spawnMercenary(teamId: string, cframe: CFrame, leader: Player?)
 		health:Destroy()
 	end
 	character:PivotTo(cframe)
+	-- Orientation lissée (désactivée en marche, voir face / moveTo).
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "AlignAttachment"
+	attachment.Parent = root
+	local orient = Instance.new("AlignOrientation")
+	orient.Name = "Facing"
+	orient.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	orient.Attachment0 = attachment
+	orient.MaxTorque = math.huge
+	orient.MaxAngularVelocity = Config.Robots.ai.turnRate
+	orient.Responsiveness = Config.Robots.ai.turnResponsiveness
+	orient.CFrame = cframe.Rotation
+	orient.Enabled = false
+	orient.Parent = root
 	character.Parent = mercFolder()
 	pcall(function()
 		root:SetNetworkOwner(nil)

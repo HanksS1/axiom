@@ -33,6 +33,7 @@ local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
+local TransactionLog = require(script.Parent.Parent.Economy.TransactionLog)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
 local Uid = require(script.Parent.Parent.Util.Uid)
@@ -242,6 +243,11 @@ local function applyOutcome(
 	local xpGained = Leveling.matchXp(breakdown.total)
 	local levelBefore = profile.level
 	profile.level, profile.xp = Leveling.addXp(profile.level, profile.xp, xpGained)
+	-- Crédits : même modèle que l'XP (l'extraction paie nettement mieux que la mort).
+	local creditsBefore = profile.credits
+	local earned = MatchRules.matchCredits(breakdown.total, extracted, outcome == "left")
+	profile.credits = math.min(Config.Economy.maxCredits, profile.credits + earned)
+	local creditsGained = profile.credits - creditsBefore
 
 	local stats = profile.stats
 	stats.matchesPlayed += 1
@@ -286,6 +292,7 @@ local function applyOutcome(
 		score = breakdown,
 		topPosition = position,
 		xpGained = xpGained,
+		creditsGained = creditsGained,
 		levelBefore = levelBefore,
 		level = profile.level,
 		xp = profile.xp,
@@ -317,6 +324,13 @@ local function finalize(participant: Participant, outcome: Outcome, carried: Inv
 	end)
 	task.spawn(DataService.saveNow, player) -- « sauvegardé immédiatement »
 	if result then
+		if result.creditsGained > 0 then
+			TransactionLog.record(player, "match.credits", {
+				credits = result.creditsGained,
+				outcome = outcome,
+				score = result.score.total,
+			})
+		end
 		MatchService.ScoreRecorded:Fire(player, result.mode, result.score.total)
 		if player.Parent == Players then
 			ServerNet.fire("MatchResult", player, result)

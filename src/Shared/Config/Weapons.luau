@@ -57,6 +57,10 @@ export type RangedDef = {
 	noiseRadius: number, -- rayon d'audition des robots
 	tracerDuration: number?, -- tracé visible par tous (secondes)
 	lightCoverDamageMultiplier: number?, -- traverse les couverts légers
+	-- Dégâts × ce facteur contre les robots. Dégressif avec la valeur de l'arme : les
+	-- armes de début rattrapent les PV des robots, les armes chères n'en ont pas besoin.
+	-- Repères : kit de base 1,6 · armes à ~600-900 cr 1,3-1,4 · ~1 000 cr 1,2 ·
+	-- Aiguille et armes lourdes : aucun · Court-Circuit 2,5 (arme anti-robot, plafond).
 	robotDamageMultiplier: number?,
 	slowOnHit: { multiplier: number, duration: number }?,
 	up: number,
@@ -100,6 +104,7 @@ local ranged: { [string]: RangedDef } = {
 		spread = 1.2,
 		noiseRadius = DEFAULT_NOISE,
 		up = 2,
+		robotDamageMultiplier = 1.6, -- kit de base : une Sentinelle (Moyen) en moins d'un chargeur
 		baseValue = 100,
 	},
 	vigil_pistol = {
@@ -120,6 +125,7 @@ local ranged: { [string]: RangedDef } = {
 		spread = 0.9,
 		noiseRadius = DEFAULT_NOISE,
 		up = 2,
+		robotDamageMultiplier = 1.4,
 		baseValue = 600,
 	},
 	crackler = {
@@ -140,6 +146,7 @@ local ranged: { [string]: RangedDef } = {
 		spread = 2.2,
 		noiseRadius = DEFAULT_NOISE,
 		up = 3,
+		robotDamageMultiplier = 1.3,
 		baseValue = 750,
 	},
 	sentinel_rifle = {
@@ -160,6 +167,7 @@ local ranged: { [string]: RangedDef } = {
 		spread = 1.0,
 		noiseRadius = DEFAULT_NOISE,
 		up = 4,
+		robotDamageMultiplier = 1.2,
 		baseValue = 1000,
 	},
 	hullbreaker = {
@@ -180,6 +188,7 @@ local ranged: { [string]: RangedDef } = {
 		spread = 6,
 		noiseRadius = DEFAULT_NOISE,
 		up = 3,
+		robotDamageMultiplier = 1.2,
 		baseValue = 1100,
 	},
 	mag_nailer = {
@@ -201,6 +210,7 @@ local ranged: { [string]: RangedDef } = {
 		projectileSpeed = 250,
 		noiseRadius = 15,
 		up = 3,
+		robotDamageMultiplier = 1.3,
 		baseValue = 900,
 	},
 	needle = {

@@ -543,4 +543,81 @@ return function(T, H)
 			expect(cells.nanite_injector).toBeNil()
 		end)
 	end)
+
+	describe("Détente pendant un rechargement", function()
+		it("seule la cadence garde un appui en attente", function()
+			expect(WeaponLogic.keepsTrigger("cooldown")).toBe(true)
+			for _, block in { "reloading", "overheated", "no_cells", "empty" } do
+				expect(WeaponLogic.keepsTrigger(block)).toBe(false)
+			end
+			expect(Config.Combat.movement.triggerBuffer > Config.Combat.movement.sprintToFireDelay).toBe(true)
+		end)
+
+		it("un appui pendant le rechargement est refusé pour « rechargement » (donc oublié)", function()
+			local def = W.scrap_laser_pistol
+			local state = WeaponLogic.new(def, 0)
+			state.ammo = 0
+			WeaponLogic.startReload(def, state, 0)
+			local ok, block = WeaponLogic.canFire(def, state, 0.5, 100)
+			expect(ok).toBe(false)
+			expect(block).toBe("reloading")
+			expect(WeaponLogic.keepsTrigger(block)).toBe(false)
+		end)
+	end)
+
+	describe("Armes contre les robots", function()
+		local Robots = Config.Robots.byId
+		local Modes = Config.Modes.byId
+		-- Tirs nécessaires pour détruire un robot (arme dans son état, mode de jeu, à bout portant).
+		local function shots(weaponId, condition, robotId, modeId)
+			local hit = { def = W[weaponId], condition = condition, distance = 5, isHead = false, targetKind = "robot" }
+			local health = Robots[robotId].health * Modes[modeId].robots.health
+			return math.ceil(health / (Damage.ranged(hit) * W[weaponId].pellets))
+		end
+
+		it("le pistolet du kit de base a un bonus contre les robots, nettement sous l'arme de référence", function()
+			local kit = Config.Economy.baseKit.ranged
+			local pistol = W[kit.itemId].robotDamageMultiplier
+			expect(pistol ~= nil).toBe(true)
+			expect(pistol > 1).toBe(true)
+			expect(pistol <= W.short_circuit.robotDamageMultiplier - 0.5).toBe(true)
+			expect(W.short_circuit.robotDamageMultiplier).toBe(2.5)
+		end)
+
+		it("kit de base : robots légers et moyens en un chargeur, lourds et Gardien jamais triviaux", function()
+			local kit = Config.Economy.baseKit.ranged
+			local capacity = W[kit.itemId].capacity
+			for _, modeId in { "easy", "medium" } do
+				expect(shots(kit.itemId, kit.condition, "stalker", modeId) <= 5).toBe(true)
+				expect(shots(kit.itemId, kit.condition, "sentinel", modeId) <= capacity).toBe(true)
+			end
+			-- Bastion : au moins deux chargeurs (sauf en visant son point faible) ; Gardien : un vrai combat.
+			expect(shots(kit.itemId, kit.condition, "bastion", "medium") >= capacity * 2).toBe(true)
+			expect(shots(kit.itemId, kit.condition, "warden", "easy") >= 40).toBe(true)
+			expect(shots(kit.itemId, kit.condition, "warden", "medium") >= 60).toBe(true)
+		end)
+
+		it("bonus dégressif avec la valeur : l'équipement acheté reste plus fort par seconde", function()
+			local previous = math.huge
+			local ids = {}
+			for id, def in W do
+				if def.robotDamageMultiplier and id ~= "short_circuit" then
+					table.insert(ids, id)
+				end
+			end
+			table.sort(ids, function(a, b)
+				return W[a].baseValue < W[b].baseValue
+			end)
+			for _, id in ids do
+				expect(W[id].robotDamageMultiplier <= previous).toBe(true)
+				previous = W[id].robotDamageMultiplier
+			end
+			-- Dégâts par seconde contre un robot : Fusil Sentinelle (bon état) > pistolet du kit.
+			local function dps(id, condition)
+				local hit = { def = W[id], condition = condition, distance = 5, isHead = false, targetKind = "robot" }
+				return Damage.ranged(hit) * W[id].pellets * W[id].burstCount * W[id].fireRate
+			end
+			expect(dps("sentinel_rifle", 3) > dps("scrap_laser_pistol", 1) * 2).toBe(true)
+		end)
+	end)
 end

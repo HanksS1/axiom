@@ -99,6 +99,18 @@ function WeaponLogic.cellsForNextShot(def: any, state: RangedState): number
 end
 
 --[[
+	Un appui de détente refusé pour ce motif doit-il rester en attente ?
+	Seule la cadence (« cooldown ») justifie d'attendre : le tir part dès que
+	l'arme est prête (dans la limite de Combat.movement.triggerBuffer). Un appui
+	pendant un rechargement, une surchauffe, sans cellules ou à vide (qui lance
+	le rechargement) est oublié : sinon les tirs « mis en attente » partiraient
+	tous d'un coup à la fin du rechargement.
+]]
+function WeaponLogic.keepsTrigger(block: FireBlock?): boolean
+	return block == "cooldown"
+end
+
+--[[
 	Le tir est-il possible maintenant ? `intervalScale` (0..1) assouplit le
 	contrôle de cadence côté serveur (paquets réseau regroupés) ; 1 = strict.
 ]]

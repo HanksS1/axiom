@@ -48,40 +48,43 @@ local maps = {
 		id = "neo_lumen",
 		order = 1,
 		seed = 1101,
-		-- Nuit urbaine néon, LISIBLE (retour de test : « inutilisablement sombre »).
-		-- Avant : ambient (70,60,90), outdoorAmbient (110,90,140), brightness 1.6,
-		-- density 0.36, haze 2.2, contrast 0.12. Leviers, du plus efficace au plus fin :
-		-- 1. ambient / outdoorAmbient : relèvent le noir des zones d'ombre (silhouettes,
-		--    couvertures) sans éclaircir le ciel ; c'est ce qui aide les écrans pâles ;
-		-- 2. density / haze de l'Atmosphere : la brume mangeait le relief au-delà de
-		--    ~60 studs (distance de combat) ;
-		-- 3. exposure : éclaircit tout l'écran (à manier par 0,1) ;
-		-- 4. lightScale : néons et lampadaires plus forts et plus larges, ce qui garde
-		--    l'ambiance de nuit mieux qu'une lumière globale.
+		-- Nuit urbaine néon, LISIBLE. Seconde passe (retour de test : « encore trop
+		-- sombre, combat illisible ») : lumière ambiante proche de la normale sous un
+		-- ciel de nuit. La lisibilité passe avant l'ambiance : c'est un jeu de combat.
+		-- Historique : ambient (70,60,90) → (104,94,128) → (150,144,168).
+		-- Leviers, du plus efficace au plus fin :
+		-- 1. ambient / outdoorAmbient : plancher du noir des zones d'ombre (terrain,
+		--    couvertures, silhouettes), sans toucher au ciel. Proche du neutre (~150),
+		--    légèrement violet pour garder la teinte de la carte ;
+		-- 2. density / haze : brume presque levée, le relief se lit à distance de combat ;
+		-- 3. exposure : +0,4 éclaircit tout l'écran (écrans pâles) ;
+		-- 4. lightScale : néons et lampadaires bien plus forts et plus larges (portée
+		--    plafonnée à 60 studs par MapRenderer) : c'est ce qui garde l'air de nuit ;
+		-- 5. clockTime : INCHANGÉ (18,6, crépuscule violet) : c'est lui qui fait le ciel.
 		lighting = {
-			ambient = Color3.fromRGB(104, 94, 128),
-			outdoorAmbient = Color3.fromRGB(138, 122, 168),
-			brightness = 2.1,
+			ambient = Color3.fromRGB(150, 144, 168),
+			outdoorAmbient = Color3.fromRGB(168, 160, 190),
+			brightness = 2.5,
 			clockTime = 18.6,
 			fogColor = Color3.fromRGB(90, 70, 120),
 			fogEnd = 900,
-			exposure = 0.25,
+			exposure = 0.4,
 		},
 		-- Crépuscule violet, poussière en suspension, néons qui bavent.
 		mood = {
-			density = 0.22,
-			offset = 0.12,
+			density = 0.12,
+			offset = 0.05,
 			color = Color3.fromRGB(150, 120, 170),
-			decay = Color3.fromRGB(78, 58, 100),
-			glare = 0.1,
-			haze = 0.9,
-			bloom = 0.9,
-			contrast = 0.08,
-			saturation = -0.04,
-			tint = Color3.fromRGB(244, 236, 255),
+			decay = Color3.fromRGB(90, 70, 110),
+			glare = 0,
+			haze = 0.3,
+			bloom = 0.8,
+			contrast = 0.04,
+			saturation = 0,
+			tint = Color3.fromRGB(248, 244, 255),
 		},
 		-- Lumières de la carte (néons, lampadaires) : × intensité, × portée (60 au plus).
-		lightScale = { brightness = 1.4, range = 1.2 },
+		lightScale = { brightness = 1.8, range = 1.5 },
 		guardian = {
 			robotId = "warden",
 			nameKey = "guardian.helix_titan",

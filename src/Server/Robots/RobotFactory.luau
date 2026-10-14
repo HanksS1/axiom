@@ -122,27 +122,39 @@ function RobotFactory.build(robotId: string, cframe: CFrame, override: any?): Bu
 	humanoid.HipHeight = if def.flying then 0 else math.max(0, size.Y / 2 - 1)
 	humanoid.Parent = model
 
+	-- Orientation par contrainte physique (tous les robots) : l'IA donne un cap
+	-- quelques fois par seconde, la contrainte tourne le robot en continu. Jamais
+	-- d'écriture directe du CFrame d'un robot qui bouge (rotation par paliers).
+	-- Au sol, elle n'est active que lorsque le robot fait face à sa cible (sinon le
+	-- Humanoid s'oriente lui-même dans le sens de la marche).
+	local AI = Config.Robots.ai
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "AlignAttachment"
+	attachment.Parent = root
+	local orient = Instance.new("AlignOrientation")
+	orient.Name = "Facing"
+	orient.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	orient.Attachment0 = attachment
+	orient.MaxTorque = math.huge
+	orient.MaxAngularVelocity = AI.turnRate
+	orient.Responsiveness = AI.turnResponsiveness
+	orient.CFrame = cframe.Rotation
+	orient.Enabled = def.flying == true
+	orient.Parent = root
+
 	if def.flying then
-		-- Vol : position et orientation maintenues par contraintes physiques.
+		-- Vol : position maintenue par contrainte. La consigne est le point visé, la
+		-- vitesse est plafonnée par la contrainte : trajectoire continue, sans à-coups.
 		humanoid.PlatformStand = true
-		local attachment = Instance.new("Attachment")
-		attachment.Parent = root
 		local align = Instance.new("AlignPosition")
 		align.Name = "Hover"
 		align.Mode = Enum.PositionAlignmentMode.OneAttachment
 		align.Attachment0 = attachment
 		align.MaxForce = 1e6
+		align.MaxVelocity = def.speed
 		align.Responsiveness = 18
 		align.Position = cframe.Position
 		align.Parent = root
-		local orient = Instance.new("AlignOrientation")
-		orient.Name = "Facing"
-		orient.Mode = Enum.OrientationAlignmentMode.OneAttachment
-		orient.Attachment0 = attachment
-		orient.MaxTorque = 1e6
-		orient.Responsiveness = 20
-		orient.CFrame = cframe.Rotation
-		orient.Parent = root
 	end
 
 	return { model = model, root = root, humanoid = humanoid, eye = eye }

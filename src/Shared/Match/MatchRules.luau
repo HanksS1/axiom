@@ -110,6 +110,20 @@ function MatchRules.score(stats: MatchStats, modeId: string, extracted: boolean)
 	}
 end
 
+--[[
+	Crédits gagnés en fin de partie (Config.Progression.credits), à partir du score
+	déjà calculé. `abandoned` : le joueur a quitté la partie (aucun gain).
+]]
+function MatchRules.matchCredits(scoreTotal: number, extracted: boolean, abandoned: boolean): number
+	if abandoned then
+		return 0
+	end
+	local C = Progression.credits
+	local base = C.participation + math.max(0, scoreTotal) * C.scoreShare
+	local credits = if extracted then base + C.extractionBonus else base * C.deathShare
+	return math.clamp(math.floor(credits), 0, C.maxPerMatch)
+end
+
 export type TopGame = Types.TopGame
 
 --[[

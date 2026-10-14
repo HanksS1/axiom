@@ -61,24 +61,27 @@ un habillage généré par le code.
 Outils : `lune run tests/tools/map_stats.luau` (compteurs) et
 `lune run tests/tools/map_preview.luau [dossier]` (plan vu de dessus de chaque carte, en SVG).
 
-## Néo-Lumen plus lisible (retour de test)
+## Néo-Lumen plus lisible (deux retours de test)
 
-La carte était inutilisablement sombre. Réglages de `Config.Maps.neo_lumen` (avant → après) :
+Cible : **une lumière ambiante proche de la normale sous un ciel de nuit**. La lisibilité passe
+avant l'ambiance (jeu de combat). Réglages de `Config.Maps.neo_lumen` :
 
-| Réglage | Avant | Après | Pourquoi |
-|---|---|---|---|
-| `ambient` | (70, 60, 90) | (104, 94, 128) | relève le noir des ombres : silhouettes et couvertures lisibles, ciel inchangé |
-| `outdoorAmbient` | (110, 90, 140) | (138, 122, 168) | idem à l'extérieur |
-| `brightness` | 1,6 | 2,1 | lune / crépuscule un peu plus fort |
-| `exposure` | 0 | 0,25 | éclaircit tout l'écran (écrans pâles) |
-| `mood.density` | 0,36 | 0,22 | la brume mangeait le relief au-delà de ~60 studs |
-| `mood.haze` | 2,2 | 0,9 | idem |
-| `mood.contrast` | 0,12 | 0,08 | des ombres moins bouchées |
-| `lightScale` | — | ×1,4 intensité, ×1,2 portée | néons et lampadaires plus forts : garde l'ambiance de nuit |
+| Réglage | Origine | 1re passe | 2e passe | Pourquoi |
+|---|---|---|---|---|
+| `ambient` | (70, 60, 90) | (104, 94, 128) | (150, 144, 168) | plancher du noir : terrain, couvertures, silhouettes lisibles ; légèrement violet |
+| `outdoorAmbient` | (110, 90, 140) | (138, 122, 168) | (168, 160, 190) | idem à l'extérieur |
+| `brightness` | 1,6 | 2,1 | 2,5 | lumière directe un peu plus forte |
+| `exposure` | 0 | 0,25 | 0,4 | éclaircit tout l'écran (écrans pâles) |
+| `mood.density` | 0,36 | 0,22 | 0,12 | brume presque levée : relief lisible à distance de combat |
+| `mood.haze` | 2,2 | 0,9 | 0,3 | idem |
+| `mood.glare` | 0,2 | 0,1 | 0 | plus d'éblouissement près du soleil couchant |
+| `mood.contrast` | 0,12 | 0,08 | 0,04 | ombres moins bouchées |
+| `lightScale` | — | ×1,4 / ×1,2 | ×1,8 / ×1,5 | néons et lampadaires (intensité / portée, portée plafonnée à 60 studs) |
+| `clockTime` | 18,6 | 18,6 | 18,6 | **inchangé** : c'est lui qui donne le ciel de nuit |
 
-L'heure (18,6, crépuscule violet) et les couleurs de la brume ne changent pas : la carte reste
-une nuit urbaine néon. Pour ajuster : d'abord `ambient` (±10 par canal), puis `density` / `haze`,
-puis `exposure` par pas de 0,05. `lightScale` existe pour toutes les cartes (champ facultatif).
+Pour ajuster au test : d'abord `ambient` / `outdoorAmbient` (±15 par canal), puis `exposure` par
+pas de 0,05 (au-delà de 0,5, l'image « délave »), puis `lightScale.brightness`. Si la carte
+paraît « plein jour », baisser `exposure` avant `ambient`. Les autres cartes ne changent pas.
 L'éclairage n'est plus « sauvegardé puis restauré » : au retour, c'est celui du Terminus.
 
 ## Points de départ (modifié après la P10, à la demande de l'auteur)

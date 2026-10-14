@@ -216,12 +216,15 @@ local robots: { [string]: RobotDef } = {
 return Freeze.deep({
 	byId = robots,
 
+	-- Densité réduite d'environ 20 % après les tests (document : 20 à 28 robots,
+	-- vague de 6 à 10) : l'auteur préfère moins de robots et plus de fluidité.
+	-- Chaque robot est un Humanoid simulé par le serveur (physique, chemins, vision).
 	density = {
-		minActive = 20,
-		maxActive = 28,
+		minActive = 16,
+		maxActive = 22,
 		garrisonShare = 0.6, -- 60 % en garnison dans les zones à risque
-		-- Plafond absolu pendant la vague d'alerte (28 + 10).
-		hardCap = 38,
+		-- Plafond absolu pendant la vague d'alerte (22 + 8).
+		hardCap = 30,
 		-- Aucun robot n'apparaît à moins de cette distance d'un point de départ
 		-- des joueurs (début de partie), ni d'un joueur vivant (vague d'alerte).
 		spawnClearance = 40,
@@ -235,7 +238,17 @@ return Freeze.deep({
 	ai = {
 		visionAngle = 90,
 		gunshotHearingRadius = 60, -- surchargé par l'arme (noiseRadius)
-		updateRate = 8, -- mises à jour par seconde (entre 5 et 10)
+		-- Décisions de l'IA par seconde (entre 5 et 10). Le MOUVEMENT, lui, est continu :
+		-- déplacement (Humanoid:MoveTo, AlignPosition) et orientation (AlignOrientation)
+		-- sont des contraintes physiques résolues à chaque image et interpolées par
+		-- Roblox chez les clients. Monter cette valeur rend les robots plus réactifs,
+		-- pas plus fluides, et coûte du serveur (×1,25 de calcul d'IA à 10).
+		updateRate = 8,
+		-- Orientation lissée : vitesse de rotation maximale (radians/s) et réactivité de
+		-- la contrainte (plus haut = suit le cap plus vite). Tourelles (ancrées) : même
+		-- réactivité, appliquée par la boucle du serveur.
+		turnRate = 7,
+		turnResponsiveness = 14,
 		sleepDistance = 150, -- logique lourde désactivée sans joueur à moins de 150 studs
 		suspicionTime = 1.0,
 		searchTime = 8,
