@@ -58,9 +58,10 @@ Bindings.defaults = {
 	quickCycle = { keyboard = nil, gamepad = "DPadDown" },
 	ping = { keyboard = "T", gamepad = "DPadUp" },
 	map = { keyboard = "M", gamepad = "ButtonL1" },
-	-- I (même position en AZERTY et en QWERTY). Pas Tab : Roblox la réserve à la
-	-- liste des joueurs, l'appui n'atteint jamais le jeu.
-	inventory = { keyboard = "I", gamepad = "ButtonSelect" },
+	-- B comme « sac » (même position en AZERTY et en QWERTY). Ni Tab (liste des
+	-- joueurs de Roblox) ni I / O (zoom de la caméra de Roblox) : Roblox intercepte
+	-- ces touches et l'appui n'atteint jamais le jeu.
+	inventory = { keyboard = "B", gamepad = "ButtonSelect" },
 } :: { [string]: Binding }
 
 -- Touches supplémentaires fixes (non personnalisables).
@@ -76,10 +77,13 @@ Bindings.NONE = "none"
 
 local allowed: { keyboard: { [string]: boolean }, gamepad: { [string]: boolean } } = { keyboard = {}, gamepad = {} }
 do
-	-- Clavier : lettres (sauf déplacement W A S D), chiffres, modificateurs, souris.
+	-- Clavier : lettres, chiffres, modificateurs, souris. Sauf le déplacement (W A S D)
+	-- et les touches que Roblox intercepte (I / O : zoom de la caméra ; Tab : liste
+	-- des joueurs) : une action liée à ces touches ne se déclencherait jamais.
+	local reserved = { W = true, A = true, S = true, D = true, I = true, O = true }
 	for code = string.byte("A"), string.byte("Z") do
 		local letter = string.char(code)
-		if letter ~= "W" and letter ~= "A" and letter ~= "S" and letter ~= "D" then
+		if not reserved[letter] then
 			allowed.keyboard[letter] = true
 		end
 	end

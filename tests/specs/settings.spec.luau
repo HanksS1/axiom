@@ -80,10 +80,19 @@ return function(T, H)
 	end)
 
 	describe("Touche d'inventaire", function()
-		it("I par défaut ; Tab refusée (réservée par Roblox à la liste des joueurs)", function()
-			expect(Bindings.defaults.inventory.keyboard).toBe("I")
-			expect(Bindings.isAllowed("keyboard", "Tab")).toBe(false)
-			expect(Bindings.isAllowed("keyboard", "I")).toBe(true)
+		it("B par défaut ; Tab, I et O refusées (interceptées par Roblox)", function()
+			expect(Bindings.defaults.inventory.keyboard).toBe("B")
+			for _, key in { "Tab", "I", "O" } do
+				expect(Bindings.isAllowed("keyboard", key)).toBe(false)
+			end
+			expect(Bindings.isAllowed("keyboard", "B")).toBe(true)
+			-- Aucune touche par défaut n'est une touche interceptée.
+			for _, action in Bindings.actions do
+				local key = Bindings.defaults[action].keyboard
+				if key then
+					expect(Bindings.isAllowed("keyboard", key)).toBe(true)
+				end
+			end
 		end)
 	end)
 end

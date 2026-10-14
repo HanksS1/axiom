@@ -34,7 +34,7 @@ d'équipement tombe). Tout se règle dans `Config/Loot.luau` (`kitShare`, `varia
 2. Maintenir **E** (manette : X ; mobile : bouton d'interaction) pour ouvrir.
 3. Panneau de droite : **Prendre** / **Équiper** (un clic), **Tout prendre** (bouton ou E). Sac plein :
    **Échanger** propose de choisir l'objet à laisser.
-4. **I** (manette : Select ; mobile : SAC) : panneau du sac — Ranger / Jeter /
+4. **B** (manette : Select ; mobile : SAC ; ou clic sur la jauge « Sac x/y ») : panneau du sac — Ranger / Jeter /
    Équiper / Utiliser. Jauge « Sac x/y » au-dessus de la barre rapide.
 5. **3 / 4 / 5** : soins, batterie de bouclier, Surcharge (manette : croix bas
    pour choisir, maintenir pour utiliser).
@@ -46,9 +46,10 @@ d'équipement tombe). Tout se règle dans `Config/Loot.luau` (`kitShare`, `varia
 
 ## Retours de test (inventaire, munitions)
 
-- **Touche du sac : I** (et non plus Tab). Roblox réserve Tab à la liste des joueurs : l'appui
-  n'atteignait jamais le jeu, le sac semblait ne pas s'ouvrir. Tab ne peut plus être choisie
-  dans les paramètres.
+- **Touche du sac : B** (« sac », même position en AZERTY et en QWERTY). Ni Tab (liste des
+  joueurs) ni I / O (zoom de la caméra) : Roblox intercepte ces touches, l'appui n'atteignait
+  jamais le jeu. Elles ne peuvent plus être choisies dans les paramètres. Un clic sur la jauge
+  « Sac x/y » (au-dessus de la barre rapide) ouvre aussi le sac.
 - **« Tout prendre » ne surcharge jamais le sac** : règle pure `InventoryLogic.takeAll` (testée).
   Le plus précieux d'abord ; l'équipement va dans son emplacement s'il est vide ; ce qui ne tient
   pas reste dans le conteneur, et le joueur en est prévenu (« Sac plein : N objet(s) laissé(s) »).
