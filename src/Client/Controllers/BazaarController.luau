@@ -3,11 +3,15 @@
 	BazaarController : Holo-Bazar (station « bazaar », bouton « + » des Noyaux)
 	et ouverture des caisses cosmétiques (section 14.10).
 
-	Animation d'ouverture : dépressurisation, scan laser, explosion de
-	lumière à la couleur de la rareté, puis révélation : l'objet obtenu
-	apparaît en 3D (il tourne), cerné de la couleur de sa rareté. Le bouton
-	« Passer » est TOUJOURS disponible, et le paramètre « ouverture rapide »
-	saute l'animation (pas l'image de l'objet).
+	Ouverture d'une caisse (UI/CrateScene, en 3D) : des lasers assemblent la
+	caisse en pixels de plus en plus fins, un scanner la balaie, elle s'ouvre
+	et l'objet obtenu en sort pour flotter au-dessus, la caisse restant
+	visible. Le bouton « Passer » est TOUJOURS disponible, et le paramètre
+	« ouverture rapide » montre directement la caisse ouverte.
+
+	Ce que contient une caisse : un SKIN (une apparence), jamais une arme. Il
+	rejoint la Collection du joueur (onglet Collection), ne prend aucune
+	place dans le coffre, et peut être équipé tout de suite.
 
 	Les achats en Robux passent uniquement par MarketplaceService (fenêtre
 	officielle de Roblox, ouverte seulement à la demande du joueur).
@@ -20,9 +24,11 @@ local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local Shop = require(Shared.Monetization.Shop)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local Create = require(script.Parent.Parent.UI.Create)
+local CrateScene = require(script.Parent.Parent.UI.CrateScene)
 local Panel = require(script.Parent.Parent.UI.Panel)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -40,40 +46,42 @@ local M = Config.Monetization
 
 local screen: BazaarScreen.Screen
 local overlay: Frame
-local box: Frame
-local laser: Frame
+local stage: Frame
 local flash: Frame
 local resultName: TextLabel
 local resultRarity: TextLabel
 local resultExtra: TextLabel
 local skipButton: TextButton
+local equipButton: TextButton
 local closeButton: TextButton
-local prize: Frame? = nil -- aperçu 3D de l'objet obtenu
-local playToken = 0
+local scene: CrateScene.Scene? = nil
+local current: { [string]: any }? = nil -- résultat de la caisse affichée
 
-local function clearPrize()
-	if prize then
-		prize:Destroy()
-		prize = nil
+local function clearScene()
+	if scene then
+		scene.destroy()
+		scene = nil
 	end
 end
 
+local function close()
+	clearScene()
+	current = nil
+	overlay.Visible = false
+	PanelState.set("crateOpening", false)
+end
+
 local function buildOverlay(root: Instance)
-	box = Create("Frame", {
+	-- Scène 3D : carrée, au-dessus des textes, quelle que soit la forme de l'écran.
+	stage = Create("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.42),
-		Size = UDim2.fromOffset(150, 120),
-		BackgroundColor3 = Color3.fromRGB(30, 32, 40),
+		Position = UDim2.fromScale(0.5, 0.33),
+		Size = UDim2.fromScale(0.56, 0.56),
+		BackgroundTransparency = 1,
+		ZIndex = 1,
 	}, {
-		Stroke = Create("UIStroke", { Color = Theme.magenta, Thickness = 3 }),
-	})
-	laser = Create("Frame", {
-		Size = UDim2.new(1.2, 0, 0, 3),
-		Position = UDim2.fromScale(-0.1, 0),
-		BackgroundColor3 = Theme.red,
-		BorderSizePixel = 0,
-		Visible = false,
-		Parent = box,
+		Ratio = Create("UIAspectRatioConstraint", { AspectRatio = 1, DominantAxis = Enum.DominantAxis.Height }),
+		Limit = Create("UISizeConstraint", { MaxSize = Vector2.new(560, 560) }),
 	})
 	flash = Create("Frame", {
 		Size = UDim2.fromScale(1, 1),
@@ -84,7 +92,7 @@ local function buildOverlay(root: Instance)
 	local function label(y: number, size: number): TextLabel
 		return Create("TextLabel", {
 			AnchorPoint = Vector2.new(0.5, 0),
-			Position = UDim2.new(0.5, 0, 0.6, y),
+			Position = UDim2.new(0.5, 0, 0.62, y),
 			Size = UDim2.new(0.9, 0, 0, size + 8),
 			BackgroundTransparency = 1,
 			Font = Theme.fontTitle,
@@ -96,169 +104,124 @@ local function buildOverlay(root: Instance)
 		})
 	end
 	resultName = label(0, 26)
-	resultRarity = label(40, 20)
-	resultExtra = label(72, 16)
+	resultRarity = label(38, 20)
+	resultExtra = label(68, 15)
+	resultExtra.Font = Theme.fontText
+	resultExtra.TextColor3 = Theme.textDim
+	resultExtra.Size = UDim2.new(0.9, 0, 0, 44)
 	skipButton = Panel.button("", Theme.textDim, 140)
 	skipButton.AnchorPoint = Vector2.new(1, 1)
 	skipButton.Position = UDim2.new(1, -16, 1, -16)
 	skipButton.ZIndex = 4
-	closeButton = Panel.button("", Theme.green, 180)
-	closeButton.AnchorPoint = Vector2.new(0.5, 1)
-	closeButton.Position = UDim2.new(0.5, 0, 1, -16)
+	equipButton = Panel.button("", Theme.magenta, 200)
+	equipButton.AnchorPoint = Vector2.new(1, 1)
+	equipButton.Position = UDim2.new(0.5, -8, 1, -16)
+	equipButton.ZIndex = 4
+	closeButton = Panel.button("", Theme.green, 200)
+	closeButton.AnchorPoint = Vector2.new(0, 1)
+	closeButton.Position = UDim2.new(0.5, 8, 1, -16)
 	closeButton.ZIndex = 4
 	overlay = Create("Frame", {
 		Name = "CrateOpening",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundColor3 = Color3.fromRGB(4, 5, 8),
-		BackgroundTransparency = 0.15,
+		BackgroundTransparency = 0.12,
 		Visible = false,
 		ZIndex = 60,
 		Parent = root,
 	}, {
-		Box = box,
+		Stage = stage,
 		Flash = flash,
 		Name_ = resultName,
 		Rarity = resultRarity,
 		Extra = resultExtra,
 		Skip = skipButton,
+		Equip = equipButton,
 		Close = closeButton,
 	})
-	closeButton.Activated:Connect(function()
-		playToken += 1
-		clearPrize()
-		overlay.Visible = false
-		PanelState.set("crateOpening", false)
+	closeButton.Activated:Connect(close)
+	skipButton.Activated:Connect(function()
+		if scene then
+			scene.skip()
+		end
+	end)
+	-- Équiper tout de suite le skin obtenu.
+	equipButton.Activated:Connect(function()
+		local result = current
+		local slot = if result then Shop.slotOf(result.cosmeticId) else nil
+		if result == nil or slot == nil then
+			return
+		end
+		ClientNet.fire("EquipCosmetic", slot, result.cosmeticId)
+		equipButton.Text = "✔ " .. t("shop.equippedNow")
+		equipButton.Active = false
+		equipButton.AutoButtonColor = false
 	end)
 end
 
+-- Ce que le skin habille : l'arme ciblée, ou le sac / le casque / le gilet.
+local function targetName(cosmeticId: string): string
+	local def = Config.Cosmetics.byId[cosmeticId]
+	if def == nil then
+		return ""
+	end
+	return if def.category == "weapon" then t("item." .. def.target) else t("cosmetic.slot." .. def.category)
+end
+
+-- Révélation : nom, rareté, où va l'objet, boutons.
 local function reveal(result: { [string]: any })
 	local rarityColor = BazaarScreen.rarityColor(result.rarity)
-	laser.Visible = false
-	box.Rotation = 0
-	box.Visible = false
-	flash.BackgroundTransparency = 1
-	-- L'objet obtenu, à la place de la caisse.
-	clearPrize()
-	local icon = BazaarScreen.preview(result.cosmeticId, UDim2.fromScale(0.36, 0.36), true)
-	if icon then
-		icon.AnchorPoint = Vector2.new(0.5, 0.5)
-		icon.Position = UDim2.fromScale(0.5, 0.34)
-		icon.ZIndex = 3
-		-- Carré, quelle que soit la forme de l'écran.
-		Create("UIAspectRatioConstraint", {
-			AspectRatio = 1,
-			DominantAxis = Enum.DominantAxis.Height,
-			Parent = icon,
-		})
-		Create("UISizeConstraint", { MaxSize = Vector2.new(230, 230), Parent = icon })
-		local stroke = icon:FindFirstChildOfClass("UIStroke")
-		if stroke then
-			stroke.Color = rarityColor
-			stroke.Thickness = 3
-			stroke.Transparency = 0
-		end
-		local glow = icon:FindFirstChild("Glow")
-		if glow and glow:IsA("Frame") then
-			glow.BackgroundColor3 = rarityColor
-		end
-		icon.Parent = overlay
-		prize = icon
-	end
 	resultName.Text = BazaarScreen.cosmeticName(t, result.cosmeticId)
 	resultRarity.Text = t("rarity." .. result.rarity)
 	resultRarity.TextColor3 = rarityColor
-	resultExtra.Text = if result.duplicate then t("shop.duplicate", { noyaux = result.refund }) else ""
+	resultExtra.Text = if result.duplicate
+		then t("shop.duplicate", { noyaux = result.refund })
+		else t("shop.addedToCollection", { target = targetName(result.cosmeticId) })
 	skipButton.Visible = false
+	local view = ProfileController.get()
+	local slot = Shop.slotOf(result.cosmeticId)
+	local equipped = view ~= nil and slot ~= nil and view.cosmeticsEquipped[slot] == result.cosmeticId
+	equipButton.Text = if equipped then "✔ " .. t("shop.equippedNow") else t("shop.equipNow")
+	equipButton.Active = not equipped
+	equipButton.AutoButtonColor = not equipped
+	equipButton.Visible = slot ~= nil
 	closeButton.Text = t("common.confirm")
 	closeButton.Visible = true
 end
 
-local function steam()
-	for _ = 1, 12 do
-		local puff = Create("Frame", {
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.fromOffset(18, 18),
-			BackgroundColor3 = Color3.fromRGB(220, 230, 240),
-			BackgroundTransparency = 0.3,
-			ZIndex = 1,
-			Parent = box,
-		}, { Corner = Create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
-		local angle = math.random() * math.pi * 2
-		local tween = TweenService:Create(puff, TweenInfo.new(0.9), {
-			Position = UDim2.new(0.5, math.cos(angle) * 130, 0.5, math.sin(angle) * 90),
-			Size = UDim2.fromOffset(46, 46),
-			BackgroundTransparency = 1,
-		})
-		tween.Completed:Once(function()
-			puff:Destroy()
-		end)
-		tween:Play()
-	end
-end
-
--- Ouverture : dépressurisation → scan laser → éclair → révélation.
+-- Ouverture : la caisse se construit, est scannée, s'ouvre ; l'objet en sort.
 local function play(result: { [string]: any })
-	playToken += 1
-	local token = playToken
+	clearScene()
+	current = result
 	overlay.Visible = true
 	PanelState.set("crateOpening", true)
 	resultName.Text, resultRarity.Text, resultExtra.Text = "", "", ""
-	clearPrize()
+	equipButton.Visible = false
 	closeButton.Visible = false
-	box.Visible = true
-	box.Rotation = 0
 	skipButton.Text = t("shop.skip")
 	skipButton.Visible = true
+	flash.BackgroundTransparency = 1
+
+	local def = Config.Cosmetics.byId[result.cosmeticId]
+	local rarityColor = BazaarScreen.rarityColor(result.rarity)
 	local view = ProfileController.get()
-	if view and view.settings.skipCrateAnimation == true then
-		reveal(result)
-		return
-	end
-	local function alive(): boolean
-		return playToken == token
-	end
-	task.spawn(function()
-		-- Dépressurisation.
-		steam()
-		local started = os.clock()
-		while alive() and os.clock() - started < 0.9 do
-			box.Rotation = math.sin(os.clock() * 45) * 5
-			task.wait()
-		end
-		box.Rotation = 0
-		-- Scan laser.
-		laser.Visible = true
-		for _ = 1, 2 do
-			if not alive() then
+	local instant = view ~= nil and view.settings.skipCrateAnimation == true
+	scene = CrateScene.play(stage, BazaarScreen.previewItem(def), def, rarityColor, {
+		-- Explosion de lumière à la couleur de la rareté quand le couvercle saute.
+		onOpen = function()
+			if instant then
 				return
 			end
-			laser.Position = UDim2.fromScale(-0.1, 0)
-			local tween = TweenService:Create(laser, TweenInfo.new(0.45), { Position = UDim2.fromScale(-0.1, 1) })
-			tween:Play()
-			tween.Completed:Wait()
-		end
-		laser.Visible = false
-		if not alive() then
-			return
-		end
-		-- Explosion de lumière à la couleur de la rareté.
-		flash.BackgroundColor3 = BazaarScreen.rarityColor(result.rarity)
-		flash.BackgroundTransparency = 0
-		TweenService:Create(flash, TweenInfo.new(0.6), { BackgroundTransparency = 1 }):Play()
-		task.wait(0.25)
-		if alive() then
-			reveal(result)
-		end
-	end)
-	local skipConnection: RBXScriptConnection
-	skipConnection = skipButton.Activated:Connect(function()
-		skipConnection:Disconnect()
-		if alive() then
-			playToken += 1
-			reveal(result)
-		end
-	end)
+			flash.BackgroundColor3 = rarityColor
+			flash.BackgroundTransparency = 0.25
+			TweenService:Create(flash, TweenInfo.new(0.7), { BackgroundTransparency = 1 }):Play()
+		end,
+		onReveal = function()
+			if current == result then
+				reveal(result)
+			end
+		end,
+	}, instant)
 end
 
 function BazaarController.init() end
@@ -296,7 +259,12 @@ function BazaarController.start()
 	buildOverlay(root)
 
 	ClientNet.on("CosmeticCrateResult", function(result: any)
-		if type(result) == "table" and type(result.cosmeticId) == "string" and type(result.rarity) == "string" then
+		if
+			type(result) == "table"
+			and type(result.cosmeticId) == "string"
+			and Config.Cosmetics.byId[result.cosmeticId] ~= nil
+			and type(result.rarity) == "string"
+		then
 			play(result)
 		end
 	end)

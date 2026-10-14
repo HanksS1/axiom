@@ -185,4 +185,74 @@ return function(T, H)
 			expect(Shop.slotOf("inconnu")).toBeNil()
 		end)
 	end)
+
+	describe("Ouverture d'une caisse (animation)", function()
+		local CrateSequence = H.require("ReplicatedStorage/Shared/Visuals/CrateSequence")
+		local ItemModels = H.require("ReplicatedStorage/Shared/Visuals/ItemModels")
+		local C = M.crateOpening
+		local timeline = CrateSequence.timeline(C.phases)
+
+		it("construction, scanner, ouverture, puis l'objet sort : dans cet ordre, en moins de 8 s", function()
+			local order = {}
+			local total = 0
+			for _, phase in C.phases do
+				table.insert(order, phase.name)
+				expect(phase.duration > 0).toBe(true)
+				total += phase.duration
+			end
+			expect(table.concat(order, ",")).toBe("coarse,fine,solidify,scan,open,rise")
+			expect(timeline.total).toBeNear(total)
+			expect(total < 8).toBe(true)
+			expect(CrateSequence.phaseAt(timeline, 0)).toBe("coarse")
+			expect(CrateSequence.phaseAt(timeline, timeline.total + 1)).toBe("done")
+			local scan = CrateSequence.step(timeline, "scan")
+			expect(CrateSequence.phaseAt(timeline, (scan.start + scan.finish) / 2)).toBe("scan")
+			expect(CrateSequence.progress(timeline, "scan", scan.start - 1)).toBe(0)
+			expect(CrateSequence.progress(timeline, "scan", (scan.start + scan.finish) / 2)).toBeNear(0.5)
+			expect(CrateSequence.progress(timeline, "scan", timeline.total)).toBe(1)
+		end)
+
+		it("pixels de plus en plus fins, tous dans la caisse, du bas vers le haut", function()
+			local size = C.crateSize
+			local coarse = CrateSequence.voxels(size, C.coarseCell)
+			local fine = CrateSequence.voxels(size, C.fineCell)
+			expect(#coarse >= 8).toBe(true)
+			expect(#fine > #coarse * 3).toBe(true)
+			-- Budget de pièces raisonnable dans un ViewportFrame.
+			expect(#fine <= 150).toBe(true)
+			for _, list in { coarse, fine } do
+				local seen = {}
+				local lastY = -math.huge
+				for _, voxel in list do
+					local p = voxel.position
+					local key = string.format("%.3f,%.3f,%.3f", p.X, p.Y, p.Z)
+					expect(seen[key]).toBeNil()
+					seen[key] = true
+					expect(math.abs(p.X) + voxel.size.X / 2 <= size.X / 2 + 1e-6).toBe(true)
+					expect(math.abs(p.Y) + voxel.size.Y / 2 <= size.Y / 2 + 1e-6).toBe(true)
+					expect(math.abs(p.Z) + voxel.size.Z / 2 <= size.Z / 2 + 1e-6).toBe(true)
+					expect(p.Y >= lastY - 1e-6).toBe(true)
+					lastY = p.Y
+				end
+			end
+			-- Toujours le même ordre (aucun hasard).
+			local again = CrateSequence.voxels(size, C.fineCell)
+			for index, voxel in fine do
+				expect(again[index].position).toEqual(voxel.position)
+			end
+			expect(CrateSequence.spawned(#fine, 0)).toBe(0)
+			expect(CrateSequence.spawned(#fine, 0.5)).toBe(math.floor(#fine / 2))
+			expect(CrateSequence.spawned(#fine, 1)).toBe(#fine)
+		end)
+
+		it("chaque cosmétique s'affiche sur un objet qui a un modèle", function()
+			local PREVIEW = { backpack = "backpack_medium", helmet = "helmet", vest = "vest" }
+			for id, def in Config.Cosmetics.byId do
+				local itemId = if def.category == "weapon" then def.target else PREVIEW[def.category]
+				if not ItemModels.has(itemId) then
+					error(`{id} : aucun modèle pour {itemId}`)
+				end
+			end
+		end)
+	end)
 end

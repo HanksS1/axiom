@@ -72,10 +72,9 @@ local function preview(def: any, size: UDim2, spin: boolean): Frame
 	return ItemIcon.create(itemId, size, nil, def, spin)
 end
 
--- Aperçu 3D d'un cosmétique (ouverture d'une caisse) ; nil si le cosmétique est inconnu.
-function BazaarScreen.preview(cosmeticId: string, size: UDim2, spin: boolean): Frame?
-	local def = Config.Cosmetics.byId[cosmeticId]
-	return if def then preview(def, size, spin) else nil
+-- Objet qui porte un cosmétique (l'arme ciblée, ou un sac / casque / gilet type).
+function BazaarScreen.previewItem(def: any): string
+	return if def.category == "weapon" then def.target else PREVIEW_ITEM[def.category] or def.target
 end
 
 local function formatPercent(hundredths: number): string
