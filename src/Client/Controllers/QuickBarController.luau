@@ -28,7 +28,7 @@ local slots: { { frame: Frame, name: TextLabel, count: TextLabel, key: TextLabel
 local usingBar: Frame
 local usingFill: Frame
 local usingLabel: TextLabel
-local bagLabel: TextLabel
+local bagLabel: TextButton
 local boostLabel: TextLabel
 
 local function render()
@@ -48,7 +48,9 @@ local function render()
 			then 0
 			else 0.7
 	end
+	local bagKey = if device == "keyboard" then InputController.hint("inventory") else nil
 	bagLabel.Text = t("hud.bagUp", { used = inventory.used, capacity = inventory.capacity })
+		.. (if bagKey then `  [{bagKey}]` else "")
 	bagLabel.TextColor3 = if inventory.capacity > 0 and inventory.used >= inventory.capacity
 		then Theme.orange
 		else Theme.textDim
@@ -147,8 +149,10 @@ function QuickBarController.start()
 		Parent = HUDController.root(),
 	}, { Fill = usingFill, Label = usingLabel })
 
-	bagLabel = Create("TextLabel", {
+	-- Jauge du sac : un clic ouvre le sac (en plus de la touche).
+	bagLabel = Create("TextButton", {
 		Name = "BagUp",
+		AutoButtonColor = false,
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -66),
 		Size = UDim2.fromOffset(200, 18),
@@ -172,6 +176,8 @@ function QuickBarController.start()
 		Text = "",
 		Parent = HUDController.root(),
 	})
+
+	bagLabel.Activated:Connect(InventoryController.toggle)
 
 	RunService.RenderStepped:Connect(render)
 end
