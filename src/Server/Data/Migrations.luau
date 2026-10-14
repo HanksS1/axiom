@@ -47,6 +47,10 @@ local steps: { [number]: (data: any) -> () } = {
 	[3] = function(_data)
 		-- P5 : assurance choisie pour la prochaine partie (assainie plus bas).
 	end,
+	[4] = function(data)
+		-- Aides ponctuelles déjà montrées (première caisse du Holo-Bazar…).
+		data.guidesSeen = data.guidesSeen or {}
+	end,
 }
 
 local function isInteger(value: any): boolean
@@ -184,6 +188,13 @@ function Migrations.sanitize(data: any, now: number): (Profile, Report)
 	profile.hasVaultExtension = data.hasVaultExtension == true
 	-- Les profils créés avant le tutoriel (P10) et déjà au niveau 2 en sont dispensés.
 	profile.tutorialDone = data.tutorialDone == true or profile.level >= Config.Progression.minLevelToPlay
+	if type(data.guidesSeen) == "table" then
+		for guide, shown in data.guidesSeen do
+			if type(guide) == "string" and #guide <= 32 and shown == true then
+				profile.guidesSeen[guide] = true
+			end
+		end
+	end
 
 	-- Ordre de priorité en cas d'uid dupliqué : le loadout, puis le sac, puis le coffre.
 	local loadout = {}

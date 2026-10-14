@@ -13,12 +13,13 @@
 local Freeze = require(script.Parent.Parent.Util.Freeze)
 
 export type Lighting = {
-	ambient: Color3,
-	outdoorAmbient: Color3,
-	brightness: number,
+	ambient: Color3, -- lumière des zones à l'ombre et des intérieurs : le « plancher » du noir
+	outdoorAmbient: Color3, -- même chose à l'extérieur
+	brightness: number, -- intensité du soleil / de la lune
 	clockTime: number,
-	fogColor: Color3,
+	fogColor: Color3, -- sans effet quand une Atmosphere est présente (voir `mood`)
 	fogEnd: number,
+	exposure: number?, -- compensation d'exposition (0 par défaut) : éclaircit tout l'écran
 }
 
 -- Ambiance : brume atmosphérique, halo des néons, étalonnage des couleurs.
@@ -47,27 +48,40 @@ local maps = {
 		id = "neo_lumen",
 		order = 1,
 		seed = 1101,
+		-- Nuit urbaine néon, LISIBLE (retour de test : « inutilisablement sombre »).
+		-- Avant : ambient (70,60,90), outdoorAmbient (110,90,140), brightness 1.6,
+		-- density 0.36, haze 2.2, contrast 0.12. Leviers, du plus efficace au plus fin :
+		-- 1. ambient / outdoorAmbient : relèvent le noir des zones d'ombre (silhouettes,
+		--    couvertures) sans éclaircir le ciel ; c'est ce qui aide les écrans pâles ;
+		-- 2. density / haze de l'Atmosphere : la brume mangeait le relief au-delà de
+		--    ~60 studs (distance de combat) ;
+		-- 3. exposure : éclaircit tout l'écran (à manier par 0,1) ;
+		-- 4. lightScale : néons et lampadaires plus forts et plus larges, ce qui garde
+		--    l'ambiance de nuit mieux qu'une lumière globale.
 		lighting = {
-			ambient = Color3.fromRGB(70, 60, 90),
-			outdoorAmbient = Color3.fromRGB(110, 90, 140),
-			brightness = 1.6,
+			ambient = Color3.fromRGB(104, 94, 128),
+			outdoorAmbient = Color3.fromRGB(138, 122, 168),
+			brightness = 2.1,
 			clockTime = 18.6,
 			fogColor = Color3.fromRGB(90, 70, 120),
 			fogEnd = 900,
+			exposure = 0.25,
 		},
 		-- Crépuscule violet, poussière en suspension, néons qui bavent.
 		mood = {
-			density = 0.36,
-			offset = 0.2,
+			density = 0.22,
+			offset = 0.12,
 			color = Color3.fromRGB(150, 120, 170),
-			decay = Color3.fromRGB(70, 50, 90),
-			glare = 0.2,
-			haze = 2.2,
+			decay = Color3.fromRGB(78, 58, 100),
+			glare = 0.1,
+			haze = 0.9,
 			bloom = 0.9,
-			contrast = 0.12,
-			saturation = -0.08,
-			tint = Color3.fromRGB(240, 228, 255),
+			contrast = 0.08,
+			saturation = -0.04,
+			tint = Color3.fromRGB(244, 236, 255),
 		},
+		-- Lumières de la carte (néons, lampadaires) : × intensité, × portée (60 au plus).
+		lightScale = { brightness = 1.4, range = 1.2 },
 		guardian = {
 			robotId = "warden",
 			nameKey = "guardian.helix_titan",
@@ -260,6 +274,22 @@ return Freeze.deep({
 	list = list,
 	origin = Vector3.new(0, 0, -1600),
 	size = 800,
+	-- Terminus (lobby) : éclairage fixé par le code, appliqué au démarrage du hub et
+	-- au retour de partie (l'état ne dépend plus de ce qui traîne dans le place).
+	-- Gare souterraine éclairée par ses néons et ses feux de bidons : hausse modérée
+	-- par rapport aux réglages par défaut de Roblox, surtout dans les ombres
+	-- (ambient) ; le soleil bas de fin d'après-midi passe par la voûte percée.
+	hub = {
+		lighting = {
+			ambient = Color3.fromRGB(92, 88, 96), -- plancher du noir sous la voûte
+			outdoorAmbient = Color3.fromRGB(118, 112, 122),
+			brightness = 2,
+			clockTime = 17.2, -- rais de lumière chauds par les trous de la voûte
+			fogColor = Color3.fromRGB(44, 42, 48),
+			fogEnd = 700,
+			exposure = 0.15,
+		},
+	},
 	-- Plan vu de dessus (touche « carte ») : taille d'une case en studs, et
 	-- tranche de hauteur dans laquelle un obstacle compte (hauteur d'homme) ;
 	-- `minSpan` : le décor plus court (barils, caisses) n'est pas dessiné.

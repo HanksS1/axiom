@@ -15,6 +15,7 @@
 	Les animations sont jouées par le client (tags, voir Kit).
 ]]
 
+local HubDress = require(script.Parent.HubDress)
 local Kit = require(script.Parent.Kit)
 
 local TerminusBuilder = {}
@@ -1128,6 +1129,9 @@ function TerminusBuilder.build(origin: Vector3): Built
 		spawn.Parent = folder
 		table.insert(spawns, cframe)
 	end
+
+	-- Murs derrière les PNJ : fresques, emblèmes, câbles, décors du catalogue des cartes.
+	HubDress.build(decor, origin, stations, NEON)
 
 	return { folder = folder, stations = stations, spawns = spawns }
 end

@@ -29,6 +29,7 @@ local TerminusBuilder = require(script.Parent.Parent.Hub.TerminusBuilder)
 local PlaceRole = require(script.Parent.Parent.Matchmaking.PlaceRole)
 local ArenaService = require(script.Parent.ArenaService)
 local CombatService = require(script.Parent.CombatService)
+local MapRuntimeService = require(script.Parent.MapRuntimeService)
 local MapService = require(script.Parent.MapService)
 local MatchService = require(script.Parent.MatchService)
 local MovementGuardService = require(script.Parent.MovementGuardService)
@@ -68,6 +69,8 @@ function HubService.start()
 	if PlaceRole.isMatchServer() then
 		return
 	end
+	-- Éclairage du lobby fixé par le code (Config.Maps.hub), remis au retour de partie.
+	MapRuntimeService.applyHubLighting()
 	local greybox = if RunService:IsStudio() then Config.Dev.testArenaInStudio else Config.Dev.greyboxOnline
 	if greybox and Workspace:FindFirstChild("Terminus") == nil then
 		local built = TerminusBuilder.build(HUB_ORIGIN)

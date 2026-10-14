@@ -149,8 +149,23 @@ return function(T, H)
 			data.activeMatch = nil
 			local profile, err = Migrations.run(data, NOW)
 			expect(err).toBeNil()
-			expect(profile.version).toBe(3)
+			expect(profile.version).toBe(ProfileTemplate.VERSION)
 			expect(type(profile.pendingLoot)).toBe("table")
+		end)
+
+		it("v3 → v4 : aides ponctuelles vues conservées, valeurs invalides écartées", function()
+			local data = ProfileTemplate.new(NOW)
+			data.version = 3
+			data.guidesSeen = nil
+			local profile = Migrations.run(data, NOW)
+			expect(profile.version).toBe(ProfileTemplate.VERSION)
+			expect(next(profile.guidesSeen)).toBeNil()
+			data = ProfileTemplate.new(NOW)
+			data.guidesSeen = { cosmetics = true, bad = "oui", [5] = true }
+			profile = Migrations.run(data, NOW)
+			expect(profile.guidesSeen.cosmetics).toBe(true)
+			expect(profile.guidesSeen.bad).toBeNil()
+			expect(profile.guidesSeen[5]).toBeNil()
 		end)
 		it("statut de Légende conservé ; anciens joueurs (niveau 2+) dispensés du tutoriel", function()
 			local data = ProfileTemplate.new(NOW)

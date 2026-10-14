@@ -770,7 +770,6 @@ function MatchService.finish()
 		table.clear(participants)
 		table.clear(teams)
 		ArenaService.setSandbox(true)
-		ArenaService.spawnSandboxCrates()
 	end)
 end
 

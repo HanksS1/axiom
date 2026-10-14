@@ -234,6 +234,9 @@ local function openCrate(player: Player, crateId: string)
 		else
 			profile.cosmeticsOwned[cosmeticId] = true
 		end
+		-- Première caisse : le client explique ce qu'est un cosmétique (une seule fois).
+		local firstTime = profile.guidesSeen.cosmetics ~= true
+		profile.guidesSeen.cosmetics = true
 		result = {
 			crateId = crateId,
 			cosmeticId = cosmeticId,
@@ -241,6 +244,7 @@ local function openCrate(player: Player, crateId: string)
 			duplicate = duplicate,
 			refund = refund,
 			guaranteed = Shop.guaranteeNext(crateId, pity),
+			firstTime = firstTime,
 		}
 		return true
 	end)

@@ -174,6 +174,4 @@ return Freeze.deep({
 	cellQuantity = { min = 10, max = 30 },
 	-- Le remplissage s'arrête quand le budget restant passe sous ce seuil (crédits).
 	fillThreshold = 25,
-	-- Délai de réapparition des caisses dans l'arène de test (Studio).
-	arenaRespawnDelay = 30,
 })

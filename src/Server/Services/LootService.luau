@@ -680,9 +680,22 @@ function LootService.takeAll(player: Player, container: Container): number
 	return #taken
 end
 
--- Pose des objets au sol, devant le joueur (objet jeté, remplacé…).
+-- Bac à sable (hors partie : arène d'entraînement, Terminus) : aucun butin ne
+-- peut apparaître, donc rien ne peut être ramassé. Activé par ArenaService,
+-- désactivé au début d'une partie (MatchService → ArenaService.setSandbox).
+local sandbox = true
+
+function LootService.setSandbox(enabled: boolean)
+	sandbox = enabled
+end
+
+function LootService.isSandbox(): boolean
+	return sandbox
+end
+
+-- Pose des objets au sol, devant le joueur (objet jeté, remplacé…). Rien en bac à sable.
 function LootService.dropToGround(position: Vector3, items: { ItemInstance }): Container?
-	if #items == 0 then
+	if #items == 0 or sandbox then
 		return nil
 	end
 	local params = RaycastParams.new()
@@ -727,7 +740,7 @@ end
 
 -- Sac de dépouille : tout ce que portait le combattant mort.
 function LootService.spawnDeathBag(position: Vector3, items: { ItemInstance }, ownerName: string?): Container?
-	if #items == 0 then
+	if #items == 0 or sandbox then
 		return nil
 	end
 	local model = Instance.new("Model")
@@ -928,10 +941,11 @@ function LootService.init()
 		end
 	end)
 
-	-- Mort : tout l'équipement tombe dans un sac de dépouille.
+	-- Mort : tout l'équipement tombe dans un sac de dépouille (jamais en bac à sable :
+	-- l'équipement y est une copie, rendue intacte à la réapparition).
 	CombatService.FighterDied:Connect(function(fighter)
 		local bag = fighter.bag
-		if bag == nil then
+		if bag == nil or sandbox then
 			return
 		end
 		local items = InventoryLogic.drainAll(bag)

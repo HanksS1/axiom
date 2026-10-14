@@ -3,7 +3,9 @@
 	RangeService : le stand de tir du Terminus (section 16.4).
 
 	- Cibles d'entraînement : silhouettes mobiles partagées, que tout joueur
-	  au stand peut toucher (dégâts affichés, jamais détruites).
+	  au stand peut toucher (dégâts affichés, jamais détruites). Attribut
+	  `Practice` : pendant SON défi, un joueur ne les voit plus (masquage
+	  local, RangeController) ; les autres joueurs continuent de s'en servir.
 	- Essai d'une arme du coffre : le joueur reçoit une COPIE de son arme
 	  (même modèle, même état, marquée « kit » : sans valeur, jamais
 	  conservée) et une réserve de cellules prêtée. Tout est rendu en
@@ -228,6 +230,7 @@ end
 local function spawnPractice()
 	for index = 1, R.practice.targets do
 		local target = createTarget(nil)
+		target.model:SetAttribute("Practice", true)
 		local depth = (index - 0.5) / R.practice.targets
 		target.from = lanePoint(depth, 0, 0.2 + 0.3 * (index % 2))
 		target.to = lanePoint(depth, 1, 0.2 + 0.3 * (index % 2))

@@ -1,11 +1,19 @@
 --!strict
 --[[
-	ArenaService : arène de test greybox (Studio uniquement, phase P1).
+	ArenaService : arène d'entraînement greybox.
 
 	Construite si la place ne contient pas déjà de carte (dossier « Map »
 	ou « Arena » dans Workspace). Contient des couverts pleins, des couverts
 	légers (tag « LightCover ») et des mannequins d'entraînement équipés de
 	gilets / casques de différents états pour tester bouclier et tirs à la tête.
+
+	Bac à sable (hors partie) : aucun risque, aucun gain.
+	- Aucune caisse, aucun butin : rien ne peut en être retiré (LootService
+	  ne crée ni sac de dépouille ni objet au sol en bac à sable).
+	- Un joueur mort dans l'arène y réapparaît après `Dev.arenaRespawnDelay`
+	  secondes, équipement intact (copie du profil, voir CharacterService).
+	  Le gestionnaire de mort n'est installé que hors partie : MatchService
+	  installe le sien pendant une partie et gère lui-même les apparitions.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -23,6 +31,7 @@ local PlaceRole = require(script.Parent.Parent.Matchmaking.PlaceRole)
 local CombatService = require(script.Parent.CombatService)
 local LootService = require(script.Parent.LootService)
 local MapService = require(script.Parent.MapService)
+local MovementGuardService = require(script.Parent.MovementGuardService)
 
 local Dev = Config.Dev
 
@@ -182,57 +191,54 @@ local function spawnDummy(arena: Instance, spec: any)
 	CombatService.register(fighter)
 end
 
--- Caisses de test : 6 de ravitaillement, 3 coffres militaires, 1 casier d'AXIOM.
-local CRATES: { { position: Vector3, crateType: string } } = {
-	{ position = Vector3.new(25, 0, 10), crateType = "supply" },
-	{ position = Vector3.new(-25, 0, 10), crateType = "supply" },
-	{ position = Vector3.new(0, 0, 30), crateType = "supply" },
-	{ position = Vector3.new(60, 0, -20), crateType = "supply" },
-	{ position = Vector3.new(-60, 0, -20), crateType = "supply" },
-	{ position = Vector3.new(-40, 0, 55), crateType = "supply" },
-	{ position = Vector3.new(45, 8.5, 50), crateType = "military" },
-	{ position = Vector3.new(-65, 0, 60), crateType = "military" },
-	{ position = Vector3.new(65, 0, -60), crateType = "military" },
-	{ position = Vector3.new(0, 0, 70), crateType = "axiom_locker" },
-}
-
--- Bac à sable (hors partie) : caisses qui réapparaissent, réapparition des joueurs.
+-- Bac à sable (hors partie) : aucun butin, réapparition dans l'arène.
 local sandbox = true
+local built = false
 
-local function spawnCrate(cframe: CFrame, crateType: string)
-	if not sandbox then
+-- Mort hors partie. Dans l'arène : désintégration, puis réapparition sur place
+-- après `Dev.arenaRespawnDelay`. Ailleurs : comportement par défaut (le personnage
+-- meurt après la désintégration, Roblox le fait réapparaître au Terminus).
+local function sandboxDeath(fighter: Fighter.Fighter, _killer: Fighter.Fighter?)
+	local player = fighter.player
+	if player == nil or not ArenaService.contains(fighter.root.Position) then
+		task.delay(Config.Combat.death.disintegrateDuration, function()
+			if fighter.humanoid.Parent ~= nil then
+				fighter.humanoid.Health = 0
+			end
+		end)
 		return
 	end
-	local container = LootService.spawnCrate(cframe, crateType)
-	-- La caisse ouverte est remplacée par une neuve après un délai.
-	container.model:GetAttributeChangedSignal("Opened"):Once(function()
-		task.delay(Config.Loot.arenaRespawnDelay, function()
-			if not sandbox then
-				return
-			end
-			LootService.remove(container)
-			spawnCrate(cframe, crateType)
-		end)
+	local dead = fighter.character
+	task.delay(Dev.arenaRespawnDelay, function()
+		-- Partie lancée entre-temps, joueur parti ou déjà réapparu : rien à faire.
+		if not sandbox or player.Parent ~= Players or player.Character ~= dead then
+			return
+		end
+		player:LoadCharacter()
+		local character = player.Character
+		local spawns = MapService.deploySpawns()
+		if character and #spawns > 0 and sandbox then
+			character:PivotTo(spawns[math.random(1, #spawns)].cframe + Vector3.new(0, 3, 0))
+			MovementGuardService.reset(player)
+		end
 	end)
-end
-
--- Remplit l'arène de caisses de bac à sable à partir des repères.
-function ArenaService.spawnSandboxCrates()
-	for _, marker in MapService.crateSpawns() do
-		spawnCrate(marker.cframe, marker.attributes.CrateType or "supply")
-	end
 end
 
 -- Active / désactive le bac à sable (désactivé pendant une partie).
 function ArenaService.setSandbox(enabled: boolean)
 	sandbox = enabled
+	LootService.setSandbox(enabled)
+	-- Hors partie, l'arène gère les morts ; en partie, MatchService installe son gestionnaire.
+	if enabled and built then
+		CombatService.setDeathHandler(sandboxDeath)
+	end
 end
 
 function ArenaService.isSandbox(): boolean
 	return sandbox
 end
 
--- Repères de partie : points de départ, extractions, accélérateurs, caisses.
+-- Repères de partie : points de départ, extractions, accélérateurs (aucune caisse).
 local function placeMarkers(arena: Instance)
 	local half = Dev.arenaSize / 2
 	for index = 1, 8 do
@@ -254,9 +260,6 @@ local function placeMarkers(arena: Instance)
 	for index = 1, 6 do
 		local angle = index / 6 * math.pi * 2
 		MapService.placeMarker(arena, "AcceleratorSpot", CFrame.new(math.cos(angle) * 60, 0.2, math.sin(angle) * 60))
-	end
-	for _, spec in CRATES do
-		MapService.placeMarker(arena, "CrateSpawn", CFrame.new(spec.position), { CrateType = spec.crateType })
 	end
 	-- Zones à risque (garnisons, Gardien) et points de patrouille des robots.
 	MapService.placeMarker(arena, "RiskZone", CFrame.new(0, 1, 62), { Main = true, Radius = 14 })
@@ -309,7 +312,8 @@ function ArenaService.start()
 	for _, spec in Dev.dummies do
 		task.spawn(spawnDummy, arena, spec)
 	end
-	ArenaService.spawnSandboxCrates()
+	built = true
+	ArenaService.setSandbox(true)
 
 	-- Les mannequins détruits réapparaissent.
 	CombatService.FighterDied:Connect(function(fighter)

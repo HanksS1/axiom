@@ -36,5 +36,20 @@ return function(T, H)
 				end
 			end
 		end)
+
+		it("fresques des murs : une par station, traduites", function()
+			local HubDress = H.require("ServerScriptService/Server/Hub/HubDress")
+			local stations = {}
+			for station in HubNpcs.ids() do
+				stations[station] = true
+			end
+			for _, key in HubDress.MURALS do
+				-- Chaque fresque correspond à une vraie station du Terminus.
+				expect(stations[key]).toBe(true)
+				for _, lang in { "fr", "en" } do
+					expect(Localization.has(lang, "hub.wall." .. key)).toBe(true)
+				end
+			end
+		end)
 	end)
 end

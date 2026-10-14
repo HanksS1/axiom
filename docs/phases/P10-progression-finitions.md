@@ -28,6 +28,34 @@ Un ancien hall de gare où les survivants ont installé un marché :
   mécaniques, affiches et tags traduits.
 - Toutes les animations tournent **côté client** (aucun coût serveur), seulement près du Terminus.
 
+## Retours de test en Studio (lobby, stand de tir, arène)
+
+- **Éclairage du Terminus** fixé par le code (`Config.Maps.hub.lighting`), appliqué au démarrage
+  du hub et au retour de partie (`MapRuntimeService.applyHubLighting`) : l'état ne dépend plus du
+  `Lighting` du place. Hausse modérée, surtout dans les ombres :
+
+  | Réglage | Valeur | Rôle | Pour ajuster |
+  |---|---|---|---|
+  | `ambient` | (92, 88, 96) | plancher du noir sous la voûte (intérieur) | le levier principal : ±10 par canal |
+  | `outdoorAmbient` | (118, 112, 122) | idem sous les puits de lumière | suivre `ambient` |
+  | `brightness` | 2 | rais de soleil par la voûte percée | 1,5 à 2,5 |
+  | `clockTime` | 17,2 | soleil bas, chaud | 16 à 18 (plus tard = plus sombre) |
+  | `exposure` | 0,15 | éclaircit tout l'écran | par pas de 0,05 ; au-delà de 0,3, le lobby « délave » |
+
+- **Murs du Terminus** (`Server/Hub/HubDress.luau`) : derrière chaque étal, une fresque à la
+  couleur de la station (slogan localisé `hub.wall.*`), un cadre néon qui grésille et un emblème
+  holographique qui tourne ; fresques derrière le stand de tir et près de la Porte de
+  déploiement ; chemin de câbles avec fuites de vapeur le long du mur sud ; casiers, armoires,
+  terminal, pupitre, groupe de froid, transformateur et baie repris du catalogue des cartes
+  (`Server/Maps/Props`). Tout est décoratif (ancré, sans collision ni tirs) et animé par les tags
+  existants (`Flicker`, `Spin`, `Hologram`).
+- **Stand de tir** : pendant SON défi, le joueur ne voit plus les cibles d'entraînement (cœur
+  cyan) ni le PNJ du stand — masquage local, les autres joueurs voient tout. Rétabli à toute fin
+  de séance (résultat, arrêt, éloignement, mort, départ en partie, réapparition). Les cibles du
+  stand ne bloquent plus la ligne de vue côté serveur : une cible d'entraînement ne fait plus
+  rater une cible de défi. Réglages : `Config.Range.challenge.hidePractice` / `hideNpc`.
+- **Arène d'entraînement** : plus de caisses ni de butin (voir P2) ; réapparition sur place.
+
 ## Progression
 
 1. **Niveau** (déjà en P3) : affiché sur le profil, et maintenant **au-dessus de la tête** des

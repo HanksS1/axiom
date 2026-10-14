@@ -97,10 +97,11 @@ end
 -- Exclut tous les personnages des rayons « monde » (ligne de vue).
 local function refreshRayFilter()
 	-- Les personnages ne bloquent pas la ligne de vue ; les objets (mur
-	-- déployable, drone, orbe) la bloquent.
+	-- déployable, drone, orbe) la bloquent, sauf les silhouettes du stand de tir
+	-- (une cible d'entraînement ne doit pas faire rater une cible de défi).
 	local excluded = {}
 	for character, fighter in fighters do
-		if fighter.kind ~= "object" then
+		if fighter.kind ~= "object" or character:GetAttribute("RangeTarget") == true then
 			table.insert(excluded, character)
 		end
 	end

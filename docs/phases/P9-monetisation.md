@@ -49,6 +49,27 @@ rejoint la **Collection** (onglet Collection), ne prend **aucune place dans le c
 s'applique à chaque exemplaire de l'objet que le joueur porte. L'écran de résultat le dit et
 propose **« Équiper maintenant »**. Un doublon est converti en Noyaux (14.8).
 
+## Ce qu'on gagne, et où le voir (retour de test)
+
+Un joueur ne comprenait ni ce qu'il gagnait ni pourquoi « Équiper » ne changeait rien.
+
+- Le rendu des skins **existait déjà**, côté serveur : `CharacterService.applySkins` pose
+  `WeaponSkin` / `HelmetSkin` / `VestSkin` / `BackpackSkin`, et `updateWeaponVisual` /
+  `updateArmorVisual` les lisent pour construire l'objet porté (répliqué à tous les joueurs).
+  Aucun code client n'était nécessaire.
+- Le vrai problème : un skin d'arme ne se voit que sur **cette** arme, en main. Gagner un skin de
+  Fusil Sentinelle avec un pistolet en main ne change rien à l'écran.
+- L'écran de résultat dit maintenant : la rareté et ce que c'est (« SKIN D'ARME · Fusil
+  Sentinelle »), où il est rangé (Collection, pas le coffre), et si le joueur a l'objet
+  (`Shop.skinStatus`, testé : porté / au coffre / pas encore possédé, en orange).
+- Après « Équiper » : ce qui a changé et où le voir (texte + notification), au lieu d'une coche.
+- Onglet Caisses : rappel « uniquement des skins, rien n'arrive dans le coffre ». Onglet
+  Collection : état de l'objet pour chaque skin.
+- **Première caisse** : une aide explique ce qu'est un skin, où il est rangé et comment
+  l'équiper. Comme pour le tutoriel, c'est le profil qui mémorise qu'elle a été vue
+  (`guidesSeen.cosmetics`, profil v4) ; le serveur la signale dans le résultat de la caisse
+  (`firstTime`), aucune requête de plus.
+
 ## Comment tester dans Studio
 
 1. Menu ☰ → **Holo-Bazar** (ou « + » à côté des Noyaux).

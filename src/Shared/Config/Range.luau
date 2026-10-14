@@ -45,5 +45,10 @@ return Freeze.deep({
 		sequenceLength = 90,
 		-- Défis simultanés au maximum (les cibles d'un défi n'appartiennent qu'à son joueur).
 		maxConcurrent = 2,
+		-- Pendant SON défi, le joueur ne voit plus les cibles d'entraînement (cœur
+		-- cyan) ni le PNJ du stand : seules les cibles orange du défi restent.
+		-- Masquage local : les autres joueurs voient tout normalement.
+		hidePractice = true,
+		hideNpc = true,
 	},
 })

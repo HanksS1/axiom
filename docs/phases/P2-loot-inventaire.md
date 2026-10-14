@@ -8,7 +8,7 @@
 |---|---|
 | Logique pure (testée) | `Shared/Economy/Pricing.luau` (Marchand, revente, réparation, assurance, coût du kit), `Shared/Items/InventoryLogic.luau` (UP, piles, équiper / ranger / jeter, consommation des cellules), `Server/Loot/LootGenerator.luau` (caisses à budget de valeur, loot des robots, états par mode) |
 | Config | `Config/Loot.luau` (budgets), `Config/Modes.luau` (`lootValueMultiplier`), `Config/Network.luau` |
-| Serveur | `Services/LootService.luau` (caisses, sacs de dépouille, objets au sol, prise validée), `Services/InventoryService.luau` (sac de partie, actions), `CombatService.luau` (consommables, recharge depuis les vraies piles), `Combat/Fighter.luau` (sac de partie, chargeurs conservés par arme), `CharacterService.luau` (fournisseur de sac), `ArenaService.luau` (10 caisses de test) |
+| Serveur | `Services/LootService.luau` (caisses, sacs de dépouille, objets au sol, prise validée), `Services/InventoryService.luau` (sac de partie, actions), `CombatService.luau` (consommables, recharge depuis les vraies piles), `Combat/Fighter.luau` (sac de partie, chargeurs conservés par arme), `CharacterService.luau` (fournisseur de sac), `ArenaService.luau` (arène d'entraînement : aucune caisse depuis les retours de test) |
 | Client | `Controllers/InventoryController.luau` (panneau du sac, raccourcis 3/4/5), `ContainerController.luau` (panneau de conteneur, échange sac plein), `QuickBarController.luau` (barre rapide, jauge d'UP), `NotificationController.luau` (messages, traduction des invites), `InputController.luau` (appui court / long, nouvelles actions), `UI/ItemCard.luau`, `UI/PanelState.luau` |
 | Tests | `tests/specs/loot.spec.luau` (24 tests), `tests/tools/crate_values.luau` (valeurs moyennes des caisses) |
 
@@ -29,8 +29,8 @@ d'équipement tombe). Tout se règle dans `Config/Loot.luau` (`kitShare`, `varia
 
 ## Comment tester
 
-1. `rojo serve`, Play : l'arène contient 6 caisses de ravitaillement, 3 coffres
-   militaires (dont un sur la plateforme) et un casier d'AXIOM (alarme rouge).
+1. `rojo serve`, Play : le loot se teste en partie (panneau DEV → partie solo sur une
+   carte). L'arène d'entraînement n'a plus de caisses (bac à sable sans gain).
 2. Maintenir **E** (manette : X ; mobile : bouton d'interaction) pour ouvrir.
 3. Panneau de droite : **Prendre** / **Équiper** (un clic), **Tout prendre** (bouton ou E). Sac plein :
    **Échanger** propose de choisir l'objet à laisser.
@@ -40,8 +40,9 @@ d'équipement tombe). Tout se règle dans `Config/Loot.luau` (`kitShare`, `varia
    pour choisir, maintenir pour utiliser).
 6. Mourir (contre un 2e joueur) : un **sac de dépouille** apparaît avec tout
    l'équipement ; n'importe qui peut le fouiller.
-7. Arène = bac à sable : à la réapparition, vous retrouvez l'équipement de votre
-   profil (rien n'est perdu). Les caisses ouvertes réapparaissent après 30 s.
+7. Arène = bac à sable, **ni risque ni gain** : aucune caisse, aucun sac de dépouille,
+   aucun objet au sol (LootService en mode bac à sable hors partie). Mort dans l'arène :
+   réapparition sur place après `Dev.arenaRespawnDelay` (3,5 s), équipement intact.
 
 ## Sécurité
 

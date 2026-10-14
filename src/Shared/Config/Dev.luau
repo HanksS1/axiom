@@ -19,6 +19,9 @@ return Freeze.deep({
 		{ position = Vector3.new(-12, 3, -30), vestCondition = 5, helmetCondition = 5 },
 	},
 	dummyRespawnDelay = 4,
+	-- Joueur mort dans l'arène (bac à sable) : réapparition sur place, équipement
+	-- intact, après ce délai (secondes, désintégration comprise).
+	arenaRespawnDelay = 3.5,
 	-- Robots dans l'arène (petite carte) : partie et bac à sable.
 	arenaRobots = 8,
 	-- Mercenaires IA dans l'arène (le complément à 16 serait trop dense).

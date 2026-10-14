@@ -147,7 +147,8 @@ end
 local function say(npc: Npc)
 	local head = npc.head
 	local id = npc.model:GetAttribute("NpcId")
-	if head == nil or type(id) ~= "string" then
+	-- PNJ masqué localement (défi du stand de tir) : il se tait.
+	if head == nil or type(id) ~= "string" or npc.model:GetAttribute("LocallyHidden") == true then
 		return
 	end
 	local existing = head:FindFirstChild("SpeechBubble")

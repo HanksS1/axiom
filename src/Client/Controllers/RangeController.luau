@@ -7,12 +7,19 @@
 	  résultat. Tout vient du serveur (RangeState) : le client n'envoie
 	  jamais de score.
 	- Dégâts flottants au-dessus des cibles touchées (RangeHit).
+	- Pendant un défi : les cibles d'entraînement et le PNJ du stand sont
+	  masqués POUR CE JOUEUR SEULEMENT (LocalTransparencyModifier, rien n'est
+	  modifié sur le serveur), puis rétablis à la fin de la séance, quelle
+	  qu'en soit la raison (fin, arrêt, éloignement, mort, départ en partie).
 ]]
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+
+local Config = require(ReplicatedStorage:WaitForChild("Shared").Config)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local Create = require(script.Parent.Parent.UI.Create)
@@ -35,6 +42,82 @@ local bannerValue: TextLabel
 local state: { [string]: any }? = nil
 local startsAt = 0
 local endsAt = 0
+
+-- Éléments masqués pendant le défi, et leur état d'origine (pour tout rétablir).
+type Hidden = {
+	models: { Instance },
+	parts: { [BasePart]: boolean },
+	decals: { Decal },
+	guis: { [Instance]: boolean },
+}
+local hidden: Hidden? = nil
+
+local function hideModel(model: Instance, into: Hidden, query: boolean)
+	-- Attribut posé par le client : local, jamais répliqué (le PNJ se tait, voir HubAmbienceController).
+	model:SetAttribute("LocallyHidden", true)
+	table.insert(into.models, model)
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			into.parts[descendant] = descendant.CanQuery
+			descendant.LocalTransparencyModifier = 1
+			-- Une cible masquée ne doit pas non plus arrêter les tirs du joueur.
+			if not query then
+				descendant.CanQuery = false
+			end
+		elseif descendant:IsA("Decal") then
+			table.insert(into.decals, descendant)
+			descendant.LocalTransparencyModifier = 1
+		elseif descendant:IsA("BillboardGui") or descendant:IsA("SurfaceGui") then
+			into.guis[descendant] = descendant.Enabled
+			descendant.Enabled = false
+		end
+	end
+end
+
+-- Vue du défi : seules les cibles orange du défi restent visibles.
+local function setChallengeView(active: boolean)
+	local current = hidden
+	if current then
+		hidden = nil
+		for _, model in current.models do
+			model:SetAttribute("LocallyHidden", nil)
+		end
+		for part, query in current.parts do
+			if part.Parent then
+				part.LocalTransparencyModifier = 0
+				part.CanQuery = query
+			end
+		end
+		for _, decal in current.decals do
+			if decal.Parent then
+				decal.LocalTransparencyModifier = 0
+			end
+		end
+		for gui, enabled in current.guis do
+			if gui.Parent then
+				(gui :: any).Enabled = enabled
+			end
+		end
+	end
+	if not active then
+		return
+	end
+	local terminus = Workspace:FindFirstChild("Terminus")
+	if terminus == nil then
+		return
+	end
+	local into: Hidden = { models = {}, parts = {}, decals = {}, guis = {} }
+	for _, descendant in terminus:GetDescendants() do
+		if descendant:IsA("Model") then
+			if Config.Range.challenge.hidePractice and descendant:GetAttribute("Practice") == true then
+				hideModel(descendant, into, false)
+			elseif Config.Range.challenge.hideNpc and descendant:GetAttribute("Station") == "range" then
+				hideModel(descendant, into, true)
+			end
+		end
+	end
+	hidden = into
+end
 
 local function renderBanner()
 	local current = state
@@ -64,6 +147,8 @@ local function onState(next: { [string]: any })
 	end
 	state = if next.mode then next else nil
 	screen.setSession(next.mode)
+	-- Toute fin de séance (résultat, arrêt, éloignement, mort…) rétablit la vue.
+	setChallengeView(next.mode == "challenge")
 	if next.finished then
 		NotificationController.show(t("range.result", { score = next.score or 0, hits = next.hits or 0 }), Theme.orange)
 	elseif next.ended == "left" then
@@ -153,6 +238,7 @@ function RangeController.start()
 	player.CharacterAdded:Connect(function()
 		state = nil
 		screen.setSession(nil)
+		setChallengeView(false)
 		renderBanner()
 	end)
 end
