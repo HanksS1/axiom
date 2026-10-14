@@ -103,6 +103,39 @@ return function(T, H)
 		end)
 	end)
 
+	describe("Crédits offerts", function()
+		it("ajout, montants refusés, plafond du profil", function()
+			local profile = ProfileTemplate.new(NOW)
+			profile.credits = 100
+			local ok, _, added = CrateGifts.grantCredits(profile, 500)
+			expect(ok).toBe(true)
+			expect(added).toBe(500)
+			expect(profile.credits).toBe(600)
+			for _, bad in { 0, -10, 2.5, A.maxCreditsPerGift + 1 } do
+				local refused, reason = CrateGifts.grantCredits(profile, bad)
+				expect(refused).toBe(false)
+				expect(reason).toBe("invalid_amount")
+			end
+			expect(profile.credits).toBe(600)
+			-- Le total reste borné par le maximum d'un profil.
+			profile.credits = Config.Economy.maxCredits - 50
+			ok, _, added = CrateGifts.grantCredits(profile, 1000)
+			expect(ok).toBe(true)
+			expect(added).toBe(50)
+			expect(profile.credits).toBe(Config.Economy.maxCredits)
+			local refused, reason = CrateGifts.grantCredits(profile, 100)
+			expect(refused).toBe(false)
+			expect(reason).toBe("credits_full")
+		end)
+
+		it("raccourcis du panneau valides", function()
+			for _, value in A.creditPresets do
+				expect(value >= 1 and value <= A.maxCreditsPerGift).toBe(true)
+			end
+			expect(A.creditStep >= 1).toBe(true)
+		end)
+	end)
+
 	describe("Droits d'administrateur", function()
 		it("hors Studio : seulement la liste et le groupe configurés", function()
 			expect(CrateGifts.isAdmin(424242, 0, false)).toBe(table.find(A.userIds, 424242) ~= nil)

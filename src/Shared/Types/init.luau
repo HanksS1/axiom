@@ -159,6 +159,8 @@ export type QueueView = {
 	needed: number?,
 	since: number?, -- os.time() de l'entrée dans la file
 	suggestCrossplay: boolean?,
+	maps: { string }?, -- cartes acceptées par le groupe
+	mapCounts: { [string]: number }?, -- joueurs en file par carte (même file)
 }
 
 return {}

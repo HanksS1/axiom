@@ -32,4 +32,11 @@ return Freeze.deep({
 	-- d'un même type sur un profil (garde-fou contre une erreur de saisie).
 	maxPerGift = 20,
 	maxStock = 999,
+
+	-- Crédits offerts : montants proposés dans le panneau, pas des boutons +/−, et
+	-- plafond par envoi (garde-fou contre une erreur de saisie). Le total du joueur
+	-- reste borné par Economy.maxCredits.
+	creditPresets = { 100, 500, 1000, 5000 },
+	creditStep = 100,
+	maxCreditsPerGift = 100000,
 })

@@ -48,6 +48,7 @@ export type MatchConfig = {
 export type QueueStats = {
 	players: number,
 	oldest: number?,
+	maps: { [string]: number }?, -- joueurs par carte acceptée
 }
 
 local maps: { [string]: any } = {}

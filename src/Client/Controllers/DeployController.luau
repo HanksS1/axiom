@@ -282,6 +282,11 @@ function DeployController.start()
 		queue = if type(state) == "table" then state else { status = "idle" }
 		renderQueue()
 	end)
+	ClientNet.on("QueueMapCountsResult", function(modeId: string, format: string, counts: { [string]: number })
+		if type(modeId) == "string" and type(format) == "string" and type(counts) == "table" then
+			screen.setMapCounts(modeId, format, counts)
+		end
+	end)
 	ClientNet.on("PartyState", function(party: Types.PartyView?)
 		screen.setParty(if type(party) == "table" then party else nil)
 	end)
@@ -342,6 +347,10 @@ function DeployController.start()
 		accumulator = 0
 		if queue.status ~= "idle" then
 			renderQueue()
+		end
+		-- Porte ouverte : joueurs en file par carte, rafraîchis toutes les 3 s.
+		if screen.panel:isOpen() then
+			screen.tick()
 		end
 		local invite = pendingInvite
 		if invite and os.clock() > invite.expires then

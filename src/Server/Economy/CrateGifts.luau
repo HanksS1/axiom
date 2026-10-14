@@ -49,6 +49,23 @@ function CrateGifts.grant(profile: any, kind: string, amount: number): (boolean,
 	return true, nil, current + amount
 end
 
+--[[
+	Ajoute `amount` crédits offerts. Retourne (succès, raison, crédits réellement
+	ajoutés) : le total reste borné par Economy.maxCredits.
+]]
+function CrateGifts.grantCredits(profile: any, amount: number): (boolean, string?, number)
+	if type(amount) ~= "number" or amount % 1 ~= 0 or amount < 1 or amount > Admin.maxCreditsPerGift then
+		return false, "invalid_amount", 0
+	end
+	local before = profile.credits
+	profile.credits = math.min(Config.Economy.maxCredits, before + amount)
+	local added = profile.credits - before
+	if added <= 0 then
+		return false, "credits_full", 0
+	end
+	return true, nil, added
+end
+
 -- Utilise une caisse offerte de type `kind`, s'il en reste. Retourne true si une a été utilisée.
 function CrateGifts.consume(profile: any, kind: string): boolean
 	local current = CrateGifts.count(profile, kind)
