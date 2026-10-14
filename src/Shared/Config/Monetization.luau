@@ -58,6 +58,26 @@ return Freeze.deep({
 		rotationPeriod = 24 * 60 * 60, -- renouvellement à 00:00 UTC
 	},
 
+	-- Ouverture d'une caisse du Holo-Bazar (14.10), en secondes : des lasers
+	-- assemblent la caisse en gros pixels, puis en pixels de plus en plus fins
+	-- jusqu'à la caisse complète ; un scanner la balaie ; elle s'ouvre et
+	-- l'objet obtenu en sort et flotte au-dessus. « Passer » saute à la fin.
+	crateOpening = {
+		phases = {
+			{ name = "coarse", duration = 0.9 }, -- gros pixels
+			{ name = "fine", duration = 1.2 }, -- pixels fins
+			{ name = "solidify", duration = 0.45 }, -- la caisse se solidifie
+			{ name = "scan", duration = 1.4 }, -- scanner, aller-retour
+			{ name = "open", duration = 0.8 }, -- secousse, couvercle
+			{ name = "rise", duration = 0.9 }, -- l'objet sort et monte
+		},
+		crateSize = Vector3.new(4, 2.4, 2.6),
+		coarseCell = 1.25, -- taille des gros pixels (studs)
+		fineCell = 0.6,
+		itemSize = 3.2, -- plus grande dimension de l'objet flottant (studs)
+		floatHeight = 4.6, -- hauteur de l'objet au-dessus du sol de la scène
+	},
+
 	-- Valeur d'un cosmétique par rareté (prix direct ; Mythique : valeur de référence).
 	rarityValue = { common = 100, rare = 250, epic = 500, legendary = 1000, mythic = 2000 },
 	-- Doublon de caisse : converti en 20 % de la valeur de l'objet, en Noyaux.

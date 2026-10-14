@@ -27,6 +27,28 @@
 5. Ligne de conduite (14.10) : vrai compte à rebours, aucune fausse rareté, prix en Robux visibles
    sur les packs, aucune fenêtre d'achat qui s'ouvre seule, bouton « Passer » toujours disponible.
 
+## Ouverture d'une caisse (refaite après les premiers tests)
+
+Scène 3D (`Client/UI/CrateScene.luau`, déroulé pur et testé dans
+`Shared/Visuals/CrateSequence.luau`, durées dans `Config.Monetization.crateOpening`) :
+
+1. **Construction** : quatre projecteurs magenta tirent des lasers qui posent la caisse
+   en gros pixels, puis en pixels de plus en plus fins, jusqu'à la caisse complète (≈ 2,5 s).
+2. **Scanner** : une lame rouge balaie la caisse de haut en bas et retour ; son bandeau prend
+   la couleur de la rareté.
+3. **Ouverture** : la caisse tremble, le couvercle s'ouvre, une colonne de lumière à la
+   couleur de la rareté jaillit (éclair à l'écran).
+4. **L'objet sort** et reste à flotter au-dessus de la caisse ouverte, en tournant, avec
+   son nom, sa rareté et ce qu'il devient.
+
+« Passer » place la scène directement à la fin ; « ouverture rapide » aussi (sans éclair).
+
+**Où va l'objet obtenu ?** Une caisse du Holo-Bazar ne donne jamais d'arme : elle donne un
+**skin** (l'apparence d'une arme, d'un sac, d'un casque ou d'un gilet, section 14.5). Il
+rejoint la **Collection** (onglet Collection), ne prend **aucune place dans le coffre**, et
+s'applique à chaque exemplaire de l'objet que le joueur porte. L'écran de résultat le dit et
+propose **« Équiper maintenant »**. Un doublon est converti en Noyaux (14.8).
+
 ## Comment tester dans Studio
 
 1. Menu ☰ → **Holo-Bazar** (ou « + » à côté des Noyaux).
