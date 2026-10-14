@@ -12,6 +12,26 @@
 | Client | `Screens/DeployScreen.luau` (Porte de déploiement), `Controllers/DeployController.luau` (file d'attente, invitations duo, plateforme), bouton « Retour au Terminus » en fin de partie |
 | Tests | `tests/specs/matchmaking.spec.luau` (14 tests) |
 
+## Sélection de cartes (ajoutée après les tests)
+
+À la Porte de déploiement, le chef du groupe coche les cartes qu'il accepte (toutes par
+défaut, au moins une). Chaque carte montre :
+
+- sa **vignette** : le plan vu de dessus de la carte, dans ses couleurs
+  (`Config.Maps.*.card`). Le plan est généré à partir des cartes elles-mêmes
+  (`Shared/Match/MapThumbnails.luau`, par `lune run tests/tools/map_thumbnails.luau` ; un test
+  signale une vignette périmée). Pour afficher une vraie capture à la place, renseigner
+  `card.image` (`rbxassetid://…`) ;
+- le **nombre de joueurs en file** pour le même mode et le même format qui acceptent cette
+  carte (rafraîchi toutes les 3 s pendant que la Porte est ouverte).
+
+Composition d'une partie (`Matchmaking.compose`, testé) : le ticket le plus ancien part en
+priorité ; parmi SES cartes, on retient celle qui réunit le plus de joueurs (tous les tickets
+retenus l'acceptent) ; à égalité, tirage au sort. Plus on coche de cartes, plus l'attente est
+courte. En ligne, les compteurs par carte passent par les statistiques de la file
+(`MatchStore.writeStats`, champ `maps`) ; en local (Studio), par les tickets du serveur. Dans
+Studio, une carte imposée par le panneau DEV reste prioritaire.
+
 ## Comment tester dans Studio
 
 Les places ne sont pas configurées : les parties se lancent **sur le serveur lui-même** (« parties

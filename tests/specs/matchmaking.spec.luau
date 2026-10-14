@@ -227,4 +227,87 @@ return function(T, H)
 			end
 		end)
 	end)
+
+	describe("Sélection de cartes", function()
+		local all = Config.Maps.list
+		local function withMaps(maps, joinedAt, userIds)
+			local result = ticket("solo", joinedAt, userIds)
+			result.maps = maps
+			return result
+		end
+
+		it("sélection nettoyée : cartes connues, sans doublon, vide = toutes", function()
+			expect(Matchmaking.cleanMaps(nil)).toEqual(all)
+			expect(Matchmaking.cleanMaps({})).toEqual(all)
+			expect(Matchmaking.cleanMaps({ "inconnue", 3 })).toEqual(all)
+			expect(Matchmaking.cleanMaps({ all[3], all[1], all[3] })).toEqual({ all[1], all[3] })
+		end)
+
+		it("ticket : cartes inconnues refusées, absence = toutes acceptées", function()
+			local t1 = withMaps(nil, 0, { 1 })
+			expect(Matchmaking.isValidTicket(t1)).toBe(true)
+			expect(Matchmaking.accepts(t1, all[2])).toBe(true)
+			local t2 = withMaps({ all[1] }, 0, { 2 })
+			expect(Matchmaking.accepts(t2, all[1])).toBe(true)
+			expect(Matchmaking.accepts(t2, all[2])).toBe(false)
+			expect(Matchmaking.isValidTicket(withMaps({ "inconnue" }, 0, { 3 }))).toBe(false)
+		end)
+
+		it("joueurs en file par carte (un duo compte pour 2)", function()
+			local duo = ticket("duo", 0, { 10, 11 })
+			duo.maps = { all[2] }
+			local counts =
+				Matchmaking.mapCounts({ withMaps({ all[1], all[2] }, 0, { 1 }), duo, withMaps(nil, 0, { 2 }) })
+			expect(counts[all[1]]).toBe(2)
+			expect(counts[all[2]]).toBe(4)
+			expect(counts[all[3]]).toBe(1)
+		end)
+
+		it("la partie part sur une carte acceptée par tous ses joueurs, celle qui en réunit le plus", function()
+			local tickets = {
+				withMaps({ all[1], all[2] }, 0, { 1 }), -- le plus ancien
+				withMaps({ all[2] }, 5, { 2 }),
+				withMaps({ all[2], all[3] }, 6, { 3 }),
+				withMaps({ all[1] }, 7, { 4 }),
+				withMaps({ all[3] }, 8, { 5 }), -- n'accepte pas les cartes du plus ancien
+			}
+			local composition = Matchmaking.compose(tickets, options)
+			expect(composition.mapId).toBe(all[2])
+			expect(composition.players).toBe(3)
+			for _, chosen in composition.tickets do
+				expect(Matchmaking.accepts(chosen, composition.mapId)).toBe(true)
+			end
+		end)
+
+		it("égalité : tirage parmi les cartes ex aequo", function()
+			local tickets = { withMaps({ all[1], all[2] }, 0, { 1 }) }
+			local first = Matchmaking.compose(tickets, options)
+			expect(first.mapId).toBe(all[1])
+			local options2 = table.clone(options)
+			options2.pick = function(count)
+				expect(count).toBe(2)
+				return 2
+			end
+			expect(Matchmaking.compose(tickets, options2).mapId).toBe(all[2])
+		end)
+
+		it(
+			"vignettes de la Porte à jour avec les cartes (sinon : lune run tests/tools/map_thumbnails.luau)",
+			function()
+				local MapPlan = H.require("ReplicatedStorage/Shared/Match/MapPlan")
+				local MapThumbnails = H.require("ReplicatedStorage/Shared/Match/MapThumbnails")
+				local Registry = H.require("ServerScriptService/Server/Maps/Registry")
+				local LayoutBuilder = H.require("ServerScriptService/Server/Maps/LayoutBuilder")
+				local P = Config.Maps.plan
+				for _, mapId in all do
+					local layout = Registry[mapId](LayoutBuilder.random(Config.Maps.byId[mapId].seed))
+					local plan = MapPlan.build(layout.parts, Config.Maps.size, P.thumbnailCell, P.band)
+					if MapThumbnails[mapId] ~= MapPlan.encode(plan) then
+						error(`vignette de {mapId} périmée`)
+					end
+					expect(Config.Maps.byId[mapId].card ~= nil).toBe(true)
+				end
+			end
+		)
+	end)
 end

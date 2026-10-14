@@ -15,11 +15,15 @@
 	    serveur, avec un délai d'attente raccourci.
 	- Après 90 s d'attente, la partie part avec les joueurs présents et des
 	  mercenaires IA. Hors crossplay, après 60 s, on propose de basculer.
+	- Cartes : le chef du groupe coche les cartes acceptées ; la partie part sur
+	  une carte acceptée par tous ses joueurs (Matchmaking.compose). Les joueurs
+	  en file par carte sont affichés à la Porte (QueueMapCounts).
 	- Téléportation échouée : nouvelles tentatives, puis retour au Terminus
 	  avec l'équipement intact (le profil est rechargé).
 ]]
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
 
@@ -36,6 +40,7 @@ local Teleporter = require(script.Parent.Parent.Matchmaking.Teleporter)
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
 local Uid = require(script.Parent.Parent.Util.Uid)
 local DataService = require(script.Parent.DataService)
+local MapRuntimeService = require(script.Parent.MapRuntimeService)
 local MatchService = require(script.Parent.MatchService)
 local PartyService = require(script.Parent.PartyService)
 local TutorialService = require(script.Parent.TutorialService)
@@ -52,6 +57,7 @@ type Entry = {
 	status: "queued" | "teleporting",
 	lastRefresh: number,
 	players: number, -- joueurs dans la file (affichage)
+	mapCounts: { [string]: number }?, -- joueurs en file par carte (affichage)
 }
 
 local entries: { [string]: Entry } = {}
@@ -86,6 +92,8 @@ local function push(entry: Entry)
 		needed = MM.matchSize,
 		since = ticket.joinedAt,
 		suggestCrossplay = Matchmaking.suggestCrossplay(ticket.group, waited, entry.forced),
+		maps = ticket.maps,
+		mapCounts = entry.mapCounts,
 	}
 	for _, member in entry.members do
 		sendState(member, state)
@@ -125,7 +133,7 @@ local function notifyAll(members: { Player }, key: string, params: { [string]: a
 	end
 end
 
-local function join(player: Player, modeId: string, format: Matchmaking.Format, crossplay: boolean)
+local function join(player: Player, modeId: string, format: Matchmaking.Format, crossplay: boolean, maps: { string }?)
 	if PlaceRole.isMatchServer() then
 		return -- la file n'existe qu'au Terminus
 	end
@@ -195,6 +203,7 @@ local function join(player: Player, modeId: string, format: Matchmaking.Format, 
 		group = group,
 		joinedAt = joinedAt,
 		hubJobId = jobId,
+		maps = Matchmaking.cleanMaps(maps),
 	}
 	local entry: Entry = {
 		ticket = ticket,
@@ -286,7 +295,14 @@ local function startLocal(composition: Matchmaking.Composition)
 		players = players,
 		teams = teams,
 		mercenaries = MM.matchSize - #players,
+		-- Studio : une carte imposée par le panneau DEV passe avant la sélection.
+		mapId = if RunService:IsStudio() and MapRuntimeService.devChoice ~= "random" then nil else composition.mapId,
 	})
+end
+
+-- Tirage au sort parmi des cartes à égalité.
+local function pickIndex(count: number): number
+	return math.random(1, count)
 end
 
 -- Files en cours de traitement sur CE serveur : le verrou MemoryStore est au nom
@@ -307,12 +323,13 @@ local function matchmakeRemote(key: string)
 		total += #ticket.userIds
 		oldest = if oldest then math.min(oldest, ticket.joinedAt) else ticket.joinedAt
 	end
-	MatchStore.writeStats(key, { players = total, oldest = oldest })
+	MatchStore.writeStats(key, { players = total, oldest = oldest, maps = Matchmaking.mapCounts(tickets) })
 	local composition = Matchmaking.compose(tickets, {
 		now = os.time(),
 		matchSize = MM.matchSize,
 		fillTimeout = MM.queue.fillTimeout,
 		minPlayers = MM.queue.minPlayersToStart,
+		pick = pickIndex,
 	})
 	if composition == nil then
 		return
@@ -334,7 +351,7 @@ local function matchmakeRemote(key: string)
 		teams = teams,
 		bots = composition.bots,
 		createdAt = os.time(),
-		mapId = Config.Maps.list[math.random(1, #Config.Maps.list)],
+		mapId = composition.mapId,
 	})
 	if not written then
 		return
@@ -363,9 +380,11 @@ local function matchmakerLoop()
 				for _, ticket in tickets do
 					total += #ticket.userIds
 				end
+				local counts = Matchmaking.mapCounts(tickets)
 				for _, entry in entries do
 					if entry.key == key then
 						entry.players = total
+						entry.mapCounts = counts
 					end
 				end
 				if not MatchService.isRunning() then
@@ -374,6 +393,7 @@ local function matchmakerLoop()
 						matchSize = MM.matchSize,
 						fillTimeout = MM.localFillTimeout,
 						minPlayers = MM.queue.minPlayersToStart,
+						pick = pickIndex,
 					})
 					if composition then
 						startLocal(composition)
@@ -430,17 +450,61 @@ local function pollLoop()
 			local stats = statsByKey[entry.key]
 			if stats then
 				entry.players = stats.players
+				entry.mapCounts = stats.maps
 			end
 			push(entry)
 		end
 	end
 end
 
+-- Joueurs en file par carte, pour une file donnée (Porte de déploiement, avant d'entrer).
+local countsCache: { [string]: { at: number, counts: { [string]: number } } } = {}
+
+local function mapCountsFor(key: string): { [string]: number }
+	if isLocal() then
+		local tickets = {}
+		for _, entry in entries do
+			if entry.key == key and entry.status == "queued" then
+				table.insert(tickets, entry.ticket)
+			end
+		end
+		return Matchmaking.mapCounts(tickets)
+	end
+	local cached = countsCache[key]
+	if cached and os.clock() - cached.at < MM.queue.pollInterval then
+		return cached.counts
+	end
+	local stats = MatchStore.readStats(key)
+	local counts = if stats and type(stats.maps) == "table" then stats.maps else Matchmaking.mapCounts({})
+	countsCache[key] = { at = os.clock(), counts = counts }
+	return counts
+end
+
+local function sendMapCounts(player: Player, modeId: string, format: Matchmaking.Format, crossplay: boolean)
+	local group = Matchmaking.platformGroup(crossplay, { PartyService.platformOf(player) })
+	local key = Matchmaking.queueKey(modeId, format, group)
+	ServerNet.fire("QueueMapCountsResult", player, modeId, format, mapCountsFor(key))
+end
+
 function QueueService.init()
 	ServerNet.onEvent(
 		"QueueJoin",
-		Guard.tuple(Guard.keyOf(Config.Modes.byId), Guard.enum({ "solo", "duo" }), Guard.boolean()),
+		Guard.tuple(
+			Guard.keyOf(Config.Modes.byId),
+			Guard.enum({ "solo", "duo" }),
+			Guard.boolean(),
+			Guard.optional(Guard.array(Guard.keyOf(Config.Maps.byId), #Config.Maps.list))
+		),
 		join
+	)
+	ServerNet.onEvent(
+		"QueueMapCounts",
+		Guard.tuple(Guard.keyOf(Config.Modes.byId), Guard.enum({ "solo", "duo" }), Guard.boolean()),
+		function(player, modeId: string, format: Matchmaking.Format, crossplay: boolean)
+			if not PlaceRole.isMatchServer() then
+				sendMapCounts(player, modeId, format, crossplay)
+			end
+		end
 	)
 	ServerNet.onEvent("QueueLeave", Guard.tuple(), function(player)
 		QueueService.cancelFor(player, "queue.cancelled")

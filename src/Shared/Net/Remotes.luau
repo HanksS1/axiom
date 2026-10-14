@@ -89,6 +89,7 @@ local Remotes: { [string]: RemoteDef } = {
 	EquipCosmetic = { kind = "event", toServer = true },
 	-- Administration : offrir des caisses à un joueur (refusé si l'appelant n'est pas administrateur)
 	AdminGiftCrates = { kind = "event", toServer = true },
+	AdminGiftCredits = { kind = "event", toServer = true },
 
 	-- Cartes (P7) : grondements, effondrements, Gardien qui surgit… (effets visuels)
 	MapEvent = { kind = "event", toServer = false },
@@ -103,6 +104,8 @@ local Remotes: { [string]: RemoteDef } = {
 	QueueJoin = { kind = "event", toServer = true },
 	QueueLeave = { kind = "event", toServer = true },
 	QueueState = { kind = "event", toServer = false },
+	QueueMapCounts = { kind = "event", toServer = true }, -- joueurs en file par carte (mode, format, crossplay)
+	QueueMapCountsResult = { kind = "event", toServer = false },
 	ReturnToHub = { kind = "event", toServer = true },
 
 	-- Progression (P10) : classements (mondial, amis, par mode, défi du stand de tir)

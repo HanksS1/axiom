@@ -6,6 +6,8 @@
 	  (identifiant Roblox listé, rang dans un groupe, ou Roblox Studio si la
 	  config le permet). L'attribut `IsAdmin` du joueur sert seulement à
 	  afficher le panneau côté client : chaque demande est revérifiée ici.
+	- Offrir des crédits à un joueur présent sur le serveur (plafonnés par envoi
+	  et par le maximum de crédits d'un profil), journalisés de la même façon.
 	- Offrir des caisses (giveaway) : caisse gratuite ou caisses du Holo-Bazar,
 	  à un joueur présent sur le serveur. Elles s'ajoutent à son profil
 	  (`crateTokens`) et s'ouvrent gratuitement au Holo-Bazar / au bouton de
@@ -79,7 +81,44 @@ local function gift(admin: Player, targetUserId: number, kind: string, amount: n
 	ServerNet.notify(admin, "admin.given." .. kind, { count = amount, name = target.DisplayName })
 end
 
+local function giftCredits(admin: Player, targetUserId: number, amount: number)
+	if not admins[admin] then
+		ServerNet.flag(admin, "AdminGiftCredits", "demande d'un non-administrateur")
+		return
+	end
+	local target = Players:GetPlayerByUserId(targetUserId)
+	if target == nil then
+		ServerNet.notify(admin, "admin.failure.offline")
+		return
+	end
+	local granted, reason, added = false, nil :: string?, 0
+	DataService.update(target, function(profile)
+		granted, reason, added = CrateGifts.grantCredits(profile, amount)
+		return granted
+	end)
+	if not granted then
+		ServerNet.notify(admin, "admin.failure." .. tostring(reason or "unknown"))
+		return
+	end
+	task.spawn(DataService.saveNow, target)
+	local detail = { admin = admin.UserId, target = target.UserId, credits = added }
+	TransactionLog.record(target, "admin.giftCredits", detail)
+	if admin ~= target then
+		TransactionLog.record(admin, "admin.giftCredits", detail)
+	end
+	ServerNet.notify(target, "gift.receivedCredits", { credits = added })
+	ServerNet.notify(admin, "admin.givenCredits", { credits = added, name = target.DisplayName })
+end
+
 function AdminService.init()
+	ServerNet.onEvent(
+		"AdminGiftCredits",
+		Guard.tuple(
+			Guard.integer(), -- UserId (négatif pour les joueurs de test de Studio)
+			Guard.integer(1, Config.Admin.maxCreditsPerGift)
+		),
+		giftCredits
+	)
 	ServerNet.onEvent(
 		"AdminGiftCrates",
 		Guard.tuple(

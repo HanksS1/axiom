@@ -46,6 +46,14 @@ export type GuardianDef = {
 local maps = {
 	neo_lumen = {
 		id = "neo_lumen",
+		-- Vignette de la Porte de déploiement : plan vu de dessus (MapThumbnails) dans
+		-- ces couleurs. `image` : capture facultative (rbxassetid://…), affichée à la place.
+		card = {
+			ground = Color3.fromRGB(26, 22, 40),
+			wall = Color3.fromRGB(150, 110, 210),
+			accent = Color3.fromRGB(255, 46, 196),
+			image = "",
+		},
 		order = 1,
 		seed = 1101,
 		-- Nuit urbaine néon, LISIBLE. Seconde passe (retour de test : « encore trop
@@ -108,6 +116,14 @@ local maps = {
 	},
 	forge_7 = {
 		id = "forge_7",
+		-- Vignette de la Porte de déploiement : plan vu de dessus (MapThumbnails) dans
+		-- ces couleurs. `image` : capture facultative (rbxassetid://…), affichée à la place.
+		card = {
+			ground = Color3.fromRGB(34, 28, 24),
+			wall = Color3.fromRGB(200, 130, 60),
+			accent = Color3.fromRGB(255, 138, 0),
+			image = "",
+		},
 		order = 2,
 		seed = 2207,
 		lighting = {
@@ -160,6 +176,14 @@ local maps = {
 	},
 	terres_brulees = {
 		id = "terres_brulees",
+		-- Vignette de la Porte de déploiement : plan vu de dessus (MapThumbnails) dans
+		-- ces couleurs. `image` : capture facultative (rbxassetid://…), affichée à la place.
+		card = {
+			ground = Color3.fromRGB(70, 56, 40),
+			wall = Color3.fromRGB(200, 170, 120),
+			accent = Color3.fromRGB(255, 221, 51),
+			image = "",
+		},
 		order = 3,
 		seed = 3313,
 		lighting = {
@@ -209,6 +233,14 @@ local maps = {
 	},
 	noyau_zero = {
 		id = "noyau_zero",
+		-- Vignette de la Porte de déploiement : plan vu de dessus (MapThumbnails) dans
+		-- ces couleurs. `image` : capture facultative (rbxassetid://…), affichée à la place.
+		card = {
+			ground = Color3.fromRGB(14, 22, 30),
+			wall = Color3.fromRGB(70, 150, 190),
+			accent = Color3.fromRGB(0, 229, 255),
+			image = "",
+		},
 		order = 4,
 		seed = 4421,
 		lighting = {
@@ -296,7 +328,8 @@ return Freeze.deep({
 	-- Plan vu de dessus (touche « carte ») : taille d'une case en studs, et
 	-- tranche de hauteur dans laquelle un obstacle compte (hauteur d'homme) ;
 	-- `minSpan` : le décor plus court (barils, caisses) n'est pas dessiné.
-	plan = { cell = 4, band = { min = 1.5, max = 6, minSpan = 7 } },
+	-- `thumbnailCell` : case des vignettes de la Porte de déploiement (MapThumbnails).
+	plan = { cell = 4, thumbnailCell = 10, band = { min = 1.5, max = 6, minSpan = 7 } },
 	guardianBehaviors = guardianBehaviors,
 	-- Métal en fusion (Forge-7) : mort instantanée. Zones vérifiées 5 fois par seconde.
 	hazardTick = 0.2,

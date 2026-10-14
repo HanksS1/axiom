@@ -6,10 +6,10 @@
 	administrateur (attribut IsAdmin). Le serveur revérifie chaque demande :
 	ce panneau n'est qu'une commodité d'affichage.
 
-	Offrir des caisses : choisir un joueur présent sur le serveur, le type de
-	caisse (gratuite, Rouille, Néon, Prototype) et la quantité, puis « Offrir ».
-	Le joueur les ouvre gratuitement au Holo-Bazar (ou au bouton de la caisse
-	gratuite).
+	Deux onglets, pour un joueur présent sur le serveur :
+	- Caisses : type (gratuite, Rouille, Néon, Prototype) et quantité. Le joueur
+	  les ouvre gratuitement au Holo-Bazar (ou au bouton de la caisse gratuite) ;
+	- Crédits : montant (raccourcis et pas de ±100).
 ]]
 
 local Players = game:GetService("Players")
@@ -35,6 +35,8 @@ local toggle: TextButton? = nil
 local selectedUserId: number? = nil
 local selectedCrate = A.giftCrates[1]
 local amount = 1
+local tab: "crates" | "credits" = "crates"
+local credits = A.creditPresets[1]
 
 local function crateName(kind: string): string
 	return if kind == "free" then t("freecrate.title") else t("cosmeticCrate." .. kind)
@@ -78,6 +80,19 @@ local function render()
 		})
 	end
 
+	-- Onglets : caisses ou crédits.
+	local tabs = row()
+	for index, key in { "crates", "credits" } do
+		local active = tab == key
+		local button = Panel.button(t("admin.tab." .. key), if active then Theme.magenta else Theme.textDim, 170)
+		button.LayoutOrder = index
+		button.Parent = tabs
+		button.Activated:Connect(function()
+			tab = key :: any
+			render()
+		end)
+	end
+
 	-- Joueur (présent sur ce serveur).
 	section("admin.player")
 	local players = row()
@@ -102,6 +117,66 @@ local function render()
 			selectedUserId = other.UserId
 			render()
 		end)
+	end
+
+	local target = if selectedUserId then Players:GetPlayerByUserId(selectedUserId) else nil
+
+	if tab == "credits" then
+		-- Montant : raccourcis, puis ajustement par pas.
+		section("admin.creditsAmount")
+		local presets = row()
+		for index, value in A.creditPresets do
+			local button = Panel.button(
+				(if value == credits then "✔ " else "") .. tostring(value),
+				if value == credits then Theme.green else Theme.text,
+				170
+			)
+			button.LayoutOrder = index
+			button.Parent = presets
+			button.Activated:Connect(function()
+				credits = value
+				render()
+			end)
+		end
+		local adjust = row()
+		local less = Panel.button(`− {A.creditStep}`, Theme.text, 170)
+		less.LayoutOrder = 1
+		less.Parent = adjust
+		local shown = Panel.button(t("admin.creditsValue", { credits = credits }), Theme.cyan, 170)
+		shown.LayoutOrder = 2
+		shown.AutoButtonColor = false
+		shown.Parent = adjust
+		local more = Panel.button(`+ {A.creditStep}`, Theme.text, 170)
+		more.LayoutOrder = 3
+		more.Parent = adjust
+		less.Activated:Connect(function()
+			credits = math.max(A.creditStep, credits - A.creditStep)
+			render()
+		end)
+		more.Activated:Connect(function()
+			credits = math.min(A.maxCreditsPerGift, credits + A.creditStep)
+			render()
+		end)
+		local giveCredits = Panel.button(
+			if target
+				then t("admin.giveCredits", { credits = credits, name = target.DisplayName })
+				else t("admin.choosePlayer"),
+			if target then Theme.green else Theme.textDim,
+			520
+		)
+		giveCredits.LayoutOrder = nextOrder()
+		giveCredits.Parent = content
+		giveCredits.Activated:Connect(function()
+			if selectedUserId then
+				ClientNet.fire("AdminGiftCredits", selectedUserId, credits)
+			end
+		end)
+		local creditsNote = Panel.label(t("admin.creditsNote"), 13, Theme.textDim)
+		creditsNote.LayoutOrder = nextOrder()
+		creditsNote.TextWrapped = true
+		creditsNote.Size = UDim2.new(1, -8, 0, 40)
+		creditsNote.Parent = content
+		return
 	end
 
 	-- Type de caisse.
@@ -145,7 +220,6 @@ local function render()
 	end)
 
 	-- Offrir.
-	local target = if selectedUserId then Players:GetPlayerByUserId(selectedUserId) else nil
 	local give = Panel.button(
 		if target
 			then t("admin.give", { count = amount, crate = crateName(selectedCrate), name = target.DisplayName })

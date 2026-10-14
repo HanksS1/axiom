@@ -82,6 +82,10 @@ caisses du Holo-Bazar (Rouille, Néon, Prototype), 1 à 20 à la fois.
   bouton, et chaque demande est revérifiée. Une demande d'un non-administrateur est signalée.
 - **Panneau** : bouton « ADMIN » (à droite de l'écran, administrateurs seulement) → joueur,
   type de caisse, quantité → « Offrir ».
+- **Crédits** : onglet « Crédits » du même panneau → joueur, montant (100 / 500 / 1 000 /
+  5 000, puis ±100) → « Offrir ». Au plus 100 000 par envoi (`Config.Admin.maxCreditsPerGift`),
+  total du joueur borné par `Economy.maxCredits` ; notification « Cadeau : +N crédits ! »,
+  sauvegarde immédiate, journal « admin.giftCredits ».
 - **Côté joueur** : notification « Cadeau : 3 Caisse(s) Néon ! » ; au Holo-Bazar, le bouton de
   la caisse devient « Ouvrir · offerte (3) » (mêmes probabilités et même garantie qu'une caisse
   achetée, sans payer) ; les caisses gratuites offertes s'ajoutent au compteur du bouton de la

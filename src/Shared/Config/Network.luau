@@ -50,6 +50,7 @@ return Freeze.deep({
 		CosmeticCrateOpen = { rate = 0.5, burst = 2 },
 		EquipCosmetic = { rate = 2, burst = 6 },
 		AdminGiftCrates = { rate = 1, burst = 4 },
+		AdminGiftCredits = { rate = 1, burst = 4 },
 		-- Matchmaking
 		SetPlatform = { rate = 1, burst = 4 },
 		PartyInvite = { rate = 0.5, burst = 3 },
@@ -57,6 +58,7 @@ return Freeze.deep({
 		PartyLeave = { rate = 1, burst = 2 },
 		QueueJoin = { rate = 0.5, burst = 3 },
 		QueueLeave = { rate = 1, burst = 3 },
+		QueueMapCounts = { rate = 1, burst = 3 },
 		ReturnToHub = { rate = 0.5, burst = 2 },
 		-- Progression (P10)
 		LeaderboardRequest = { rate = 0.5, burst = 4 },
