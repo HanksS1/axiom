@@ -58,7 +58,9 @@ Bindings.defaults = {
 	quickCycle = { keyboard = nil, gamepad = "DPadDown" },
 	ping = { keyboard = "T", gamepad = "DPadUp" },
 	map = { keyboard = "M", gamepad = "ButtonL1" },
-	inventory = { keyboard = "Tab", gamepad = "ButtonSelect" },
+	-- I (même position en AZERTY et en QWERTY). Pas Tab : Roblox la réserve à la
+	-- liste des joueurs, l'appui n'atteint jamais le jeu.
+	inventory = { keyboard = "I", gamepad = "ButtonSelect" },
 } :: { [string]: Binding }
 
 -- Touches supplémentaires fixes (non personnalisables).
@@ -99,7 +101,6 @@ do
 			"RightControl",
 			"LeftAlt",
 			"RightAlt",
-			"Tab",
 			"CapsLock",
 			"Backquote",
 			"MouseButton1",

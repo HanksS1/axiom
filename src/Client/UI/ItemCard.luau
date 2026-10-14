@@ -176,6 +176,19 @@ function ItemCard.create(item: Types.ItemInstance, t: Translate, actions: { Acti
 	if value > 0 then
 		table.insert(details, t("inventory.value", { value = value }))
 	end
+	-- Munitions : la cellule d'une arme, ou les armes qui utilisent une cellule.
+	local ammo = ItemRules.ammoOf(item.itemId)
+	if ammo then
+		table.insert(details, 1, t("inventory.ammo", { cell = t("item." .. ammo) }))
+	elseif info and info.category == "cell" then
+		local names = {}
+		for _, weaponId in ItemRules.weaponsUsing(item.itemId) do
+			table.insert(names, t("item." .. weaponId))
+		end
+		if #names > 0 then
+			table.insert(details, 1, t("inventory.ammoFor", { weapons = table.concat(names, ", ") }))
+		end
+	end
 
 	local actionRow = Create("Frame", {
 		AnchorPoint = Vector2.new(1, 0.5),

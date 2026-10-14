@@ -22,6 +22,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local ItemRules = require(Shared.Items.ItemRules)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local Create = require(script.Parent.Parent.UI.Create)
@@ -425,12 +426,15 @@ local function render()
 
 	local status = ""
 	if isRanged and snap.rangedId then
+		-- Type de munitions de l'arme (la réserve se compte dans ces cellules).
+		local ammo = ItemRules.ammoOf(snap.rangedId)
+		local cell = if ammo then `<font size="13" color="#969EAA">  {t("item." .. ammo)}</font>` else ""
 		if snap.capacity then
 			local ammoColor = if snap.ammo == 0 then "#FF3B3B" else "#EBF0F5"
 			ammoLabel.Text =
-				`<font color="{ammoColor}">{snap.ammo}</font><font size="18" color="#969EAA"> / {snap.reserve}</font>`
+				`<font color="{ammoColor}">{snap.ammo}</font><font size="18" color="#969EAA"> / {snap.reserve}</font>{cell}`
 		else
-			ammoLabel.Text = `<font size="18" color="#969EAA">{snap.reserve}</font>`
+			ammoLabel.Text = `<font size="18" color="#969EAA">{snap.reserve}</font>{cell}`
 		end
 		reloadBar.Visible = snap.reloadProgress ~= nil
 		if snap.reloadProgress then

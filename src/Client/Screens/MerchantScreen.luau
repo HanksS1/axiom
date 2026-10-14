@@ -21,6 +21,7 @@ local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local ConfirmDialog = require(script.Parent.Parent.UI.ConfirmDialog)
+local Create = require(script.Parent.Parent.UI.Create)
 local ItemCard = require(script.Parent.Parent.UI.ItemCard)
 local Panel = require(script.Parent.Parent.UI.Panel)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -134,8 +135,67 @@ function MerchantScreen.create(parent: Instance, t: Translate): Screen
 
 	local render: (view: Types.ProfileView) -> ()
 
+	-- Cellules des armes à distance du joueur (équipées, au coffre, dans le sac).
+	local function ammoNeeded(view: Types.ProfileView): { string }
+		local cells: { string } = {}
+		local function add(item: Types.ItemInstance?)
+			local cell = if item then ItemRules.ammoOf(item.itemId) else nil
+			if cell and table.find(cells, cell) == nil then
+				table.insert(cells, cell)
+			end
+		end
+		add(view.loadout.ranged)
+		for _, items in { view.vault, view.bag } do
+			for _, item in items do
+				add(item)
+			end
+		end
+		table.sort(cells)
+		return cells
+	end
+
 	local function renderBuy(view: Types.ProfileView)
 		local order = 0
+		-- En tête : les munitions de VOS armes (le reste du catalogue suit).
+		local cells = ammoNeeded(view)
+		if #cells > 0 then
+			order += 1
+			Create("TextLabel", {
+				LayoutOrder = order,
+				Size = UDim2.new(1, 0, 0, 26),
+				BackgroundTransparency = 1,
+				Font = Theme.fontTitle,
+				TextSize = 15,
+				TextColor3 = Theme.orange,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Text = t("merchant.yourAmmo"),
+				Parent = list,
+			})
+			for _, cellId in cells do
+				local info = ItemCatalog.get(cellId) :: ItemCatalog.ItemInfo
+				local price = Pricing.merchantPrice(cellId, nil)
+				if price then
+					order += 1
+					local preview: Types.ItemInstance = {
+						uid = `ammo_{cellId}`,
+						itemId = cellId,
+						stack = info.stackSize,
+					}
+					ItemCard.create(preview, t, {
+						{
+							label = t("merchant.buy", { credits = price }),
+							color = if view.credits >= price then Theme.green else Theme.textDim,
+							callback = function()
+								confirmIfNeeded(price, "merchant.confirmBuy", function(confirmed)
+									ClientNet.fire("MerchantBuy", cellId, nil, nil, confirmed)
+								end)
+							end,
+						},
+					}, order).Parent =
+						list
+				end
+			end
+		end
 		local ids = {}
 		for id in ItemCatalog.all() do
 			table.insert(ids, id)

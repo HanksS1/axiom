@@ -367,8 +367,7 @@ end
 	kit de base si le joueur n'a pas d'arme. Le déroulé de partie (P3)
 	remplace ce fournisseur par le vrai sac de la partie.
 ]]
-local function defaultLoadout(player: Player): InventoryLogic.Inventory?
-	local profile = DataService.waitForProfile(player, 10)
+local function profileLoadout(profile: any?): InventoryLogic.Inventory
 	if profile and (profile.loadout.ranged or profile.loadout.melee) then
 		return InventoryLogic.new(Freeze.copy(profile.loadout), Freeze.copy(profile.bag))
 	end
@@ -376,7 +375,30 @@ local function defaultLoadout(player: Player): InventoryLogic.Inventory?
 	return InventoryLogic.new(kitLoadout, kitBag)
 end
 
+local function defaultLoadout(player: Player): InventoryLogic.Inventory?
+	return profileLoadout(DataService.waitForProfile(player, 10))
+end
+
 local loadoutProvider: (player: Player) -> InventoryLogic.Inventory? = defaultLoadout
+
+--[[
+	Hors partie : l'équipement porté suit le profil dès qu'il change (arme équipée
+	au coffre, achat, réparation), sans attendre une réapparition ni une partie.
+	Sans effet en partie : le sac de partie fait foi (et le coffre y est fermé).
+]]
+function CharacterService.refreshLoadout(player: Player)
+	if loadoutProvider ~= defaultLoadout then
+		return
+	end
+	local fighter = CombatService.getFighter(player)
+	local profile = DataService.getProfile(player)
+	if fighter == nil or profile == nil or not Fighter.isAlive(fighter) or fighter.bag == nil then
+		return
+	end
+	InventoryService.attach(fighter, profileLoadout(profile))
+	CombatService.publish(fighter)
+	CharacterService.applySkins(player)
+end
 
 function CharacterService.setLoadoutProvider(provider: ((player: Player) -> InventoryLogic.Inventory?)?)
 	loadoutProvider = provider or defaultLoadout

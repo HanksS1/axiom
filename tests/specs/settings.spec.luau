@@ -78,4 +78,12 @@ return function(T, H)
 			expect(SettingRules.isValid("keybinds", { fire = { keyboard = "G" } })).toBe(true)
 		end)
 	end)
+
+	describe("Touche d'inventaire", function()
+		it("I par défaut ; Tab refusée (réservée par Roblox à la liste des joueurs)", function()
+			expect(Bindings.defaults.inventory.keyboard).toBe("I")
+			expect(Bindings.isAllowed("keyboard", "Tab")).toBe(false)
+			expect(Bindings.isAllowed("keyboard", "I")).toBe(true)
+		end)
+	end)
 end
