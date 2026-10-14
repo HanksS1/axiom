@@ -407,8 +407,15 @@ function TerminusController.start()
 	ProfileController.Changed:Connect(function(view)
 		renderTopBar(view)
 		renderOpen(view)
-		-- Loot à trier : écran de tri automatique au retour au Terminus.
-		if #view.pendingLoot > 0 and not inMatch() and not screens.sort.panel:isOpen() and not sortDismissed then
+		-- Loot à trier : écran de tri automatique au retour au Terminus, mais jamais
+		-- sous le bilan de fin de partie (il attend qu'on le ferme).
+		if
+			#view.pendingLoot > 0
+			and not inMatch()
+			and not MatchHUDController.isResultOpen()
+			and not screens.sort.panel:isOpen()
+			and not sortDismissed
+		then
 			TerminusController.open("sort")
 		elseif #view.pendingLoot == 0 then
 			sortDismissed = false
@@ -416,6 +423,24 @@ function TerminusController.start()
 		end
 	end)
 	ClientNet.on("FreeCrateResult", showCrateResult)
+
+	-- Bilan affiché : un écran de tri ouvert juste avant (profil arrivé en premier) s'efface.
+	MatchHUDController.ResultOpened:Connect(function()
+		if screens.sort.panel:isOpen() then
+			screens.sort.panel:close()
+		end
+		sortDismissed = false
+	end)
+	-- Bilan fermé (« Trier le butin » ou retour) : l'écran de tri s'ouvre s'il reste du butin.
+	MatchHUDController.ResultClosed:Connect(function(sort)
+		local view = ProfileController.get()
+		if sort then
+			sortDismissed = false
+		end
+		if view and #view.pendingLoot > 0 and not inMatch() and not sortDismissed then
+			TerminusController.open("sort")
+		end
+	end)
 
 	MatchHUDController.StatusChanged:Connect(function(status)
 		topBar.Visible = not (status == "alive" or status == "orb")
