@@ -184,6 +184,30 @@ return function(T, H)
 			expect(Shop.slotOf("cobalt__helmet")).toBe("helmet")
 			expect(Shop.slotOf("inconnu")).toBeNil()
 		end)
+
+		it("un skin se voit sur l'objet qu'il habille : porté, au coffre ou pas encore possédé", function()
+			-- Un skin d'arme et un skin de casque existants.
+			local weaponSkin, helmetSkin
+			for id, def in Config.Cosmetics.byId do
+				if def.category == "weapon" and weaponSkin == nil then
+					weaponSkin = id
+				elseif def.category == "helmet" and helmetSkin == nil then
+					helmetSkin = id
+				end
+			end
+			local weapon = Config.Cosmetics.byId[weaponSkin].target
+			expect(Shop.skinStatus(weaponSkin, {}, {})).toBe("missing")
+			expect(Shop.skinStatus(weaponSkin, {}, { { itemId = weapon } })).toBe("owned")
+			expect(Shop.skinStatus(weaponSkin, { ranged = { itemId = weapon } }, {})).toBe("equipped")
+			expect(Shop.skinStatus(weaponSkin, { melee = { itemId = weapon } }, {})).toBe("equipped")
+			-- Une autre arme ne compte pas.
+			expect(Shop.skinStatus(weaponSkin, { ranged = { itemId = "inconnu" } }, {})).toBe("missing")
+			-- Casque : n'importe quel casque convient.
+			expect(Shop.skinStatus(helmetSkin, { helmet = { itemId = "helmet" } }, {})).toBe("equipped")
+			expect(Shop.skinStatus(helmetSkin, {}, { { itemId = "helmet" } })).toBe("owned")
+			expect(Shop.skinStatus(helmetSkin, {}, { { itemId = weapon } })).toBe("missing")
+			expect(Shop.skinStatus("inconnu", {}, {})).toBeNil()
+		end)
 	end)
 
 	describe("Ouverture d'une caisse (animation)", function()

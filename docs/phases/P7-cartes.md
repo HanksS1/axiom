@@ -61,6 +61,26 @@ un habillage généré par le code.
 Outils : `lune run tests/tools/map_stats.luau` (compteurs) et
 `lune run tests/tools/map_preview.luau [dossier]` (plan vu de dessus de chaque carte, en SVG).
 
+## Néo-Lumen plus lisible (retour de test)
+
+La carte était inutilisablement sombre. Réglages de `Config.Maps.neo_lumen` (avant → après) :
+
+| Réglage | Avant | Après | Pourquoi |
+|---|---|---|---|
+| `ambient` | (70, 60, 90) | (104, 94, 128) | relève le noir des ombres : silhouettes et couvertures lisibles, ciel inchangé |
+| `outdoorAmbient` | (110, 90, 140) | (138, 122, 168) | idem à l'extérieur |
+| `brightness` | 1,6 | 2,1 | lune / crépuscule un peu plus fort |
+| `exposure` | 0 | 0,25 | éclaircit tout l'écran (écrans pâles) |
+| `mood.density` | 0,36 | 0,22 | la brume mangeait le relief au-delà de ~60 studs |
+| `mood.haze` | 2,2 | 0,9 | idem |
+| `mood.contrast` | 0,12 | 0,08 | des ombres moins bouchées |
+| `lightScale` | — | ×1,4 intensité, ×1,2 portée | néons et lampadaires plus forts : garde l'ambiance de nuit |
+
+L'heure (18,6, crépuscule violet) et les couleurs de la brume ne changent pas : la carte reste
+une nuit urbaine néon. Pour ajuster : d'abord `ambient` (±10 par canal), puis `density` / `haze`,
+puis `exposure` par pas de 0,05. `lightScale` existe pour toutes les cartes (champ facultatif).
+L'éclairage n'est plus « sauvegardé puis restauré » : au retour, c'est celui du Terminus.
+
 ## Points de départ (modifié après la P10, à la demande de l'auteur)
 
 Le document prévoyait 8 points de départ en bordure, ce qui superposait deux ennemis en solo.

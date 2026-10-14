@@ -44,7 +44,6 @@ local MapRuntimeService = {}
 local currentId: string? = nil
 local root: Folder? = nil
 local layout: LayoutBuilder.Layout? = nil
-local savedLighting: { [string]: any }? = nil
 local random = Random.new()
 local running = false
 local accumulator = 0
@@ -114,6 +113,7 @@ local function applyLighting(settings: any)
 	Lighting.ClockTime = settings.clockTime
 	Lighting.FogColor = settings.fogColor
 	Lighting.FogEnd = settings.fogEnd
+	Lighting.ExposureCompensation = settings.exposure or 0
 end
 
 -- Ambiance de la carte : brume atmosphérique, halo des néons, étalonnage des couleurs.
@@ -156,6 +156,12 @@ local function applyMood(mood: any?)
 	color.Parent = Lighting
 end
 
+-- Éclairage du Terminus (Config.Maps.hub) : au démarrage du hub et au retour de partie.
+function MapRuntimeService.applyHubLighting()
+	applyLighting(Maps.hub.lighting)
+	clearMood()
+end
+
 function MapRuntimeService.unload()
 	MapRuntimeService.stop()
 	local existing = root
@@ -165,11 +171,7 @@ function MapRuntimeService.unload()
 	if existing then
 		existing:Destroy()
 	end
-	if savedLighting then
-		applyLighting(savedLighting)
-		savedLighting = nil
-	end
-	clearMood()
+	MapRuntimeService.applyHubLighting()
 	-- Retour aux repères de l'arène de test (bac à sable), s'il y en a une.
 	MapService.setRoot(Workspace:FindFirstChild("Arena"))
 end
@@ -187,14 +189,6 @@ function MapRuntimeService.load(mapId: string): boolean
 	MapRuntimeService.unload()
 	-- Générateur propre aux cartes : même carte dans Studio et dans les tests.
 	local built = build(LayoutBuilder.random(def.seed))
-	savedLighting = {
-		ambient = Lighting.Ambient,
-		outdoorAmbient = Lighting.OutdoorAmbient,
-		brightness = Lighting.Brightness,
-		clockTime = Lighting.ClockTime,
-		fogColor = Lighting.FogColor,
-		fogEnd = Lighting.FogEnd,
-	}
 	applyLighting(def.lighting)
 	applyMood(def.mood)
 	local folder = MapRenderer.render(built, Workspace, Maps.origin, mapId)

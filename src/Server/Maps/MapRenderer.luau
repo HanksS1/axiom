@@ -14,6 +14,9 @@
 ]]
 
 local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage:WaitForChild("Shared").Config)
 
 local LayoutBuilder = require(script.Parent.LayoutBuilder)
 local MapService = require(script.Parent.Parent.Services.MapService)
@@ -21,6 +24,11 @@ local MapService = require(script.Parent.Parent.Services.MapService)
 local MapRenderer = {}
 
 local PER_FRAME = 400
+
+-- Lumières de la carte en cours de rendu : × intensité, × portée (Config.Maps.*.lightScale).
+type LightScale = { brightness: number, range: number }
+local NO_SCALE: LightScale = { brightness = 1, range = 1 }
+local lightScale: LightScale = NO_SCALE
 
 local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 
@@ -172,7 +180,10 @@ local function addLight(part: BasePart, spec: LayoutBuilder.LightSpec)
 		light = point
 	end
 	light.Color = spec.color
-	light.Brightness = spec.brightness
+	light.Brightness = spec.brightness * lightScale.brightness
+	if light:IsA("PointLight") or light:IsA("SpotLight") or light:IsA("SurfaceLight") then
+		light.Range = math.min(60, spec.range * lightScale.range)
+	end
 	light.Shadows = false
 	light.Parent = part
 	if spec.flicker then
@@ -291,6 +302,8 @@ end
 	dossier. Peut céder la main (étalement sur plusieurs images).
 ]]
 function MapRenderer.render(layout: LayoutBuilder.Layout, container: Instance, origin: Vector3, mapId: string): Folder
+	local def = (Config.Maps.byId :: any)[mapId]
+	lightScale = if def and def.lightScale then def.lightScale else NO_SCALE
 	local root = Instance.new("Folder")
 	root.Name = "Map"
 	root:SetAttribute("MapId", mapId)
@@ -304,6 +317,8 @@ function MapRenderer.render(layout: LayoutBuilder.Layout, container: Instance, o
 	markers.Name = "Markers"
 	markers.Parent = root
 	MapRenderer.renderParts(layout.parts, geometry, origin, groups)
+	-- Les rendus suivants (décombres, décor du Terminus) retrouvent l'échelle neutre.
+	lightScale = NO_SCALE
 	for _, marker in layout.markers do
 		MapService.placeMarker(markers, marker.tag, CFrame.new(origin) * marker.cframe, marker.attributes)
 	end

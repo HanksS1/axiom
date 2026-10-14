@@ -56,6 +56,7 @@ local equipButton: TextButton
 local closeButton: TextButton
 local scene: CrateScene.Scene? = nil
 local current: { [string]: any }? = nil -- résultat de la caisse affichée
+local guide: Frame -- aide de la première caisse (ce qu'est un skin, où il va)
 
 local function clearScene()
 	if scene then
@@ -107,8 +108,10 @@ local function buildOverlay(root: Instance)
 	resultRarity = label(38, 20)
 	resultExtra = label(68, 15)
 	resultExtra.Font = Theme.fontText
-	resultExtra.TextColor3 = Theme.textDim
-	resultExtra.Size = UDim2.new(0.9, 0, 0, 44)
+	resultExtra.TextColor3 = Theme.text
+	resultExtra.RichText = true
+	resultExtra.Size = UDim2.new(0.9, 0, 0, 66)
+	resultExtra.Position = UDim2.new(0.5, 0, 0.62, 66)
 	skipButton = Panel.button("", Theme.textDim, 140)
 	skipButton.AnchorPoint = Vector2.new(1, 1)
 	skipButton.Position = UDim2.new(1, -16, 1, -16)
@@ -139,6 +142,33 @@ local function buildOverlay(root: Instance)
 		Equip = equipButton,
 		Close = closeButton,
 	})
+	-- Aide de la première caisse : panneau centré, par-dessus la scène.
+	guide = Create("Frame", {
+		Name = "Guide",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.45),
+		Size = UDim2.fromOffset(460, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundColor3 = Theme.panel,
+		BackgroundTransparency = 0.04,
+		Visible = false,
+		ZIndex = 6,
+		Parent = overlay,
+	}, {
+		Stroke = Create("UIStroke", { Color = Theme.magenta, Thickness = 2 }),
+		Padding = Create("UIPadding", {
+			PaddingTop = UDim.new(0, 14),
+			PaddingBottom = UDim.new(0, 14),
+			PaddingLeft = UDim.new(0, 16),
+			PaddingRight = UDim.new(0, 16),
+		}),
+		Layout = Create("UIListLayout", {
+			Padding = UDim.new(0, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		}),
+		Limit = Create("UISizeConstraint", { MaxSize = Vector2.new(520, 600) }),
+	})
 	closeButton.Activated:Connect(close)
 	skipButton.Activated:Connect(function()
 		if scene then
@@ -156,29 +186,71 @@ local function buildOverlay(root: Instance)
 		equipButton.Text = "✔ " .. t("shop.equippedNow")
 		equipButton.Active = false
 		equipButton.AutoButtonColor = false
+		-- Dire ce qui a changé et où le voir (plutôt qu'une simple coche).
+		local family = BazaarScreen.skinFamily(result.cosmeticId)
+		local target = BazaarScreen.targetName(t, result.cosmeticId)
+		resultExtra.Text = t("shop.equipDone." .. family, { target = target })
+		NotificationController.show(t("shop.equipDone." .. family, { target = target }), Theme.magenta)
 	end)
 end
 
--- Ce que le skin habille : l'arme ciblée, ou le sac / le casque / le gilet.
-local function targetName(cosmeticId: string): string
-	local def = Config.Cosmetics.byId[cosmeticId]
-	if def == nil then
-		return ""
+-- Aide ponctuelle : ce qu'est un skin, où il est rangé, comment l'équiper.
+local function showGuide()
+	for _, child in guide:GetChildren() do
+		if child:IsA("TextLabel") or child:IsA("TextButton") then
+			child:Destroy()
+		end
 	end
-	return if def.category == "weapon" then t("item." .. def.target) else t("cosmetic.slot." .. def.category)
+	local lines = { "guide.cosmetics.title", "guide.cosmetics.1", "guide.cosmetics.2", "guide.cosmetics.3" }
+	for index, key in lines do
+		Create("TextLabel", {
+			LayoutOrder = index,
+			Size = UDim2.new(1, 0, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundTransparency = 1,
+			Font = if index == 1 then Theme.fontTitle else Theme.fontText,
+			TextSize = if index == 1 then 20 else 15,
+			TextColor3 = if index == 1 then Theme.magenta else Theme.text,
+			TextWrapped = true,
+			Text = (if index > 1 then "•  " else "") .. t(key),
+			ZIndex = 7,
+			Parent = guide,
+		})
+	end
+	local ok = Panel.button(t("guide.ok"), Theme.magenta, 160)
+	ok.LayoutOrder = #lines + 1
+	ok.ZIndex = 7
+	ok.Parent = guide
+	ok.Activated:Connect(function()
+		guide.Visible = false
+	end)
+	guide.Visible = true
 end
 
 -- Révélation : nom, rareté, où va l'objet, boutons.
 local function reveal(result: { [string]: any })
 	local rarityColor = BazaarScreen.rarityColor(result.rarity)
+	local family = BazaarScreen.skinFamily(result.cosmeticId)
+	local target = BazaarScreen.targetName(t, result.cosmeticId)
 	resultName.Text = BazaarScreen.cosmeticName(t, result.cosmeticId)
-	resultRarity.Text = t("rarity." .. result.rarity)
+	-- Rareté, puis ce que c'est : un skin, et pour quoi.
+	resultRarity.Text = t("rarity." .. result.rarity) .. "  ·  " .. t("shop.skinKind." .. family, { target = target })
 	resultRarity.TextColor3 = rarityColor
-	resultExtra.Text = if result.duplicate
-		then t("shop.duplicate", { noyaux = result.refund })
-		else t("shop.addedToCollection", { target = targetName(result.cosmeticId) })
-	skipButton.Visible = false
 	local view = ProfileController.get()
+	local status = if view then BazaarScreen.skinStatus(view, result.cosmeticId) else nil
+	local lines = {}
+	if result.duplicate then
+		table.insert(lines, t("shop.duplicate", { noyaux = result.refund }))
+	else
+		table.insert(lines, t("shop.addedToCollection"))
+	end
+	if status then
+		local line = t(`shop.skinStatus.{family}.{status}`, { target = target })
+		-- Objet pas encore possédé : mis en évidence (le skin ne se verra pas tout de suite).
+		table.insert(lines, if status == "missing" then `<font color="#FF8A00">{line}</font>` else line)
+	end
+	resultExtra.Text = table.concat(lines, "\n")
+	skipButton.Visible = false
 	local slot = Shop.slotOf(result.cosmeticId)
 	local equipped = view ~= nil and slot ~= nil and view.cosmeticsEquipped[slot] == result.cosmeticId
 	equipButton.Text = if equipped then "✔ " .. t("shop.equippedNow") else t("shop.equipNow")
@@ -187,6 +259,9 @@ local function reveal(result: { [string]: any })
 	equipButton.Visible = slot ~= nil
 	closeButton.Text = t("common.confirm")
 	closeButton.Visible = true
+	if result.firstTime == true then
+		showGuide()
+	end
 end
 
 -- Ouverture : la caisse se construit, est scannée, s'ouvre ; l'objet en sort.
@@ -196,6 +271,7 @@ local function play(result: { [string]: any })
 	overlay.Visible = true
 	PanelState.set("crateOpening", true)
 	resultName.Text, resultRarity.Text, resultExtra.Text = "", "", ""
+	guide.Visible = false
 	equipButton.Visible = false
 	closeButton.Visible = false
 	skipButton.Text = t("shop.skip")

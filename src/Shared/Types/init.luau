@@ -96,6 +96,7 @@ export type Profile = {
 		robotKills: number,
 	},
 	tutorialDone: boolean,
+	guidesSeen: { [string]: boolean }, -- aides ponctuelles déjà montrées
 	settings: { [string]: any },
 	processedReceipts: { [string]: number }, -- PurchaseId → horodatage
 	receiptOrder: { string }, -- ordre d'arrivée (pour borner la mémoire)
@@ -125,6 +126,7 @@ export type ProfileView = {
 	seasonHistory: { { id: number, rank: string } },
 	bestScoreByMode: { [string]: number },
 	tutorialDone: boolean,
+	guidesSeen: { [string]: boolean },
 	settings: { [string]: any },
 	stats: { [string]: number },
 	pity: { [string]: number },

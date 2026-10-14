@@ -72,6 +72,33 @@ local function preview(def: any, size: UDim2, spin: boolean): Frame
 	return ItemIcon.create(itemId, size, nil, def, spin)
 end
 
+-- Ce que le skin habille : l'arme ciblée, ou le sac / le casque / le gilet.
+function BazaarScreen.targetName(t: Translate, cosmeticId: string): string
+	local def = Config.Cosmetics.byId[cosmeticId]
+	if def == nil then
+		return ""
+	end
+	return if def.category == "weapon" then t("item." .. def.target) else t("cosmetic.slot." .. def.category)
+end
+
+-- Famille du skin pour les textes : « weapon » ou « gear ».
+function BazaarScreen.skinFamily(cosmeticId: string): string
+	local def = Config.Cosmetics.byId[cosmeticId]
+	return if def and def.category == "weapon" then "weapon" else "gear"
+end
+
+-- Le joueur a-t-il l'objet que ce skin habille (porté, au coffre, aucun) ?
+function BazaarScreen.skinStatus(view: Types.ProfileView, cosmeticId: string): Shop.SkinStatus?
+	local items = {}
+	for _, item in view.vault do
+		table.insert(items, item)
+	end
+	for _, item in view.bag do
+		table.insert(items, item)
+	end
+	return Shop.skinStatus(cosmeticId, view.loadout :: any, items)
+end
+
 -- Objet qui porte un cosmétique (l'arme ciblée, ou un sac / casque / gilet type).
 function BazaarScreen.previewItem(def: any): string
 	return if def.category == "weapon" then def.target else PREVIEW_ITEM[def.category] or def.target
@@ -190,6 +217,13 @@ function BazaarScreen.create(parent: Instance, t: Translate, hooks: Hooks): Scre
 			})
 			return
 		end
+		-- Ce que contient une caisse, dit clairement avant tout achat.
+		text(list, t("shop.cratesSkinsOnly"), UDim2.new(), UDim2.new(1, -8, 0, 0), {
+			LayoutOrder = nextOrder(),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			TextColor3 = Theme.cyan,
+			TextSize = 14,
+		})
 		local crateIds: { string } = {}
 		for crateId in M.crates :: { [string]: any } do
 			table.insert(crateIds, crateId)
@@ -349,9 +383,17 @@ function BazaarScreen.create(parent: Instance, t: Translate, hooks: Hooks): Scre
 			text(frame, BazaarScreen.cosmeticName(t, cosmeticId), UDim2.fromOffset(74, 6), UDim2.new(1, -260, 0, 30), {
 				Font = Theme.fontTitle,
 			})
-			text(frame, t("rarity." .. def.rarity), UDim2.fromOffset(74, 38), UDim2.new(0, 160, 0, 22), {
+			text(frame, t("rarity." .. def.rarity), UDim2.fromOffset(74, 38), UDim2.new(0, 110, 0, 22), {
 				TextColor3 = BazaarScreen.rarityColor(def.rarity),
 			})
+			-- Le skin ne se voit que sur l'objet qu'il habille : le rappeler.
+			local status = BazaarScreen.skinStatus(view, cosmeticId)
+			if status then
+				text(frame, t("shop.status." .. status), UDim2.fromOffset(188, 38), UDim2.new(1, -370, 0, 22), {
+					TextColor3 = if status == "missing" then Theme.orange else Theme.textDim,
+					TextSize = 13,
+				})
+			end
 			local button = Panel.button(
 				if equipped then t("shop.unequip") else t("shop.equip"),
 				if equipped then Theme.green else Theme.cyan,

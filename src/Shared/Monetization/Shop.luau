@@ -15,6 +15,7 @@
 ]]
 
 local Config = require(script.Parent.Parent.Config)
+local ItemCatalog = require(script.Parent.Parent.Items.ItemCatalog)
 local Types = require(script.Parent.Parent.Types)
 
 local M = Config.Monetization
@@ -236,6 +237,40 @@ function Shop.recordReceipt(profile: Types.Profile, purchaseId: string, now: num
 end
 
 -- Emplacement d'équipement d'un cosmétique (arme précise, ou sac / casque / gilet).
+export type SkinStatus = "equipped" | "owned" | "missing"
+
+--[[
+	Un skin ne se voit que sur l'objet qu'il habille. Le joueur a-t-il cet objet ?
+	- "equipped" : porté (emplacement équipé : il se verra en main ou sur lui) ;
+	- "owned"    : au coffre ou dans le sac (à équiper pour voir le skin) ;
+	- "missing"  : aucun exemplaire (le skin est acquis, il se verra plus tard).
+	`items` : coffre et sac du profil.
+]]
+function Shop.skinStatus(cosmeticId: string, loadout: { [string]: any }, items: { { itemId: string } }): SkinStatus?
+	local def = Config.Cosmetics.byId[cosmeticId]
+	if def == nil then
+		return nil
+	end
+	local function matches(itemId: string): boolean
+		if def.category == "weapon" then
+			return itemId == def.target
+		end
+		local info = ItemCatalog.get(itemId)
+		return info ~= nil and info.category == def.category
+	end
+	for _, item in loadout do
+		if type(item) == "table" and type(item.itemId) == "string" and matches(item.itemId) then
+			return "equipped"
+		end
+	end
+	for _, item in items do
+		if matches(item.itemId) then
+			return "owned"
+		end
+	end
+	return "missing"
+end
+
 function Shop.slotOf(cosmeticId: string): string?
 	local def = Config.Cosmetics.byId[cosmeticId]
 	if def == nil then
