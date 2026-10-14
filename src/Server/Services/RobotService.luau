@@ -11,6 +11,11 @@
 	  et la fumée bloquent). Audition : tirs (rayon de l'arme), alarmes.
 	- La Mouche alerte les robots à moins de 40 studs.
 	- Multiplicateurs du mode : PV, dégâts, précision, temps de réaction.
+	- Combats lisibles : les attaques lourdes sont annoncées (attributs
+	  WindupUntil / WindupKind du modèle), le nombre d'attaquants par cible
+	  est plafonné (Engagement), aucun robot n'apparaît près d'un joueur.
+	- Détecteur du joueur : attributs Alert (soupçon, recherche, combat) et
+	  Aggro (UserId du joueur remarqué ou visé), lus par le client.
 	- Loot à la destruction (LootGenerator.robot), points de score.
 	- Vague d'alerte à 12:00 : 6 à 10 robots convergent vers les extractions.
 ]]
@@ -24,6 +29,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local Engagement = require(Shared.Robots.Engagement)
 local RobotBrain = require(Shared.Robots.RobotBrain)
 local try = require(Shared.Util.Try)
 
@@ -66,7 +72,11 @@ type Robot = {
 	dormantRadius: number?, -- Exécuteur de la chaîne : inactif tant que personne n'approche
 	nextSpecialAt: number,
 	hiddenUntil: number,
+	surfaceAt: Vector3?, -- Gardien enfoui : point d'émergence annoncé
 	partState: { [BasePart]: { transparency: number, query: boolean } }?,
+	windupUntil: number, -- annonce d'attaque en cours (0 = aucune)
+	shownAlert: string?, -- dernières valeurs publiées (attributs du modèle)
+	shownAggro: number?,
 }
 
 export type SpawnOptions = {
@@ -76,10 +86,12 @@ export type SpawnOptions = {
 }
 
 local robots: { [Fighter]: Robot } = {}
+local engagement = Engagement.new()
 local folder: Folder?
 local random = Random.new()
 local modeId = "easy"
 local visionMultiplier = 1 -- coupures de courant (Noyau Zéro)
+local awakeAt = 0 -- début de partie : robots en veille jusqu'à ce moment
 
 local visionParams = RaycastParams.new()
 visionParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -288,13 +300,97 @@ local function stop(robot: Robot)
 	end
 end
 
-local function shoot(robot: Robot, target: Fighter)
-	local m = mode()
+--[[
+	État visible par les clients (détecteur, marqueurs de menace) : attributs du
+	modèle, répliqués seulement quand ils changent.
+	- Alert : "suspicion" | "search" | "combat" (absent en patrouille) ;
+	- Aggro : UserId du joueur remarqué (soupçon) ou pris pour cible (combat).
+]]
+local function publish(robot: Robot, noticed: Fighter?)
+	local character = robot.fighter.character
+	local state = robot.brain.state
+	local alert: string? = if state == "patrol" then nil else state
+	if robot.shownAlert ~= alert then
+		robot.shownAlert = alert
+		character:SetAttribute("Alert", alert)
+	end
+	local aggro: number? = if noticed and noticed.player then noticed.player.UserId else nil
+	if robot.shownAggro ~= aggro then
+		robot.shownAggro = aggro
+		character:SetAttribute("Aggro", aggro)
+	end
+end
+
+-- Annonce d'attaque ("shot" | "melee") visible par les clients, ou sa fin (kind = nil).
+-- `radius` : portée du coup de mêlée annoncé (cercle au sol côté client).
+local function setWindup(robot: Robot, kind: string?, duration: number, radius: number?)
+	local character = robot.fighter.character
+	if kind then
+		robot.windupUntil = now() + duration
+		character:SetAttribute("WindupKind", kind)
+		character:SetAttribute("WindupRadius", radius)
+		character:SetAttribute("WindupUntil", robot.windupUntil)
+	else
+		robot.windupUntil = 0
+		character:SetAttribute("WindupUntil", nil)
+		character:SetAttribute("WindupKind", nil)
+	end
+end
+
+--[[
+	Attaque annoncée : `strike` n'est exécuté qu'à la fin de l'annonce, et
+	seulement si le robot est encore en état de frapper (ni détruit, ni
+	étourdi, ni caché). Étourdir un robot pendant l'annonce annule donc le coup.
+]]
+local function announce(robot: Robot, kind: string, duration: number, strike: () -> (), radius: number?)
+	setWindup(robot, kind, duration, radius)
+	local fighter = robot.fighter
+	task.delay(duration, function()
+		if robots[fighter] ~= robot then
+			return
+		end
+		setWindup(robot, nil, 0)
+		if Fighter.isAlive(fighter) and not CombatService.isStunned(fighter) and robot.hiddenUntil == 0 then
+			strike()
+		end
+	end)
+end
+
+-- La cible est-elle visible depuis l'œil du robot ? Sinon : point de l'obstacle.
+local function lineOfSight(robot: Robot, target: Fighter): (boolean, Vector3)
 	local origin = robot.eye.Position
-	local damage = (robot.def.rangedDamage or robot.def.damage) * m.robots.damage
-	local hit = random:NextNumber() < m.robots.accuracy
-	local endpoint = target.root.Position
+	local goal = target.root.Position
+	visionParams.FilterDescendantsInstances = { robotFolder(), target.character }
+	local hit = Workspace:Raycast(origin, goal - origin, visionParams)
 	if hit then
+		return false, hit.Position
+	end
+	return not blockedBySmoke(origin, goal), goal
+end
+
+--[[
+	Tir d'un robot. `announced` : tir chargé annoncé à l'avance ; il est perdu
+	si la cible s'est mise à couvert ou a quitté la portée pendant l'annonce.
+]]
+local function shoot(robot: Robot, target: Fighter, announced: boolean)
+	local m = mode()
+	local def = robot.def
+	local origin = robot.eye.Position
+	local endpoint = target.root.Position
+	local distance = (endpoint - origin).Magnitude
+	local visible, obstacle = true, endpoint
+	if announced then
+		visible, obstacle = lineOfSight(robot, target)
+		if distance > def.attackRange * 1.15 then
+			visible = false
+		end
+	end
+	local speed = target.root.AssemblyLinearVelocity.Magnitude
+	local chance = RobotBrain.hitChance(m.robots.accuracy, distance, def.attackRange, speed)
+	if not visible then
+		endpoint = obstacle
+	elseif random:NextNumber() < chance then
+		local damage = (def.rangedDamage or def.damage) * m.robots.damage
 		CombatService.rangedHit(target, damage, robot.fighter, { sourcePosition = origin })
 	else
 		endpoint += Vector3.new(
@@ -303,35 +399,75 @@ local function shoot(robot: Robot, target: Fighter)
 			random:NextNumber(-1, 1) * AI.missSpread
 		)
 	end
-	ServerNet.fireAll("ShotFired", nil, "robot_" .. robot.def.id, origin, { endpoint })
+	ServerNet.fireAll("ShotFired", nil, "robot_" .. def.id, origin, { endpoint })
 end
 
 local function attack(robot: Robot, target: Fighter, distance: number, time: number)
-	if not RobotBrain.canAttack(robot.brain, time) or time < robot.nextAttackAt then
+	if not RobotBrain.canAttack(robot.brain, time) or time < robot.nextAttackAt or time < robot.windupUntil then
 		return
 	end
 	local def = robot.def
-	local meleeRange = def.meleeRange
-	if meleeRange and distance <= meleeRange + 1.5 and (def.attack == "melee" or def.attack == "hybrid") then
-		robot.nextAttackAt = time + (def.meleeInterval :: number)
+	local m = mode().robots
+	local meleeRange: number? = def.meleeRange
+	local inMelee = meleeRange ~= nil
+		and distance <= meleeRange + 1.5
+		and (def.attack == "melee" or def.attack == "hybrid")
+	if not inMelee and (def.attack == "melee" or distance > def.attackRange) then
+		return
+	end
+	-- Tour d'attaque : pas plus de `maxAttackers` robots à la fois sur la même cible.
+	if
+		not def.guardian
+		and not Engagement.request(engagement, target, robot, time, m.maxAttackers, AI.engagementHold)
+	then
+		return
+	end
+
+	if inMelee then
+		local windup: number = def.meleeWindup or 0
+		robot.nextAttackAt = time + windup + (def.meleeInterval :: number)
 		ServerNet.fireAll("MeleeSwing", nil, "robot_" .. def.id)
-		CombatService.meleeHit(robot.fighter, target, def.damage * mode().robots.damage, {})
+		local reach = (meleeRange :: number) + 2.5
+		local function strike()
+			-- Coup esquivé : la cible est sortie de portée pendant l'annonce.
+			if Fighter.isAlive(target) and (target.root.Position - robot.fighter.root.Position).Magnitude <= reach then
+				CombatService.meleeHit(robot.fighter, target, def.damage * m.damage, {})
+			end
+		end
+		if windup > 0 then
+			announce(robot, "melee", windup, strike, reach)
+		else
+			strike()
+		end
 		return
 	end
-	if def.attack == "melee" or distance > def.attackRange then
-		return
-	end
-	-- Tir (le Bastion tire en rafales).
+
+	local windup: number = def.windup or 0
+	-- Rafales (Bastion) : mise en rotation annoncée, puis les tirs, puis une pause.
 	if def.burst then
 		if robot.burstLeft <= 0 then
 			robot.burstLeft = def.burst
+			if windup > 0 then
+				robot.nextAttackAt = time + windup
+				announce(robot, "shot", windup, function() end)
+				return
+			end
 		end
 		robot.burstLeft -= 1
-		robot.nextAttackAt = time + (if robot.burstLeft <= 0 then 1.2 else def.fireInterval)
-	else
-		robot.nextAttackAt = time + def.fireInterval
+		robot.nextAttackAt = time + (if robot.burstLeft <= 0 then def.burstPause or 1.2 else def.fireInterval)
+		shoot(robot, target, false)
+		return
 	end
-	shoot(robot, target)
+	robot.nextAttackAt = time + windup + def.fireInterval
+	if windup > 0 then
+		announce(robot, "shot", windup, function()
+			if Fighter.isAlive(target) then
+				shoot(robot, target, true)
+			end
+		end)
+	else
+		shoot(robot, target, false)
+	end
 end
 
 local function patrolPoint(robot: Robot): Vector3
@@ -386,18 +522,38 @@ local function special(robot: Robot, target: Fighter?, time: number): boolean
 	end
 	local params = (Config.Maps.guardianBehaviors :: any)[behavior]
 	if robot.hiddenUntil > 0 then
+		local fighter = robot.fighter
 		if time < robot.hiddenUntil then
+			-- Enfoui : le point d'émergence est figé et annoncé (cercle rouge au sol)
+			-- avant le surgissement, pour laisser le temps de s'en écarter.
+			if behavior == "burrow" and robot.surfaceAt == nil and time >= robot.hiddenUntil - params.warning then
+				local anchor = if target then target.root.Position else fighter.root.Position
+				local angle = random:NextNumber(0, math.pi * 2)
+				local spot = groundAt(anchor + Vector3.new(math.cos(angle), 0, math.sin(angle)) * 3)
+				robot.surfaceAt = spot
+				ServerNet.fireAll("MapEvent", "surfaceWarning", spot, params.surfaceRadius, params.warning)
+			end
 			return true
 		end
 		-- Réapparition.
 		robot.hiddenUntil = 0
-		local fighter = robot.fighter
-		local anchor = if target then target.root.Position else fighter.root.Position
-		local angle = random:NextNumber(0, math.pi * 2)
-		local distance = if behavior == "burrow" then 4 else params.jump
-		local spot = groundAt(anchor + Vector3.new(math.cos(angle), 0, math.sin(angle)) * distance)
+		local announced = robot.surfaceAt
+		robot.surfaceAt = nil
+		local spot: Vector3
+		if announced then
+			spot = announced
+		else
+			-- Projection : réapparaît à distance de sa cible, jamais à son contact.
+			local anchor = if target then target.root.Position else fighter.root.Position
+			local angle = random:NextNumber(0, math.pi * 2)
+			local distance = if behavior == "burrow" then 3 else params.jump
+			spot = groundAt(anchor + Vector3.new(math.cos(angle), 0, math.sin(angle)) * distance)
+		end
 		fighter.character:PivotTo(CFrame.new(spot + Vector3.new(0, robot.def.size.Y / 2 + 0.2, 0)))
 		setHidden(robot, false, 0)
+		-- Jamais de coup dans l'instant qui suit la réapparition.
+		RobotBrain.delayAttack(robot.brain, time, AI.reappearDelay)
+		robot.nextAttackAt = math.max(robot.nextAttackAt, time + AI.reappearDelay)
 		if behavior == "burrow" then
 			for _, other in CombatService.allFighters() do
 				if
@@ -435,12 +591,17 @@ local function update(robot: Robot, dt: number)
 	end
 	local time = now()
 	if CombatService.isStunned(fighter) then
+		Engagement.release(engagement, robot)
 		stop(robot)
 		return
 	end
 	-- Sommeil : aucun joueur à moins de 150 studs.
 	if nearestPlayerDistance(fighter.root.Position) > AI.sleepDistance and robot.wave == nil then
 		stop(robot)
+		return
+	end
+	-- Veille de début de partie : immobile et aveugle, sauf s'il a été touché.
+	if time < awakeAt and robot.brain.state == "patrol" and robot.wave == nil then
 		return
 	end
 	-- Exécuteur en cours de fabrication : s'active à l'approche ou s'il est touché.
@@ -452,16 +613,29 @@ local function update(robot: Robot, dt: number)
 		robot.dormantRadius = nil
 	end
 
+	local visible = perceive(robot)
 	local target = RobotBrain.step(robot.brain, {
 		now = time,
 		dt = dt,
-		visible = perceive(robot),
+		visible = visible,
 		noise = robot.noise,
 		alertedAt = robot.alertedAt,
 	}, mode().robots.reactionTime)
 	robot.noise = nil
 	robot.alertedAt = nil
 	local state = robot.brain.state
+	-- Détecteur : la cible en combat, ou le plus proche que le robot est en train de remarquer.
+	local noticed: Fighter? = if target then target.id :: Fighter else nil
+	if noticed == nil and state == "suspicion" then
+		local nearest = math.huge
+		for _, seen in visible do
+			if seen.distance < nearest then
+				nearest = seen.distance
+				noticed = seen.id :: Fighter
+			end
+		end
+	end
+	publish(robot, noticed)
 	if special(robot, if target then target.id :: Fighter else nil, time) then
 		return
 	end
@@ -472,9 +646,11 @@ local function update(robot: Robot, dt: number)
 		local distance = target.distance
 		local def = robot.def
 		local closeIn = def.attack == "melee" or (def.attack == "hybrid" and distance < def.attackRange * 0.5)
-		if closeIn or distance > def.attackRange * 0.9 then
+		-- Attaque annoncée : le robot s'immobilise (on peut s'écarter ou se mettre à couvert).
+		local windingUp = time < robot.windupUntil
+		if not windingUp and (closeIn or distance > def.attackRange * 0.9) then
 			moveTo(robot, target.position)
-		elseif distance < def.preferredDistance * 0.6 then
+		elseif not windingUp and distance < def.preferredDistance * 0.6 then
 			-- Trop près : recul.
 			local away = (fighter.root.Position - target.position)
 			moveTo(robot, fighter.root.Position + Vector3.new(away.X, 0, away.Z).Unit * 8)
@@ -552,6 +728,10 @@ function RobotService.spawn(robotId: string, position: Vector3, garrison: boolea
 	fighter.health = health
 	fighter.teamId = "axiom"
 	fighter.robotId = robotId
+	built.model:SetAttribute("RobotId", robotId)
+	if def.guardian then
+		built.model:SetAttribute("Guardian", true)
+	end
 	built.humanoid.MaxHealth = health
 	built.humanoid.Health = health
 	CombatService.register(fighter)
@@ -578,7 +758,11 @@ function RobotService.spawn(robotId: string, position: Vector3, garrison: boolea
 		dormantRadius = opts.dormantRadius,
 		nextSpecialAt = now() + 4,
 		hiddenUntil = 0,
+		surfaceAt = nil,
 		partState = nil,
+		windupUntil = 0,
+		shownAlert = nil,
+		shownAggro = nil,
 	}
 	return fighter
 end
@@ -593,8 +777,44 @@ local function aliveCount(): number
 	return count
 end
 
--- Point de patrouille : repère RobotSpawn non-garnison, sinon un point de départ de la carte.
-local function patrolSpawn(): Vector3
+-- Points de départ des joueurs : aucun robot n'apparaît à côté en début de partie.
+local function playerSpawnPoints(): { Vector3 }
+	local points = {}
+	for _, marker in MapService.deploySpawns() do
+		table.insert(points, marker.position)
+	end
+	for _, marker in MapService.soloSpawns() do
+		table.insert(points, marker.position)
+	end
+	return points
+end
+
+-- Joueurs et mercenaires vivants (vague d'alerte : les renforts arrivent de loin).
+local function livePositions(): { Vector3 }
+	local points = {}
+	for _, other in CombatService.allFighters() do
+		if (other.kind == "player" or other.kind == "bot") and Fighter.isAlive(other) then
+			table.insert(points, other.root.Position)
+		end
+	end
+	return points
+end
+
+-- Distance au sol jusqu'au plus proche des points à éviter.
+local function clearance(position: Vector3, avoid: { Vector3 }): number
+	local best = math.huge
+	for _, point in avoid do
+		best = math.min(best, flatDistance(point, position))
+	end
+	return best
+end
+
+--[[
+	Point de patrouille : repère RobotSpawn non-garnison (sinon un point de
+	départ de la carte), à `minDistance` au moins des points à éviter. Si
+	aucun essai ne convient, le plus éloigné des essais est retenu.
+]]
+local function patrolSpawn(avoid: { Vector3 }, minDistance: number): Vector3
 	local markers = {}
 	for _, marker in MapService.robotSpawns() do
 		if marker.attributes.Garrison ~= true then
@@ -607,8 +827,20 @@ local function patrolSpawn(): Vector3
 	if #markers == 0 then
 		return Vector3.zero
 	end
-	local marker = markers[random:NextInteger(1, #markers)]
-	return marker.position + Vector3.new(random:NextNumber(-12, 12), 0, random:NextNumber(-12, 12))
+	local best: Vector3 = markers[1].position
+	local bestGap = -1
+	for _ = 1, 16 do
+		local marker = markers[random:NextInteger(1, #markers)]
+		local candidate = marker.position + Vector3.new(random:NextNumber(-12, 12), 0, random:NextNumber(-12, 12))
+		local gap = clearance(candidate, avoid)
+		if gap >= minDistance then
+			return candidate
+		end
+		if gap > bestGap then
+			best, bestGap = candidate, gap
+		end
+	end
+	return best
 end
 
 -- Emplacement libre (pas dans un mur ni une étagère) autour d'un point, sinon le point lui-même.
@@ -654,6 +886,7 @@ function RobotService.populate(newModeId: string, options: PopulateOptions?)
 	RobotService.clear()
 	modeId = newModeId
 	visionMultiplier = 1
+	awakeAt = now() + AI.wakeDelay
 	local opts: PopulateOptions = options or {}
 	local count = opts.total or random:NextInteger(Density.minActive, Density.maxActive)
 
@@ -668,6 +901,7 @@ function RobotService.populate(newModeId: string, options: PopulateOptions?)
 		end
 	end
 
+	local avoid = playerSpawnPoints()
 	local zones = MapService.riskZones()
 	local garrisonCount = if #zones > 0 then math.floor(count * Density.garrisonShare + 0.5) else 0
 
@@ -692,7 +926,15 @@ function RobotService.populate(newModeId: string, options: PopulateOptions?)
 		local zone = zones[(placed % #zones) + 1]
 		local radius = zone.attributes.Radius or AI.garrisonRadius
 		local robotId = weightedPick(Density.garrison)
-		local spot = openSpot(zone.position, radius, Config.Robots.byId[robotId].size)
+		local size = Config.Robots.byId[robotId].size
+		local spot = openSpot(zone.position, radius, size)
+		-- Jamais collé à un point de départ : quelques autres essais dans la zone.
+		for _ = 1, 4 do
+			if clearance(spot, avoid) >= Density.spawnClearance then
+				break
+			end
+			spot = openSpot(zone.position, radius, size)
+		end
 		RobotService.spawn(robotId, spot + Vector3.new(0, 1, 0), true)
 		placed += 1
 	end
@@ -701,7 +943,7 @@ function RobotService.populate(newModeId: string, options: PopulateOptions?)
 	while spawned < patrols do
 		local robotId = weightedPick(Density.patrol)
 		local def = Config.Robots.byId[robotId]
-		local origin = patrolSpawn()
+		local origin = patrolSpawn(avoid, Density.spawnClearance)
 		-- Les Traqueurs chassent en meute de 2 ou 3.
 		local pack = if def.packSize then random:NextInteger(def.packSize.min, def.packSize.max) else 1
 		for index = 1, math.min(pack, patrols - spawned) do
@@ -724,8 +966,11 @@ function RobotService.alertWave()
 	if count <= 0 or #extractions == 0 then
 		return
 	end
+	-- Les renforts arrivent de loin : jamais au contact d'un joueur.
+	local avoid = livePositions()
 	for index = 1, count do
-		local fighter = RobotService.spawn(weightedPick(Density.wave), patrolSpawn(), false)
+		local origin = patrolSpawn(avoid, Density.waveClearance)
+		local fighter = RobotService.spawn(weightedPick(Density.wave), origin, false)
 		local robot = robots[fighter]
 		robot.wave = extractions[(index % #extractions) + 1]
 		robot.brain.state = "search"
@@ -742,6 +987,7 @@ function RobotService.clear()
 		end
 	end
 	table.clear(robots)
+	table.clear(engagement)
 	if folder then
 		folder:Destroy()
 		folder = nil
@@ -774,11 +1020,13 @@ function RobotService.init()
 
 	-- Destruction : loot au sol, disparition du modèle.
 	CombatService.FighterDied:Connect(function(fighter)
+		Engagement.forget(engagement, fighter)
 		local robot = robots[fighter]
 		if robot == nil then
 			return
 		end
 		robots[fighter] = nil
+		Engagement.release(engagement, robot)
 		local position = fighter.root.Position
 		local items = LootGenerator.robot(robot.def.id, modeId, random, ItemFactory.create)
 		if #items > 0 then

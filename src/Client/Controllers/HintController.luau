@@ -125,7 +125,11 @@ end
 
 -- Conseils de partie, un à la fois, espacés (au calme seulement).
 local function matchTip(duo: boolean): boolean
-	return try("extract") or try("stance", "crouch") or (duo and try("ping", "ping"))
+	return try("radar")
+		or try("map", "map")
+		or try("extract")
+		or try("stance", "crouch")
+		or (duo and try("ping", "ping"))
 end
 
 local function poll()
@@ -167,6 +171,9 @@ local function poll()
 	end
 	if character:GetAttribute("Parrying") == true then
 		HintRules.learn(state, "melee")
+	end
+	if PanelState.isOpen("map") then
+		HintRules.learn(state, "map")
 	end
 	if character:GetAttribute("Stance") == "crouch" or character:GetAttribute("Stance") == "prone" then
 		HintRules.learn(state, "stance")

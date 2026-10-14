@@ -32,7 +32,7 @@ d'équipement tombe). Tout se règle dans `Config/Loot.luau` (`kitShare`, `varia
 1. `rojo serve`, Play : l'arène contient 6 caisses de ravitaillement, 3 coffres
    militaires (dont un sur la plateforme) et un casier d'AXIOM (alarme rouge).
 2. Maintenir **E** (manette : X ; mobile : bouton d'interaction) pour ouvrir.
-3. Panneau de droite : **Prendre** / **Équiper** (maintien 0,3 s). Sac plein :
+3. Panneau de droite : **Prendre** / **Équiper** (un clic), **Tout prendre** (bouton ou E). Sac plein :
    **Échanger** propose de choisir l'objet à laisser.
 4. **Tab** (manette : Select ; mobile : SAC) : panneau du sac — Ranger / Jeter /
    Équiper / Utiliser. Jauge « Sac x/y » au-dessus de la barre rapide.

@@ -74,8 +74,9 @@ local maps = {
 			-- Le Titan d'Helix : humanoïde géant, canon laser à charge (lent, puissant).
 			overrides = {
 				size = Vector3.new(7, 13, 5),
-				rangedDamage = 55,
-				fireInterval = 2.6,
+				rangedDamage = 42,
+				fireInterval = 2.8,
+				windup = 1.3, -- charge du canon : longue, bien visible
 				attackRange = 110,
 				color = Color3.fromRGB(90, 96, 120),
 			},
@@ -121,9 +122,10 @@ local maps = {
 			overrides = {
 				size = Vector3.new(8, 14, 8),
 				attack = "hybrid",
-				damage = 45,
+				damage = 36,
 				meleeRange = 16,
-				meleeInterval = 1.6,
+				meleeInterval = 2,
+				meleeWindup = 1,
 				rangedDamage = 18,
 				fireInterval = 1.2,
 				attackRange = 70,
@@ -172,9 +174,10 @@ local maps = {
 			overrides = {
 				size = Vector3.new(6, 8, 10),
 				attack = "hybrid",
-				damage = 40,
+				damage = 30,
 				meleeRange = 9,
-				meleeInterval = 1.2,
+				meleeInterval = 1.6,
+				meleeWindup = 0.8,
 				rangedDamage = 14,
 				fireInterval = 1.0,
 				attackRange = 60,
@@ -219,8 +222,9 @@ local maps = {
 			-- Projection d'AXIOM : devient intangible et se déplace par à-coups.
 			overrides = {
 				size = Vector3.new(5, 11, 4),
-				rangedDamage = 26,
-				fireInterval = 0.9,
+				rangedDamage = 22,
+				fireInterval = 1.1,
+				windup = 0.6,
 				attackRange = 90,
 				color = Color3.fromRGB(255, 59, 59),
 			},
@@ -236,8 +240,11 @@ local maps = {
 
 -- Comportements des Gardiens.
 local guardianBehaviors = {
-	burrow = { every = 9, hidden = 2.5, minDistance = 20, surfaceRadius = 10, surfaceDamage = 35 },
-	phase = { every = 10, hidden = 2.5, jump = 16 },
+	-- `warning` : secondes entre l'annonce du point d'émergence (cercle rouge
+	-- au sol) et le surgissement. Le point est figé à l'annonce : on s'en écarte.
+	burrow = { every = 11, hidden = 2.5, warning = 1.4, minDistance = 20, surfaceRadius = 8, surfaceDamage = 30 },
+	-- `jump` : distance de la cible à laquelle la projection réapparaît.
+	phase = { every = 10, hidden = 2.5, jump = 22 },
 }
 
 local list: { string } = {}
@@ -253,6 +260,10 @@ return Freeze.deep({
 	list = list,
 	origin = Vector3.new(0, 0, -1600),
 	size = 800,
+	-- Plan vu de dessus (touche « carte ») : taille d'une case en studs, et
+	-- tranche de hauteur dans laquelle un obstacle compte (hauteur d'homme) ;
+	-- `minSpan` : le décor plus court (barils, caisses) n'est pas dessiné.
+	plan = { cell = 4, band = { min = 1.5, max = 6, minSpan = 7 } },
 	guardianBehaviors = guardianBehaviors,
 	-- Métal en fusion (Forge-7) : mort instantanée. Zones vérifiées 5 fois par seconde.
 	hazardTick = 0.2,

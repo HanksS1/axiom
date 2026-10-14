@@ -29,8 +29,13 @@ return Freeze.deep({
 	},
 
 	pickup = {
+		-- Maintien pour ramasser au sol ou rouvrir un conteneur (9.3).
 		holdTime = 0.3,
 		maxDistance = 10,
+		-- Dans un conteneur ouvert, un clic suffit (le maintien rendait la
+		-- fouille trop longue dans les zones à risque). Seul un intervalle
+		-- minimal entre deux prises est imposé par le serveur.
+		takeInterval = 0.08,
 	},
 
 	-- Après la mort (désintégration), délai avant l'écran de fin (solo).
@@ -49,6 +54,10 @@ return Freeze.deep({
 	ping = {
 		lifetime = 8,
 		maxDistance = 500,
+		-- Repère posé depuis la carte : visible plus longtemps, avec sa distance,
+		-- et retiré quand on l'atteint. Un seul par joueur.
+		waypointLifetime = 180,
+		waypointReach = 10,
 		longPressThreshold = 0.35,
 		lowHealthForHealPing = 35,
 	},

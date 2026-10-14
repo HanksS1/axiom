@@ -25,7 +25,7 @@ avec la touche du périphérique utilisé.
 | Plus de cellules, surchauffe | l'arme ne peut plus tirer |
 | Sac plein | le sac vient de se remplir |
 | Parade | première fois que l'arme de mêlée est en main |
-| Objectif, extraction, accroupi, ping (duo) | début de partie, puis au calme, 3 au plus par partie |
+| Radar, carte, extraction, accroupi, ping (duo) | début de partie, puis au calme, 3 au plus par partie |
 | Terminus | arrivée au hub : comptoirs et Porte de déploiement |
 
 Pour ne pas gêner le jeu (`Config/Hints.luau`, `Shared/Hints/HintRules.luau`, testé) :
@@ -38,11 +38,73 @@ Pour ne pas gêner le jeu (`Config/Hints.luau`, `Shared/Hints/HintRules.luau`, t
 - la ligne ne capte aucune entrée et ne recouvre ni le réticule ni la barre rapide ;
 - désactivable : Paramètres → Affichage → « Aides contextuelles ».
 
-Panneau de butin (caisse, sac de dépouille) :
+Panneau de butin (caisse, sac de dépouille), après les premiers tests (« maintenir pour
+prendre, c'est trop long dans une zone sensible ») :
 
-- pied de panneau « Maintenez un bouton pour prendre ou équiper », avec la touche de fermeture ;
-- un simple clic sur un bouton à maintenir affiche « Maintenir » sur le bouton ;
-- bouton « Tout prendre » : prend les objets un par un, au même rythme qu'à la main.
+- **un clic** par objet (Prendre, Équiper) : c'est l'ouverture de la caisse qui prend du temps,
+  pas le tri de son contenu. Écart assumé avec 9.3 (maintien de 0,3 s), qui reste vrai pour
+  ramasser un objet au sol ;
+- **« Tout prendre »** : bouton, ou la touche d'interaction (E) une fois le panneau ouvert.
+  Une seule requête (`TakeAll`) : le serveur range tout ce qui tient dans le sac, le plus
+  précieux d'abord, et équipe ce qui va dans un emplacement vide ;
+- à la manette, « Tout prendre » est sélectionné d'emblée ;
+- côté serveur : intervalle minimal de 0,08 s entre deux prises (`Config.Match.pickup`).
+
+## Détecteur, carte et repères (ajoutés après les premiers tests)
+
+Être attaqué ne doit jamais être une surprise (`Controllers/ThreatController.luau`,
+calculs purs et testés dans `Shared/Match/Radar.luau`).
+
+**Radar** (en haut à gauche, sous la boussole) : le joueur au centre (son portrait), « devant »
+en haut, 90 studs de portée.
+
+| Point | Sens |
+|---|---|
+| gris | robot en patrouille, ne vous a pas vu |
+| jaune | robot en alerte (recherche, autre cible) |
+| orange | robot en train de vous remarquer (« REPÉRÉ ») |
+| rouge | robot qui vous a pris pour cible (« PRIS POUR CIBLE ») |
+| rouge clignotant, cadre et portrait rouges | approche imminente : il vous vise à moins de 28 studs (60 pour un Gardien) ou prépare une attaque annoncée (« DANGER ») |
+| losange | Gardien |
+| cyan | coéquipier |
+
+Un robot qui vous vise au-delà de la portée reste indiqué sur le bord (jusqu'à 160 studs). Les
+autres joueurs n'apparaissent **jamais** : le radar ne sert pas au PvP.
+
+**Marqueurs de direction** autour du viseur : un trait orange (rouge clignotant si imminent)
+pour chaque robot qui vous vise **hors de votre champ de vision** (4 au plus). Rien pour un
+robot que vous regardez déjà.
+
+**Attaques annoncées** dans le monde : visée rouge du tir chargé (de l'œil du robot au joueur
+visé), cercle rouge au sol qui se remplit pour un coup de mêlée lourd ou le surgissement du
+Ver de Silice, œil du robot qui s'embrase.
+
+**Carte** (`Controllers/MapController.luau`) : touche **M** (la touche marquée M en AZERTY
+comme en QWERTY ; manette : L1 ; mobile : toucher le radar), personnalisable dans les
+paramètres.
+
+- plan vu de dessus calculé par le serveur à partir de la description de la carte
+  (`Shared/Match/MapPlan.luau`, testé) : murs et masses à hauteur d'homme, 300 à 650
+  rectangles, envoyé une fois (`Map/Plan`) ;
+- le joueur (rond blanc, flèche du regard), le coéquipier, les **extractions** (anneau orange
+  si ouverte, gris sinon, avec nom et distance), l'**Accélérateur** quand un coéquipier est en
+  orbe, les zones à risque (rouge, « ! » pour le repaire du Gardien), les pings ;
+- **clic sur la carte : pose un repère** visible par l'équipe. Dans le monde, il s'affiche
+  avec sa distance, 3 minutes au plus, et disparaît quand on l'atteint. Un seul repère par
+  joueur ; clic droit sur la carte pour les retirer ;
+- la carte est un panneau : souris libre, tir bloqué, on peut continuer à se déplacer.
+
+Les pings contextuels existants (T ou clic molette : ennemi, butin, « je vais là », danger,
+soins) sont inchangés et apparaissent aussi sur la carte.
+
+Deux aides contextuelles en plus (radar, carte), une fois chacune.
+
+## Ouverture des caisses : l'objet se voit
+
+- Holo-Bazar : à la révélation, l'objet obtenu apparaît en 3D (il tourne), cerné de la
+  couleur de sa rareté, à la place de la caisse. Vrai aussi avec « ouverture rapide ».
+- Caisse gratuite : vignette 3D de l'objet obtenu, liseré à la couleur de son état ; la
+  fenêtre s'affiche même quand l'animation est désactivée.
 
 ## Apparence des objets (ajoutée après la P10)
 

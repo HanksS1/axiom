@@ -3,7 +3,8 @@
 	MatchHUDController : affichage de la partie (section 17.3, écrans 11, 13, 14, 15).
 
 	- En haut au centre : chrono (orange à 12:00, rouge clignotant la dernière minute).
-	- En haut à gauche : boussole et direction / distance des extractions ouvertes.
+	- En haut à gauche : boussole et direction / distance des extractions ouvertes
+	  (orange) et des repères posés sur la carte (cyan).
 	- En haut à droite : fil des éliminations (« X a été désintégré »).
 	- Annonces d'AXIOM (bandeau central).
 	- Extraction : barre circulaire de 30 s (jaune en pause, rouge si bloquée).
@@ -27,6 +28,7 @@ local Create = require(script.Parent.Parent.UI.Create)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local HUDController = require(script.Parent.HUDController)
+local PingController = require(script.Parent.PingController)
 local ProfileController = require(script.Parent.ProfileController)
 
 local MatchHUDController = {}
@@ -125,40 +127,48 @@ local function addFeed(victim: string, killer: string?)
 	end
 end
 
--- Boussole : cap actuel et repères des extractions ouvertes.
+-- Boussole : cap actuel, repères des extractions ouvertes et des repères de carte.
 local function updateCompass()
 	local camera = Workspace.CurrentCamera
 	local look = camera.CFrame.LookVector
 	local heading = math.atan2(-look.X, -look.Z)
 	local origin = camera.CFrame.Position
 	local seen: { [Instance]: boolean } = {}
+	-- Place (ou crée) le repère d'un point sur la boussole.
+	local function place(key: Instance, target: Vector3, color: Color3)
+		seen[key] = true
+		local marker = compassMarkers[key]
+		if marker == nil then
+			marker = Create("TextLabel", {
+				AnchorPoint = Vector2.new(0.5, 0),
+				Size = UDim2.fromOffset(90, 30),
+				BackgroundTransparency = 1,
+				Font = Theme.fontNumbers,
+				TextSize = 12,
+				TextColor3 = color,
+				Parent = compass,
+			})
+			compassMarkers[key] = marker
+		end
+		local offset = target - origin
+		local bearing = math.atan2(-offset.X, -offset.Z)
+		local delta = (bearing - heading + math.pi) % (2 * math.pi) - math.pi
+		local x = math.clamp(0.5 - delta / math.pi, 0, 1)
+		marker.Position = UDim2.new(x, 0, 0, 2)
+		marker.Text = "▼\n" .. tostring(math.floor(Vector3.new(offset.X, 0, offset.Z).Magnitude)) .. "m"
+		marker.TextTransparency = if math.abs(delta) > math.pi / 2 then 0.5 else 0
+	end
 	local folder = Workspace:FindFirstChild("Extractions")
 	if folder then
 		for _, zone in folder:GetChildren() do
 			if zone:IsA("Model") and zone:GetAttribute("Open") == true and zone.PrimaryPart then
-				seen[zone] = true
-				local marker = compassMarkers[zone]
-				if marker == nil then
-					marker = Create("TextLabel", {
-						AnchorPoint = Vector2.new(0.5, 0),
-						Size = UDim2.fromOffset(90, 30),
-						BackgroundTransparency = 1,
-						Font = Theme.fontNumbers,
-						TextSize = 12,
-						TextColor3 = Theme.orange,
-						Parent = compass,
-					})
-					compassMarkers[zone] = marker
-				end
-				local target = (zone.PrimaryPart :: BasePart).Position
-				local offset = target - origin
-				local bearing = math.atan2(-offset.X, -offset.Z)
-				local delta = (bearing - heading + math.pi) % (2 * math.pi) - math.pi
-				local x = math.clamp(0.5 - delta / math.pi, 0, 1)
-				marker.Position = UDim2.new(x, 0, 0, 2)
-				marker.Text = "▼\n" .. tostring(math.floor(Vector3.new(offset.X, 0, offset.Z).Magnitude)) .. "m"
-				marker.TextTransparency = if math.abs(delta) > math.pi / 2 then 0.5 else 0
+				place(zone, (zone.PrimaryPart :: BasePart).Position, Theme.orange)
 			end
+		end
+	end
+	for _, ping in PingController.active() do
+		if ping.waypoint then
+			place(ping.anchor, ping.position, Theme.cyan)
 		end
 	end
 	for zone, marker in compassMarkers do

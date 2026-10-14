@@ -35,6 +35,7 @@ Bindings.actions = {
 	"boost",
 	"quickCycle",
 	"ping",
+	"map",
 	"inventory",
 }
 
@@ -56,12 +57,16 @@ Bindings.defaults = {
 	boost = { keyboard = "Five", gamepad = nil },
 	quickCycle = { keyboard = nil, gamepad = "DPadDown" },
 	ping = { keyboard = "T", gamepad = "DPadUp" },
+	map = { keyboard = "M", gamepad = "ButtonL1" },
 	inventory = { keyboard = "Tab", gamepad = "ButtonSelect" },
 } :: { [string]: Binding }
 
 -- Touches supplémentaires fixes (non personnalisables).
 Bindings.extras = {
 	ping = { "MouseButton3" },
+	-- La touche marquée « M » d'un clavier AZERTY (les touches sont des
+	-- positions physiques : « M » y désigne la touche « , »).
+	map = { "Semicolon" },
 } :: { [string]: { string } }
 
 -- « none » : action sans touche sur ce périphérique.

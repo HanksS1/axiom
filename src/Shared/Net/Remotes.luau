@@ -50,6 +50,7 @@ local Remotes: { [string]: RemoteDef } = {
 	LootAlarm = { kind = "unreliable", toServer = false }, -- alarme de casier d'AXIOM
 	InventorySync = { kind = "event", toServer = false }, -- sac porté (propriétaire)
 	TakeItem = { kind = "event", toServer = true },
+	TakeAll = { kind = "event", toServer = true }, -- tout ce qui tient dans le sac, en une fois
 	CloseContainer = { kind = "event", toServer = true },
 	EquipItem = { kind = "event", toServer = true },
 	UnequipItem = { kind = "event", toServer = true },

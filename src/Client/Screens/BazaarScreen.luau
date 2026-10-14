@@ -72,6 +72,12 @@ local function preview(def: any, size: UDim2, spin: boolean): Frame
 	return ItemIcon.create(itemId, size, nil, def, spin)
 end
 
+-- Aperçu 3D d'un cosmétique (ouverture d'une caisse) ; nil si le cosmétique est inconnu.
+function BazaarScreen.preview(cosmeticId: string, size: UDim2, spin: boolean): Frame?
+	local def = Config.Cosmetics.byId[cosmeticId]
+	return if def then preview(def, size, spin) else nil
+end
+
 local function formatPercent(hundredths: number): string
 	return string.format("%d,%02d %%", math.floor(hundredths / 100), hundredths % 100)
 end

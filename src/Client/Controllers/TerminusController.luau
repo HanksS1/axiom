@@ -24,6 +24,7 @@ local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local Create = require(script.Parent.Parent.UI.Create)
+local ItemIcon = require(script.Parent.Parent.UI.ItemIcon)
 local Panel = require(script.Parent.Parent.UI.Panel)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -135,6 +136,14 @@ local crateBox: Frame
 local crateFill: Frame
 local crateText: TextLabel
 local crateClose: TextButton
+local cratePrize: Frame? = nil -- vignette 3D de l'objet obtenu
+
+local function clearCratePrize()
+	if cratePrize then
+		cratePrize:Destroy()
+		cratePrize = nil
+	end
+end
 local crateOpening = false
 
 local function buildCrateOverlay(root: Instance)
@@ -184,6 +193,8 @@ local function buildCrateOverlay(root: Instance)
 		Close = crateClose,
 	})
 	crateClose.Activated:Connect(function()
+		clearCratePrize()
+		crateBox.Visible = true
 		crateOverlay.Visible = false
 		PanelState.set("freeCrate", false)
 	end)
@@ -200,6 +211,8 @@ local function openCrate()
 		return
 	end
 	crateOpening = true
+	clearCratePrize()
+	crateBox.Visible = true
 	crateOverlay.Visible = true
 	PanelState.set("freeCrate", true)
 	crateText.Text = t("freecrate.opening")
@@ -235,13 +248,32 @@ local function showCrateResult(reward: { [string]: any })
 	else
 		return
 	end
-	if crateOverlay.Visible then
-		crateText.Text = text
-		crateText.TextColor3 = Theme.green
-		crateClose.Text = t("common.confirm")
-		crateClose.Visible = true
-	else
+	-- Objet : on le MONTRE (vignette 3D qui tourne, liseré à la couleur de son
+	-- état), même quand l'animation d'ouverture est désactivée.
+	local item = if reward.kind == "item" then reward.item else nil
+	if not crateOverlay.Visible and item == nil then
 		NotificationController.show(text, Theme.green)
+		return
+	end
+	clearCratePrize()
+	if item then
+		local icon =
+			ItemIcon.create(tostring(item.itemId), UDim2.fromOffset(104, 104), tonumber(item.condition), nil, true)
+		icon.AnchorPoint = Vector2.new(0.5, 0)
+		icon.Position = UDim2.new(0.5, 0, 0, 12)
+		icon.ZIndex = 26
+		icon.Parent = crateOverlay
+		cratePrize = icon
+	end
+	crateBox.Visible = item == nil
+	crateFill.Size = UDim2.fromScale(1, 1)
+	crateText.Text = text
+	crateText.TextColor3 = Theme.green
+	crateClose.Text = t("common.confirm")
+	crateClose.Visible = true
+	if not crateOverlay.Visible then
+		crateOverlay.Visible = true
+		PanelState.set("freeCrate", true)
 	end
 end
 

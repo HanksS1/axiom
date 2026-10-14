@@ -4,6 +4,10 @@
 	« Ennemi ici », « Loot ici », « Je vais là », « Danger », « Besoin de soins ».
 	Visibles par l'équipe uniquement (le joueur seul en solo). Un joueur en
 	orbe peut encore pinger (vue spectateur).
+
+	Repère de carte : posé depuis la carte (touche « carte »), n'importe où
+	sur la carte de la partie. Le client le garde affiché plus longtemps,
+	avec sa distance, pour s'orienter.
 ]]
 
 local Players = game:GetService("Players")
@@ -11,6 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local MapPlan = require(Shared.Match.MapPlan)
 local Guard = require(Shared.Util.Guard)
 
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
@@ -41,16 +46,31 @@ end
 function PingService.init()
 	ServerNet.onEvent(
 		"Ping",
-		Guard.tuple(Guard.vector3(100_000), Guard.enum(PingService.KINDS :: { string })),
-		function(player, position: Vector3, kind: string)
+		Guard.tuple(
+			Guard.vector3(100_000),
+			Guard.enum(PingService.KINDS :: { string }),
+			Guard.optional(Guard.boolean())
+		),
+		function(player, position: Vector3, kind: string, fromMap: boolean?)
 			local from = referencePosition(player)
-			if from == nil or (position - from).Magnitude > Config.Match.ping.maxDistance then
+			if from == nil then
+				return
+			end
+			local waypoint = fromMap == true
+			if waypoint then
+				-- Repère de carte : partout sur la carte de la partie, pas au-delà.
+				local _, _, inside = MapPlan.toPlan(position, Config.Maps.origin, Config.Maps.size)
+				local state = ReplicatedStorage:FindFirstChild("MatchState")
+				if not inside or state == nil or state:GetAttribute("Running") ~= true then
+					return
+				end
+			elseif (position - from).Magnitude > Config.Match.ping.maxDistance then
 				return
 			end
 			local team = player:GetAttribute("TeamId")
 			for _, other in Players:GetPlayers() do
 				if other == player or (team ~= nil and other:GetAttribute("TeamId") == team) then
-					ServerNet.fire("PingShown", other, player.UserId, player.DisplayName, position, kind)
+					ServerNet.fire("PingShown", other, player.UserId, player.DisplayName, position, kind, waypoint)
 				end
 			end
 		end

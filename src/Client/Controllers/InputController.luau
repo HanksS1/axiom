@@ -40,6 +40,7 @@ export type Action =
 	| "quickCycle"
 	| "interact"
 	| "ping"
+	| "map"
 	| "gadget1"
 	| "gadget2"
 export type Device = "keyboard" | "gamepad" | "touch"
@@ -225,7 +226,24 @@ function InputController.hint(action: Action): string?
 		return nil
 	end
 	local name = if device == "gamepad" then entry.gamepad else entry.keyboard
-	return if name then InputController.keyLabel(name) else nil
+	if name == nil then
+		return nil
+	end
+	-- Une touche supplémentaire fixe porte la lettre du raccourci sur ce clavier
+	-- (« M » en AZERTY pour la carte) : c'est elle qu'on annonce.
+	if device == "keyboard" and #name == 1 then
+		local extras: { string } = Bindings.extras[action] or {}
+		for _, extra in extras do
+			local item = toEnum(extra)
+			local ok, label = pcall(function()
+				return UserInputService:GetStringForKeyCode(item :: any)
+			end)
+			if item and ok and type(label) == "string" and string.upper(label) == name then
+				return name
+			end
+		end
+	end
+	return InputController.keyLabel(name)
 end
 
 -- Libère toutes les actions (mort, ouverture d'un menu…).

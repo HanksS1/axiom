@@ -156,4 +156,26 @@ function RobotBrain.canAttack(brain: Brain, now: number): boolean
 	return brain.state == "combat" and now >= brain.readyAt
 end
 
+--[[
+	Probabilité réelle de toucher : la précision du mode, réduite avec la
+	distance (pleine jusqu'à `nearRatio` de la portée, `farFactor` à portée
+	maximale) et quand la cible court. Courir et garder ses distances
+	protègent donc vraiment.
+]]
+function RobotBrain.hitChance(base: number, distance: number, attackRange: number, targetSpeed: number): number
+	local A = AI.accuracy
+	local ratio = if attackRange > 0 then math.clamp(distance / attackRange, 0, 1) else 0
+	local rangeFactor = 1
+	if ratio > A.nearRatio then
+		rangeFactor = 1 - (1 - A.farFactor) * (ratio - A.nearRatio) / (1 - A.nearRatio)
+	end
+	local moveFactor = if targetSpeed >= A.sprintSpeed then A.sprintFactor else 1
+	return math.clamp(base * rangeFactor * moveFactor, 0, 1)
+end
+
+-- Reporte la prochaine attaque (réapparition d'un Gardien : jamais de coup immédiat).
+function RobotBrain.delayAttack(brain: Brain, now: number, delay: number)
+	brain.readyAt = math.max(brain.readyAt, now + delay)
+end
+
 return RobotBrain

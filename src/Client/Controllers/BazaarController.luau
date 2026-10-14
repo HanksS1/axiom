@@ -4,8 +4,10 @@
 	et ouverture des caisses cosmétiques (section 14.10).
 
 	Animation d'ouverture : dépressurisation, scan laser, explosion de
-	lumière à la couleur de la rareté, puis révélation. Le bouton « Passer »
-	est TOUJOURS disponible, et le paramètre « ouverture rapide » la saute.
+	lumière à la couleur de la rareté, puis révélation : l'objet obtenu
+	apparaît en 3D (il tourne), cerné de la couleur de sa rareté. Le bouton
+	« Passer » est TOUJOURS disponible, et le paramètre « ouverture rapide »
+	saute l'animation (pas l'image de l'objet).
 
 	Les achats en Robux passent uniquement par MarketplaceService (fenêtre
 	officielle de Roblox, ouverte seulement à la demande du joueur).
@@ -46,7 +48,15 @@ local resultRarity: TextLabel
 local resultExtra: TextLabel
 local skipButton: TextButton
 local closeButton: TextButton
+local prize: Frame? = nil -- aperçu 3D de l'objet obtenu
 local playToken = 0
+
+local function clearPrize()
+	if prize then
+		prize:Destroy()
+		prize = nil
+	end
+end
 
 local function buildOverlay(root: Instance)
 	box = Create("Frame", {
@@ -115,6 +125,7 @@ local function buildOverlay(root: Instance)
 	})
 	closeButton.Activated:Connect(function()
 		playToken += 1
+		clearPrize()
 		overlay.Visible = false
 		PanelState.set("crateOpening", false)
 	end)
@@ -126,6 +137,33 @@ local function reveal(result: { [string]: any })
 	box.Rotation = 0
 	box.Visible = false
 	flash.BackgroundTransparency = 1
+	-- L'objet obtenu, à la place de la caisse.
+	clearPrize()
+	local icon = BazaarScreen.preview(result.cosmeticId, UDim2.fromScale(0.36, 0.36), true)
+	if icon then
+		icon.AnchorPoint = Vector2.new(0.5, 0.5)
+		icon.Position = UDim2.fromScale(0.5, 0.34)
+		icon.ZIndex = 3
+		-- Carré, quelle que soit la forme de l'écran.
+		Create("UIAspectRatioConstraint", {
+			AspectRatio = 1,
+			DominantAxis = Enum.DominantAxis.Height,
+			Parent = icon,
+		})
+		Create("UISizeConstraint", { MaxSize = Vector2.new(230, 230), Parent = icon })
+		local stroke = icon:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Color = rarityColor
+			stroke.Thickness = 3
+			stroke.Transparency = 0
+		end
+		local glow = icon:FindFirstChild("Glow")
+		if glow and glow:IsA("Frame") then
+			glow.BackgroundColor3 = rarityColor
+		end
+		icon.Parent = overlay
+		prize = icon
+	end
 	resultName.Text = BazaarScreen.cosmeticName(t, result.cosmeticId)
 	resultRarity.Text = t("rarity." .. result.rarity)
 	resultRarity.TextColor3 = rarityColor
@@ -166,6 +204,7 @@ local function play(result: { [string]: any })
 	overlay.Visible = true
 	PanelState.set("crateOpening", true)
 	resultName.Text, resultRarity.Text, resultExtra.Text = "", "", ""
+	clearPrize()
 	closeButton.Visible = false
 	box.Visible = true
 	box.Rotation = 0

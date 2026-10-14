@@ -40,6 +40,7 @@ local SHAKES: { [string]: { intensity: number, duration: number, radius: number 
 	rumble = { intensity = 0.6, duration = 4, radius = 500 },
 	collapse = { intensity = 1.6, duration = 1.6, radius = 260 },
 	surface = { intensity = 1.2, duration = 0.8, radius = 60 },
+	surfaceWarning = { intensity = 0.35, duration = 1.2, radius = 60 },
 }
 
 local DARK = {
