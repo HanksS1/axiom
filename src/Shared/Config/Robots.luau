@@ -5,6 +5,17 @@
 
 	Les valeurs de comportement (vitesses, portées d'attaque, cadences) ne
 	sont pas précisées par le document : ce sont des valeurs de départ.
+
+	Équilibrage après les premiers tests (les robots ne doivent être ni une
+	corvée ni une mort surprise) — écarts assumés avec le tableau 10.1 :
+	- toute attaque lourde est ANNONCÉE (`windup`, `meleeWindup`) : le coup
+	  ne part qu'à la fin de l'annonce, et rate si la cible s'est mise à
+	  couvert ou hors de portée entre-temps ;
+	- un Traqueur se sème en sprintant (17 < 22), sa morsure est moins forte ;
+	- Bastion, Exécuteur et Gardien ont moins de PV (combats plus courts) ;
+	- le Bastion tire des rafales plus courtes, avec une vraie pause ;
+	- le nombre de robots qui attaquent la même cible en même temps est
+	  plafonné selon le mode (Modes.robots.maxAttackers).
 ]]
 
 local Freeze = require(script.Parent.Parent.Util.Freeze)
@@ -29,6 +40,9 @@ export type RobotDef = {
 	speed: number, -- studs/s
 	fireInterval: number?, -- secondes entre deux tirs
 	burst: number?, -- tirs par rafale (Bastion : mitrailleuse rotative)
+	burstPause: number?, -- pause entre deux rafales (secondes)
+	windup: number?, -- annonce (secondes) avant un tir lourd ou une rafale
+	meleeWindup: number?, -- annonce (secondes) avant un coup de mêlée
 	attackRange: number, -- distance d'engagement au tir
 	meleeRange: number?,
 	meleeInterval: number?,
@@ -42,6 +56,7 @@ export type RobotDef = {
 	loot: { LootEntry },
 	stationary: boolean?, -- fixe (tourelle) : ne se déplace jamais
 	color: Color3?, -- couleur du modèle provisoire (Gardiens propres à une carte)
+	guardian: boolean?, -- mini-boss : signalé à part sur le radar, jamais limité par le plafond d'attaquants
 }
 
 local robots: { [string]: RobotDef } = {
@@ -53,7 +68,7 @@ local robots: { [string]: RobotDef } = {
 		scorePoints = 10,
 		visionRange = 80,
 		flying = true,
-		speed = 24,
+		speed = 20,
 		fireInterval = 0.8,
 		attackRange = 45,
 		preferredDistance = 25,
@@ -67,15 +82,16 @@ local robots: { [string]: RobotDef } = {
 	stalker = {
 		id = "stalker",
 		health = 80,
-		damage = 15,
+		damage = 12,
 		attack = "melee",
 		scorePoints = 20,
 		visionRange = 60,
 		flying = false,
-		speed = 20,
+		speed = 17,
 		attackRange = 4,
 		meleeRange = 4.5,
-		meleeInterval = 0.9,
+		meleeInterval = 1.1,
+		meleeWindup = 0.3,
 		preferredDistance = 2,
 		packSize = { min = 2, max = 3 },
 		conditionShift = 0,
@@ -107,7 +123,7 @@ local robots: { [string]: RobotDef } = {
 	},
 	bastion = {
 		id = "bastion",
-		health = 600,
+		health = 480,
 		damage = 8,
 		attack = "ranged",
 		scorePoints = 60,
@@ -115,7 +131,9 @@ local robots: { [string]: RobotDef } = {
 		flying = false,
 		speed = 7,
 		fireInterval = 0.12,
-		burst = 12,
+		burst = 8,
+		burstPause = 1.8,
+		windup = 0.6, -- mise en rotation de la mitrailleuse
 		attackRange = 60,
 		preferredDistance = 25,
 		weakSpotMultiplier = 2.5,
@@ -129,18 +147,19 @@ local robots: { [string]: RobotDef } = {
 	},
 	executor = {
 		id = "executor",
-		health = 400,
+		health = 340,
 		damage = 25,
 		rangedDamage = 15,
 		attack = "hybrid",
 		scorePoints = 80,
 		visionRange = 120,
 		flying = false,
-		speed = 17,
-		fireInterval = 0.6,
+		speed = 15,
+		fireInterval = 0.7,
 		attackRange = 50,
 		meleeRange = 6,
-		meleeInterval = 0.8,
+		meleeInterval = 1.0,
+		meleeWindup = 0.45,
 		preferredDistance = 4,
 		conditionShift = 1,
 		guaranteedItems = { min = 1, max = 1 },
@@ -172,14 +191,17 @@ local robots: { [string]: RobotDef } = {
 	},
 	warden = {
 		id = "warden",
-		health = 1800,
+		health = 1500,
 		damage = 30, -- « selon la carte » : valeur par défaut, surchargée par carte
 		attack = "ranged",
+		guardian = true,
 		scorePoints = 250,
 		visionRange = 120,
 		flying = false,
 		speed = 8,
 		fireInterval = 1.4,
+		windup = 0.9, -- tir chargé : visée rouge sur la cible avant le tir
+		meleeWindup = 0.8,
 		attackRange = 90,
 		preferredDistance = 35,
 		conditionShift = 1,
@@ -200,6 +222,10 @@ return Freeze.deep({
 		garrisonShare = 0.6, -- 60 % en garnison dans les zones à risque
 		-- Plafond absolu pendant la vague d'alerte (28 + 10).
 		hardCap = 38,
+		-- Aucun robot n'apparaît à moins de cette distance d'un point de départ
+		-- des joueurs (début de partie), ni d'un joueur vivant (vague d'alerte).
+		spawnClearance = 40,
+		waveClearance = 70,
 		-- Composition des garnisons et des patrouilles (poids).
 		garrison = { sentinel = 5, bastion = 2, executor = 1.5, stalker = 2 },
 		patrol = { fly = 4, stalker = 3, sentinel = 2 },
@@ -218,5 +244,32 @@ return Freeze.deep({
 		pathRefresh = 1.0, -- secondes entre deux calculs de chemin
 		threatMemory = 6, -- secondes pendant lesquelles l'attaquant reste prioritaire
 		missSpread = 4, -- écart (studs) d'un tir manqué
+		-- Précision réelle = précision du mode × portée × mouvement de la cible.
+		accuracy = {
+			nearRatio = 0.4, -- pleine précision jusqu'à 40 % de la portée
+			farFactor = 0.6, -- à portée maximale
+			sprintSpeed = 18, -- au-delà (studs/s), la cible est « en course »
+			sprintFactor = 0.7,
+		},
+		-- Durée (secondes) pendant laquelle un robot garde son tour d'attaque
+		-- sur une cible sans attaquer (voir Modes.robots.maxAttackers).
+		engagementHold = 2,
+		-- Après une réapparition (Gardien enfoui ou intangible) : délai sans attaque.
+		reappearDelay = 1,
+		-- Début de partie : les robots restent en veille quelques secondes (le temps
+		-- de regarder autour de soi). Un robot touché se réveille aussitôt.
+		wakeDelay = 12,
+	},
+
+	-- Détecteur du joueur (radar en haut à gauche, marqueurs de menace).
+	threat = {
+		radarRange = 90, -- studs couverts par le radar
+		imminentRange = 28, -- un robot qui vous vise à cette distance : le radar clignote
+		guardianImminentRange = 60,
+		edgeRange = 160, -- au-delà du radar, un robot qui vous vise reste indiqué sur le bord
+		maxBlips = 24,
+		refresh = 0.1, -- secondes entre deux mises à jour du radar
+		arcs = 4, -- marqueurs de direction autour du viseur (robots qui vous visent)
+		arcMinAngle = 35, -- degrés : pas de marqueur pour un robot déjà dans le champ
 	},
 })

@@ -23,6 +23,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local MapPlan = require(Shared.Match.MapPlan)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local LayoutBuilder = require(script.Parent.Parent.Maps.LayoutBuilder)
@@ -197,6 +198,11 @@ function MapRuntimeService.load(mapId: string): boolean
 	applyLighting(def.lighting)
 	applyMood(def.mood)
 	local folder = MapRenderer.render(built, Workspace, Maps.origin, mapId)
+	-- Plan vu de dessus, décodé par le client pour la carte (touche « carte »).
+	local plan = Instance.new("StringValue")
+	plan.Name = "Plan"
+	plan.Value = MapPlan.encode(MapPlan.build(built.parts, Maps.size, Maps.plan.cell, Maps.plan.band))
+	plan.Parent = folder
 	root = folder
 	layout = built
 	currentId = mapId

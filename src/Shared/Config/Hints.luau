@@ -33,6 +33,8 @@ local hints: { [string]: HintDef } = {
 	extract = { maxShows = 1, cooldown = 0 },
 	stance = { maxShows = 1, cooldown = 0 },
 	ping = { maxShows = 1, cooldown = 0 },
+	radar = { maxShows = 1, cooldown = 0 },
+	map = { maxShows = 1, cooldown = 0 },
 	hub = { maxShows = 1, cooldown = 0 },
 }
 

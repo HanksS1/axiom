@@ -20,6 +20,8 @@ local order = {
 	"MatchHUDController",
 	"SpectateController",
 	"PingController",
+	"ThreatController",
+	"MapController",
 	"GadgetController",
 	"TerminusController",
 	"BazaarController",

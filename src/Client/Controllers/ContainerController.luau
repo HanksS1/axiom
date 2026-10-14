@@ -3,10 +3,11 @@
 	ContainerController : contenu d'une caisse, d'un sac de dépouille ou d'un
 	tas d'objets au sol (section 9.3).
 
-	- Prendre (ranger dans le sac) ou Équiper : maintien 0,3 s. Le pied du
-	  panneau le rappelle, et un simple clic fait apparaître « Maintenir ».
-	- « Tout prendre » : prend les objets un par un, au même rythme qu'à la
-	  main (un par maintien), tant qu'il reste de la place.
+	- Prendre (ranger dans le sac) ou Équiper : un clic. Fouiller dans une
+	  zone à risque doit rester court ; c'est l'ouverture de la caisse qui
+	  prend du temps, pas le tri de son contenu.
+	- « Tout prendre » (bouton, ou la touche d'interaction) : tout ce qui
+	  tient dans le sac, le plus précieux d'abord, en une seule fois.
 	- Sac plein : « Échanger » propose de choisir un objet du sac à laisser.
 	- Le panneau se ferme si on s'éloigne (le serveur l'impose aussi).
 ]]
@@ -15,7 +16,6 @@ local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Config = require(Shared.Config)
 local InventoryLogic = require(Shared.Items.InventoryLogic)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
 local Types = require(Shared.Types)
@@ -41,7 +41,8 @@ type ContainerView = {
 }
 
 local t = ProfileController.t
-local HOLD = Config.Match.pickup.holdTime
+-- Touche de « Tout prendre » : celle qui a ouvert la caisse (invite d'interaction).
+local TAKE_ALL_ACTION: InputController.Action = "gadget1"
 
 local current: ContainerView? = nil
 local swapFor: Types.ItemInstance? = nil -- objet à prendre en attente d'un échange
@@ -51,12 +52,10 @@ local hint: TextLabel
 local list: ScrollingFrame
 local footer: TextLabel
 local takeAllButton: TextButton
-local takingAll = 0 -- jeton de la prise en série en cours (0 = aucune)
 -- Caisses déjà vues : leur contenu ne se « révèle » qu'à la première ouverture.
 local seen: { [string]: boolean } = {}
 local seenCount = 0
 local revealNext = false
-local takeAllToken = 0
 
 local function localInventory(): InventoryLogic.Inventory
 	local state = InventoryController.state()
@@ -90,49 +89,17 @@ end
 
 local function refreshTakeAll()
 	local view = current
-	local running = takingAll ~= 0
-	takeAllButton.Text = t(if running then "loot.takeAllStop" else "loot.takeAll")
-	takeAllButton.Visible = view ~= nil and swapFor == nil and (running or nextTakeable(view) ~= nil)
+	local key = if InputController.device() == "keyboard" then InputController.hint(TAKE_ALL_ACTION) else nil
+	takeAllButton.Text = t("loot.takeAll") .. (if key then `  [{key}]` else "")
+	takeAllButton.Visible = view ~= nil and swapFor == nil and nextTakeable(view) ~= nil
 end
 
-local function stopTakeAll()
-	takingAll = 0
-	refreshTakeAll()
-end
-
--- Prend tout ce qui peut l'être, un objet par intervalle de maintien (même rythme qu'à la main).
-local function startTakeAll()
+-- Tout ce qui tient dans le sac, en une requête (le serveur trie et décide).
+local function takeAll()
 	local view = current
-	if view == nil then
-		return
+	if view and swapFor == nil and nextTakeable(view) ~= nil then
+		ClientNet.fire("TakeAll", view.id)
 	end
-	takeAllToken += 1
-	local mine = takeAllToken
-	takingAll = mine
-	refreshTakeAll()
-	task.spawn(function()
-		while takingAll == mine do
-			local now = current
-			if now == nil or now.id ~= view.id then
-				break
-			end
-			local item = nextTakeable(now)
-			if item == nil then
-				break
-			end
-			local before = #now.items
-			ClientNet.fire("TakeItem", now.id, item.uid, "auto")
-			task.wait(HOLD + 0.12)
-			-- Aucun objet en moins : le serveur a refusé, inutile d'insister.
-			local after = current
-			if after == nil or after.id ~= view.id or #after.items >= before then
-				break
-			end
-		end
-		if takingAll == mine then
-			stopTakeAll()
-		end
-	end)
 end
 
 local function clear()
@@ -162,7 +129,6 @@ local function render()
 				{
 					label = t("inventory.action.swap"),
 					color = Theme.orange,
-					hold = HOLD,
 					callback = function()
 						swapFor = nil
 						take(wanted, "bag", bagItem.uid)
@@ -182,7 +148,6 @@ local function render()
 		if slot ~= nil and info and info.hasCondition then
 			table.insert(actions, {
 				label = t("inventory.action.equip"),
-				hold = HOLD,
 				callback = function()
 					take(item, "equip")
 				end,
@@ -192,7 +157,6 @@ local function render()
 			table.insert(actions, {
 				label = t("inventory.action.take"),
 				color = Theme.green,
-				hold = HOLD,
 				callback = function()
 					take(item, "bag")
 				end,
@@ -240,7 +204,6 @@ function ContainerController.close(notifyServer: boolean)
 	local view = current
 	current = nil
 	swapFor = nil
-	takingAll = 0
 	panel.Visible = false
 	PanelState.set("container", false)
 	if view and notifyServer then
@@ -278,7 +241,10 @@ local function onSync(payload: ContainerView)
 	PanelState.set("container", true)
 	render()
 	if not wasOpen and InputController.device() == "gamepad" then
-		GuiService.SelectedObject = list:FindFirstChildWhichIsA("TextButton", true)
+		-- Manette : « Tout prendre » est sélectionné d'emblée (une pression suffit).
+		GuiService.SelectedObject = if takeAllButton.Visible
+			then takeAllButton
+			else list:FindFirstChildWhichIsA("TextButton", true)
 	end
 end
 
@@ -287,7 +253,7 @@ function ContainerController.init() end
 function ContainerController.start()
 	title = Create("TextLabel", {
 		Position = UDim2.fromOffset(12, 8),
-		Size = UDim2.new(1, -200, 0, 28),
+		Size = UDim2.new(1, -230, 0, 28),
 		BackgroundTransparency = 1,
 		Font = Theme.fontTitle,
 		TextSize = 20,
@@ -343,7 +309,7 @@ function ContainerController.start()
 	takeAllButton = Create("TextButton", {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -8 - Theme.minButtonSize - 6, 0, 8),
-		Size = UDim2.fromOffset(120, Theme.minButtonSize - 14),
+		Size = UDim2.fromOffset(150, Theme.minButtonSize - 14),
 		BackgroundColor3 = Theme.panel,
 		BackgroundTransparency = 0.1,
 		Font = Theme.fontText,
@@ -377,13 +343,7 @@ function ContainerController.start()
 	close.Activated:Connect(function()
 		ContainerController.close(true)
 	end)
-	takeAllButton.Activated:Connect(function()
-		if takingAll ~= 0 then
-			stopTakeAll()
-		else
-			startTakeAll()
-		end
-	end)
+	takeAllButton.Activated:Connect(takeAll)
 
 	ClientNet.on("ContainerSync", onSync)
 	-- Le sac change : les actions possibles (prendre / échanger) aussi.
@@ -391,6 +351,13 @@ function ContainerController.start()
 	InputController.ActionBegan:Connect(function(action)
 		if action == "inventory" and current ~= nil then
 			ContainerController.close(true)
+		end
+	end)
+	-- La touche d'interaction, panneau ouvert : tout prendre (les gadgets sont
+	-- bloqués tant qu'un panneau est ouvert, la touche est donc libre).
+	InputController.Tapped:Connect(function(action)
+		if action == TAKE_ALL_ACTION and current ~= nil and InputController.device() == "keyboard" then
+			takeAll()
 		end
 	end)
 end

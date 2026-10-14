@@ -630,6 +630,56 @@ function LootService.take(player: Player, container: Container, uid: string, mod
 	LootService.ItemTaken:Fire(player, item)
 end
 
+--[[
+	« Tout prendre » : range dans le sac tout ce qui y tient (l'équipement va
+	dans son emplacement s'il est vide), le plus précieux d'abord. Ce qui ne
+	tient pas reste dans le conteneur. Retourne le nombre d'objets pris.
+]]
+function LootService.takeAll(player: Player, container: Container): number
+	local fighter = CombatService.getFighter(player)
+	local bag = if fighter then fighter.bag else nil
+	if fighter == nil or bag == nil or not Fighter.isAlive(fighter) then
+		return 0
+	end
+	local sorted = table.clone(container.items)
+	table.sort(sorted, function(a, b)
+		return ItemRules.value(a) > ItemRules.value(b)
+	end)
+	local taken: { ItemInstance } = {}
+	for _, item in sorted do
+		local info = ItemCatalog.get(item.itemId)
+		local slot: Types.SlotName? = InventoryLogic.slotFor(bag, item.itemId) :: any
+		local done = false
+		if info and info.hasCondition and slot ~= nil and (bag.equipped :: any)[slot] == nil then
+			done = InventoryLogic.equipFromOutside(bag, item, slot) == true
+		end
+		if not done then
+			local stored, leftover = InventoryLogic.store(bag, item)
+			done = stored and leftover == nil
+		end
+		if done then
+			local index = table.find(container.items, item)
+			if index then
+				table.remove(container.items, index)
+			end
+			table.insert(taken, item)
+		end
+	end
+	if #taken == 0 then
+		ServerNet.notify(player, "inventory.failure.bag_full")
+		return 0
+	end
+	CombatService.equipmentChanged(fighter)
+	if fighter.onInventoryChanged then
+		fighter.onInventoryChanged()
+	end
+	afterChange(container)
+	for _, item in taken do
+		LootService.ItemTaken:Fire(player, item)
+	end
+	return #taken
+end
+
 -- Pose des objets au sol, devant le joueur (objet jeté, remplacé…).
 function LootService.dropToGround(position: Vector3, items: { ItemInstance }): Container?
 	if #items == 0 then
@@ -847,9 +897,9 @@ function LootService.init()
 				closeFor(player, container)
 				return
 			end
-			-- Ramassage à maintenir (0,3 s) : une prise au plus par intervalle.
+			-- Un clic par objet : une prise au plus par intervalle.
 			local clock = os.clock()
-			if clock - (lastTake[player] or 0) < Pickup.holdTime * 0.8 then
+			if clock - (lastTake[player] or 0) < Pickup.takeInterval * 0.8 then
 				ServerNet.flag(player, "TakeItem", "ramassage trop rapide")
 				return
 			end
@@ -857,6 +907,19 @@ function LootService.init()
 			LootService.take(player, container, uid, mode, swapUid)
 		end
 	)
+
+	ServerNet.onEvent("TakeAll", Guard.tuple(Guard.uid()), function(player, containerId: string)
+		local container = containers[containerId]
+		if container == nil or not container.opened or not container.viewers[player] then
+			return
+		end
+		if not isNear(player, container) then
+			closeFor(player, container)
+			return
+		end
+		lastTake[player] = os.clock()
+		LootService.takeAll(player, container)
+	end)
 
 	ServerNet.onEvent("CloseContainer", Guard.tuple(Guard.uid()), function(player, containerId: string)
 		local container = containers[containerId]
