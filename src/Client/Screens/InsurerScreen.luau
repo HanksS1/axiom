@@ -45,6 +45,13 @@ function InsurerScreen.create(parent: Instance, t: Translate): Screen
 		local note = Panel.label(t("insurer.note"), 14, Theme.textDim)
 		note.LayoutOrder = 2
 		note.Parent = content
+		-- Équipement sans valeur (kit de base) : le prix plancher s'applique, on le dit.
+		if score <= 0 then
+			local free = Panel.label(t("insurer.noValue"), 14, Theme.orange)
+			free.LayoutOrder = 3
+			free.TextWrapped = true
+			free.Parent = content
+		end
 
 		local tiers: { { id: string, def: any } } = {}
 		for id, def in Config.Economy.insurance.tiers :: { [string]: any } do
@@ -78,8 +85,10 @@ function InsurerScreen.create(parent: Instance, t: Translate): Screen
 					TextSize = 18,
 					TextColor3 = Theme.text,
 					TextXAlignment = Enum.TextXAlignment.Left,
-					Text = t("insurer.tier." .. tier.id)
-						.. string.format("  ·  %d %%", math.floor(tier.def.costShare * 100 + 0.5)),
+					Text = t("insurer.tier." .. tier.id) .. "  ·  " .. t("insurer.rate", {
+						percent = math.floor(tier.def.costShare * 100 + 0.5),
+						min = tier.def.minCost or 0,
+					}),
 				}),
 				Effect = Create("TextLabel", {
 					Position = UDim2.fromOffset(12, 34),

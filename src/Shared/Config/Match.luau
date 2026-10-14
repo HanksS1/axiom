@@ -23,9 +23,10 @@ return Freeze.deep({
 		updateInterval = 0.2,
 	},
 
+	-- Renforts de 12:00 (document : 6 à 10), réduits avec la densité des robots.
 	alertWave = {
-		minRobots = 6,
-		maxRobots = 10,
+		minRobots = 5,
+		maxRobots = 8,
 	},
 
 	pickup = {

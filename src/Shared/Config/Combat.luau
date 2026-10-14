@@ -15,6 +15,10 @@ return Freeze.deep({
 		proneSpeed = 4,
 		jumpHeight = 7,
 		sprintToFireDelay = 0.15,
+		-- Appui de détente gardé en mémoire (semi-auto, rafale, mêlée) : seulement
+		-- pendant ce délai, et seulement si le tir attend la fin de la cadence. Un
+		-- clic pendant un rechargement, une surchauffe ou sans cellules est oublié.
+		triggerBuffer = 0.25,
 		proneTransition = 0.4,
 		crouchAccuracyBonus = 0.15, -- réduit la dispersion de 15 %
 		proneAccuracyBonus = 0.30,

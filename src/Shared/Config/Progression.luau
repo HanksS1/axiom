@@ -7,6 +7,22 @@
 local Freeze = require(script.Parent.Parent.Util.Freeze)
 
 return Freeze.deep({
+	-- Crédits gagnés en fin de partie (même modèle que l'XP) :
+	--   (participation + score × scoreShare) × (1 si extrait, sinon deathShare)
+	--   + extractionBonus si extrait ; 0 en cas d'abandon ; plafonné à maxPerMatch.
+	-- Le score d'une mort est déjà divisé par 2 (score.deathPenaltyMultiplier) : avec
+	-- deathShare 0,5, une mort paie environ 4 à 5 fois moins qu'une extraction.
+	-- Repères : partie extraite moyenne (score ~400) → 50 + 100 + 120 = 270 cr, soit
+	-- un peu plus d'une caisse gratuite (~150 cr en moyenne toutes les 20 min) ; le
+	-- butin extrait, revendu au Marchand, reste la source principale de crédits.
+	credits = {
+		participation = 50,
+		scoreShare = 0.25,
+		extractionBonus = 120,
+		deathShare = 0.5,
+		maxPerMatch = 2500,
+	},
+
 	xp = {
 		scoreShare = 0.5, -- 50 % du score de la partie
 		participation = 100,

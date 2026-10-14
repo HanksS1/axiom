@@ -107,4 +107,29 @@ return function(T, H)
 			expect(MatchRules.seasonAt(start + 8 * 7 * 86400)).toBe(2)
 		end)
 	end)
+
+	describe("Crédits de fin de partie", function()
+		local Config = H.require("ReplicatedStorage/Shared/Config")
+		local C = Config.Progression.credits
+
+		it("l'extraction paie nettement mieux que la mort ; l'abandon ne paie rien", function()
+			local extracted = MatchRules.matchCredits(400, true, false)
+			expect(extracted).toBe(math.floor(C.participation + 400 * C.scoreShare + C.extractionBonus))
+			-- Même partie, mais morte : le score est déjà divisé par 2 par la pénalité de mort.
+			local died = MatchRules.matchCredits(200, false, false)
+			expect(extracted >= died * 4).toBe(true)
+			expect(died > 0).toBe(true)
+			expect(MatchRules.matchCredits(400, true, true)).toBe(0)
+			-- Partie sans rien : la participation seule.
+			expect(MatchRules.matchCredits(0, true, false)).toBe(C.participation + C.extractionBonus)
+			expect(MatchRules.matchCredits(-50, false, false)).toBe(math.floor(C.participation * C.deathShare))
+		end)
+
+		it("plafonné par partie, et cohérent avec la caisse gratuite", function()
+			expect(MatchRules.matchCredits(10_000_000, true, false)).toBe(C.maxPerMatch)
+			-- Une partie extraite moyenne rapporte de l'ordre d'une à deux caisses gratuites (50 à 300 cr).
+			local typical = MatchRules.matchCredits(400, true, false)
+			expect(typical >= 150 and typical <= 600).toBe(true)
+		end)
+	end)
 end

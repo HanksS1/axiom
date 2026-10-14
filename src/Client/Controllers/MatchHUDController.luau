@@ -323,9 +323,10 @@ local function showResult(result: { [string]: any })
 		)
 	end
 	table.insert(lines, {
-		text = t("result.xp", { xp = result.xpGained or 0 })
-			.. "  ·  "
-			.. t("result.level", { level = result.level or 1 }),
+		text = t("result.xp", { xp = result.xpGained or 0 }) .. "  ·  " .. t(
+			"result.credits",
+			{ credits = result.creditsGained or 0 }
+		) .. "  ·  " .. t("result.level", { level = result.level or 1 }),
 		color = Theme.green,
 	})
 	for index, line in lines do

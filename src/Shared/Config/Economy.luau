@@ -34,11 +34,16 @@ return Freeze.deep({
 		calibrationItemId = "calibration_module",
 	},
 
+	-- Coût = max(minCost, SE × costShare). Le plancher évite un prix de 0 crédit
+	-- quand le SE est nul (kit de base gratuit, valeur nulle). Il ne joue que sur
+	-- un petit équipement : avec un kit acheté au Marchand (~745 cr de valeur),
+	-- la part du SE (75 / 134 / 224 cr) dépasse déjà chaque plancher.
+	-- Planchers ≈ une caisse gratuite (50 à 300 cr), hiérarchie conservée.
 	insurance = {
 		tiers = {
-			basic = { order = 1, costShare = 0.10, conditionLoss = 2 },
-			standard = { order = 2, costShare = 0.18, conditionLoss = 1 },
-			premium = { order = 3, costShare = 0.30, conditionLoss = 0 },
+			basic = { order = 1, costShare = 0.10, minCost = 40, conditionLoss = 2 },
+			standard = { order = 2, costShare = 0.18, minCost = 75, conditionLoss = 1 },
+			premium = { order = 3, costShare = 0.30, minCost = 125, conditionLoss = 0 },
 		},
 	},
 

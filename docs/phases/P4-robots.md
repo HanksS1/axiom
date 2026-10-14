@@ -35,7 +35,7 @@
 - **Parade** : les coups de mêlée des robots se parent comme ceux des joueurs (parade
   parfaite = robot étourdi).
 - **Destruction** : loot au sol (table du robot, état décalé pour les élites), points de score.
-- **Vague d'alerte** (12:00) : 6 à 10 robots apparaissent et convergent vers les extractions.
+- **Vague d'alerte** (12:00) : 5 à 8 robots apparaissent et convergent vers les extractions.
 
 ## Équilibrage après les premiers tests
 
@@ -73,6 +73,24 @@ robot au sol en sprintant.
 `WindupUntil` / `WindupKind` / `WindupRadius` (attaque annoncée), `Guardian`.
 Le radar et les marqueurs sont décrits dans `P8-interface.md`.
 
+### Fluidité (second retour de test)
+
+Les robots « se téléportaient » : à chaque décision de l'IA (8 par seconde), un robot au sol était
+réorienté en écrivant directement son CFrame, et la consigne d'un robot volant avançait d'un bloc.
+Le **mouvement** est maintenant continu, la **décision** reste à 8 Hz :
+
+- orientation par `AlignOrientation` (« Facing ») pour tous les robots, active au sol seulement
+  quand le robot fait face à sa cible (en marche, le Humanoid s'oriente seul) ;
+  `ai.turnRate` = 7 rad/s, `ai.turnResponsiveness` = 14 ;
+- volants : la consigne de l'`AlignPosition` est le point visé, la vitesse est plafonnée par
+  la contrainte (`MaxVelocity` = vitesse du robot) ;
+- tourelles et bras de Forge-7 (ancrés, une contrainte ne les tourne pas) : rotation progressive
+  par la boucle du serveur, seulement quand ils sont éveillés ;
+- mercenaires IA : même correctif (ils avaient le même défaut).
+
+`updateRate` reste à 8 : le monter rend les robots plus réactifs, pas plus fluides, pour 25 % de
+calcul d'IA en plus à 10. Le `PivotTo` du Gardien (surgissement, projection) est volontaire.
+
 ## Comment tester
 
 1. Panneau DEV → **Robots de test** (bac à sable) : 8 robots dans l'arène (Gardien et garnison
@@ -87,7 +105,8 @@ Le radar et les marqueurs sont décrits dans `P8-interface.md`.
 
 - Valeurs de comportement (vitesses, portées, cadences, distances) : non précisées par le
   document, valeurs de départ dans `Config/Robots.luau`.
-- Plafond pendant la vague : 38 robots (le document dit 28 actifs au départ + 6 à 10 en vague).
+- Densité réduite d'environ 20 % à la demande de l'auteur (moins de robots, plus de fluidité) :
+  16 à 22 robots au départ, vague de 5 à 8, plafond de 30 (document : 20 à 28, vague de 6 à 10).
 - Le Gardien a une attaque générique (tir lourd) : les attaques propres à chaque carte
   (Titan d'Helix, bras robotique, Ver de Silice, projection d'AXIOM) arrivent avec les cartes (P7).
 

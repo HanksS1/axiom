@@ -92,13 +92,13 @@ function Pricing.repairCost(item: Types.ItemInstance): (number?, boolean)
 	return round(repair.costMultiplier * delta), condition + 1 >= repair.calibrationRequiredForCondition
 end
 
--- Coût de l'assurance pour un SE donné (section 14.3).
+-- Coût de l'assurance pour un SE donné (section 14.3) : part du SE, jamais sous le plancher.
 function Pricing.insuranceCost(tier: string, equipmentScore: number): number?
 	local def = Config.Economy.insurance.tiers[tier]
 	if def == nil then
 		return nil
 	end
-	return round(equipmentScore * def.costShare)
+	return math.max(def.minCost or 0, round(math.max(0, equipmentScore) * def.costShare))
 end
 
 return Pricing

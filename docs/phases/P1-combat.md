@@ -104,6 +104,34 @@ Les mécaniques décrites par la config mais jamais lues par le serveur sont en 
 Choix à valider : l'explosion du Court-Circuit n'atteint pas son tireur ; les projectiles
 traversent les coéquipiers.
 
+## Second retour de test
+
+**Tirs « mis en attente » pendant un rechargement.** Chaque appui posait `triggerPending`, que
+seul le motif « à vide » purgeait : les clics faits pendant un rechargement partaient d'un coup à
+la fin. Désormais (`WeaponLogic.keepsTrigger`, testé) seule la **cadence** garde un appui en
+attente ; rechargement, surchauffe, sans cellules et à vide (qui lance toujours le rechargement)
+l'oublient. Un appui expire aussi après `Combat.movement.triggerBuffer` (0,25 s, au-dessus du
+délai sprint → tir de 0,15 s), et changer d'arme l'efface. Les modes `auto` et `beam` lisent la
+détente maintenue : inchangés.
+
+**Armes contre les robots.** `robotDamageMultiplier`, dégressif avec la valeur de l'arme :
+
+| Arme | Valeur | Multiplicateur |
+|---|---|---|
+| Pistolet laser fait maison (kit de base) | 100 | ×1,6 |
+| Pistolet « Vigil » | 600 | ×1,4 |
+| La Grésilleuse, Lance-clous magnétique | 750 / 900 | ×1,3 |
+| Fusil de Sentinelle reconverti, Brise-Carcasse | 1 000 / 1 100 | ×1,2 |
+| L'Aiguille, armes lourdes | 1 500 et + | aucun |
+| Court-Circuit (référence) | 2 500 | ×2,5 |
+
+Pistolet du kit (état Très abîmé, ×0,7) : 20 dégâts par tir contre un robot au lieu de 12,6.
+Traqueur : 4 tirs ; Sentinelle : 6 (Facile) / 8 (Moyen), soit moins d'un chargeur ; Bastion
+(Moyen) : 24 (deux chargeurs, moins en visant le point faible) ; Gardien : 53 (Facile) / 75
+(Moyen). Les tests vérifient ces bornes et que l'équipement acheté reste nettement plus fort.
+Les PV réels des robots : Mouche 30, Traqueur 80, Sentinelle 150, Tourelle 250, Exécuteur 340,
+Bastion 480, Gardien 1 500 (× 0,7 / 1 / 1,4 selon le mode).
+
 ## Questions ouvertes
 
 1. **Temps pour tuer** : le document vise 0,6 à 1,2 s contre 100 PV + 100 de bouclier.
