@@ -351,6 +351,7 @@ return {
 	["station.sort"] = "Sorting",
 	["economy.failure.queued"] = "Gear is locked while searching for a match",
 	["kick.teleportFailed"] = "Could not return to the Terminus. Reconnect: your gear is safe.",
+	["result.sortLoot"] = "Sort your loot ({count} items)",
 	["result.returnHub"] = "Back to the Terminus",
 	["party.refused.in_match"] = "Not possible during a match",
 	["party.refused.not_found"] = "Player not found on this server",

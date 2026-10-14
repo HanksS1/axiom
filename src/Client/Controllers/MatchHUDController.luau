@@ -9,7 +9,10 @@
 	- Annonces d'AXIOM (bandeau central).
 	- Extraction : barre circulaire de 30 s (jaune en pause, rouge si bloquée).
 	- Orbe (duo) : compte à rebours, marqueur de l'Accélérateur.
-	- Fin de partie : résumé, score détaillé, record, XP.
+	- Fin de partie : résumé, score détaillé, record, XP. Après une extraction,
+	  les objets ramenés y sont montrés, et « Trier le butin » ferme le bilan
+	  puis ouvre l'écran de tri (qui attend que le bilan soit fermé : avant,
+	  il s'ouvrait dessous et le bilan le cachait).
 ]]
 
 local Players = game:GetService("Players")
@@ -27,6 +30,7 @@ local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local Create = require(script.Parent.Parent.UI.Create)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
 local Theme = require(script.Parent.Parent.UI.Theme)
+local ItemIcon = require(script.Parent.Parent.UI.ItemIcon)
 local HUDController = require(script.Parent.HUDController)
 local PingController = require(script.Parent.PingController)
 local ProfileController = require(script.Parent.ProfileController)
@@ -35,6 +39,11 @@ local MatchHUDController = {}
 
 -- Statut du joueur dans la partie ("none" hors partie).
 MatchHUDController.StatusChanged = Signal.new() :: Signal.Signal<string>
+-- Le bilan de fin de partie vient d'être fermé (l'écran de tri peut s'ouvrir).
+-- `sort` : le joueur a demandé à trier son butin tout de suite.
+MatchHUDController.ResultClosed = Signal.new() :: Signal.Signal<boolean>
+-- Le bilan s'affiche (un écran de tri déjà ouvert doit s'effacer, il reviendra après).
+MatchHUDController.ResultOpened = Signal.new() :: Signal.Signal<>
 
 local player = Players.LocalPlayer
 local t = ProfileController.t
@@ -55,6 +64,59 @@ local extractionLabel: TextLabel
 local reviveLabel: TextLabel
 local acceleratorMarker: BillboardGui?
 local resultPanel: Frame
+local lootRow: Frame? = nil -- objets ramenés (bilan d'une extraction)
+local sortButton: TextButton? = nil
+
+-- Le bilan de fin de partie est-il affiché ?
+function MatchHUDController.isResultOpen(): boolean
+	return resultPanel ~= nil and resultPanel.Visible
+end
+
+local function closeResult(sort: boolean)
+	resultPanel.Visible = false
+	PanelState.set("result", false)
+	MatchHUDController.ResultClosed:Fire(sort)
+end
+
+-- Objets ramenés (en attente de tri) : vignettes, et nombre sur le bouton de tri.
+local function refreshLoot()
+	local row = lootRow
+	if row == nil then
+		return
+	end
+	for _, child in row:GetChildren() do
+		if child:IsA("Frame") or child:IsA("TextLabel") then
+			child:Destroy()
+		end
+	end
+	local view = ProfileController.get()
+	local loot = if view then view.pendingLoot else {}
+	local shown = math.min(#loot, 8)
+	for index = 1, shown do
+		local item = loot[index]
+		local icon = ItemIcon.create(item.itemId, UDim2.fromOffset(44, 44), item.condition)
+		icon.LayoutOrder = index
+		icon.Parent = row
+	end
+	if #loot > shown then
+		Create("TextLabel", {
+			LayoutOrder = 99,
+			Size = UDim2.fromOffset(44, 44),
+			BackgroundTransparency = 1,
+			Font = Theme.fontNumbers,
+			TextSize = 16,
+			TextColor3 = Theme.textDim,
+			Text = `+{#loot - shown}`,
+			Parent = row,
+		})
+	end
+	row.Visible = #loot > 0
+	local button = sortButton
+	if button then
+		button.Text = t("result.sortLoot", { count = #loot })
+		button.Visible = #loot > 0
+	end
+end
 
 local function matchState(): Instance?
 	return ReplicatedStorage:FindFirstChild("MatchState")
@@ -288,10 +350,12 @@ end
 -- Écran de fin de partie.
 local function showResult(result: { [string]: any })
 	for _, child in resultPanel:GetChildren() do
-		if child:IsA("TextLabel") or child:IsA("TextButton") then
+		if child:IsA("TextLabel") or child:IsA("TextButton") or child.Name == "Loot" then
 			child:Destroy()
 		end
 	end
+	lootRow = nil
+	sortButton = nil
 	local lines: { { text: string, color: Color3?, size: number? } } = {}
 	local outcome = tostring(result.outcome)
 	table.insert(lines, {
@@ -355,8 +419,42 @@ local function showResult(result: { [string]: any })
 	TweenService:Create(xpBar:FindFirstChild("Fill") :: Frame, TweenInfo.new(1.2, Enum.EasingStyle.Quad), {
 		Size = UDim2.fromScale(ratio, 1),
 	}):Play()
+	-- Extraction : les objets ramenés, et le tri tout de suite.
+	if outcome == "extracted" then
+		lootRow = Create("Frame", {
+			Name = "Loot",
+			LayoutOrder = #lines + 2,
+			Size = UDim2.new(1, 0, 0, 44),
+			BackgroundTransparency = 1,
+			Visible = false,
+			Parent = resultPanel,
+		}, {
+			Layout = Create("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				Padding = UDim.new(0, 4),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+		})
+		local sort = Create("TextButton", {
+			LayoutOrder = #lines + 3,
+			Size = UDim2.new(1, 0, 0, Theme.minButtonSize),
+			BackgroundColor3 = Theme.panel,
+			Font = Theme.fontTitle,
+			TextSize = 18,
+			TextColor3 = Theme.green,
+			Text = "",
+			Visible = false,
+			Parent = resultPanel,
+		}, { Stroke = Create("UIStroke", { Color = Theme.green, Transparency = 0.3 }) })
+		sort.Activated:Connect(function()
+			closeResult(true)
+		end)
+		sortButton = sort
+		refreshLoot()
+	end
 	local continue = Create("TextButton", {
-		LayoutOrder = #lines + 2,
+		LayoutOrder = #lines + 4,
 		Size = UDim2.new(1, 0, 0, Theme.minButtonSize),
 		BackgroundColor3 = Theme.panel,
 		Font = Theme.fontTitle,
@@ -366,13 +464,13 @@ local function showResult(result: { [string]: any })
 		Parent = resultPanel,
 	}, { Stroke = Create("UIStroke", { Color = Theme.cyan, Transparency = 0.4 }) })
 	continue.Activated:Connect(function()
-		resultPanel.Visible = false
-		PanelState.set("result", false)
+		closeResult(false)
 		-- Retour au Terminus sans attendre la fin de la partie.
 		ClientNet.fire("ReturnToHub")
 	end)
 	resultPanel.Visible = true
 	PanelState.set("result", true)
+	MatchHUDController.ResultOpened:Fire()
 end
 
 function MatchHUDController.init() end
@@ -545,6 +643,12 @@ function MatchHUDController.start()
 	ClientNet.on("MatchResult", function(result: { [string]: any })
 		if type(result) == "table" then
 			showResult(result)
+		end
+	end)
+	-- Le butin ramené arrive avec le profil (souvent juste après le bilan).
+	ProfileController.Changed:Connect(function()
+		if MatchHUDController.isResultOpen() then
+			refreshLoot()
 		end
 	end)
 

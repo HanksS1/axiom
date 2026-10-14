@@ -351,6 +351,7 @@ return {
 	["station.sort"] = "Tri",
 	["economy.failure.queued"] = "Équipement verrouillé pendant la recherche de partie",
 	["kick.teleportFailed"] = "Retour au Terminus impossible. Reconnectez-vous : votre équipement est en sécurité.",
+	["result.sortLoot"] = "Trier le butin ({count} objets)",
 	["result.returnHub"] = "Retour au Terminus",
 	["party.refused.in_match"] = "Impossible pendant une partie",
 	["party.refused.not_found"] = "Joueur introuvable sur ce serveur",
