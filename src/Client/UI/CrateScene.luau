@@ -38,6 +38,8 @@ local LASER = Theme.magenta
 local SCAN = Theme.red
 local FRESH = 0.25 -- secondes pendant lesquelles un pixel tout juste posé brille
 local LID = 0.45 -- épaisseur du couvercle
+-- Opacité maximale de la colonne de lumière : légère, pour ne jamais masquer l'objet qui en sort.
+local COLUMN_OPACITY = 0.14
 
 export type Callbacks = {
 	onOpen: (() -> ())?, -- le couvercle commence à s'ouvrir (éclair à l'écran)
@@ -420,8 +422,8 @@ function CrateScene.play(
 		local lidOpen = easeOutBack(math.clamp((openP - 0.35) / 0.65, 0, 1))
 		lid:PivotTo(base * hinge * CFrame.Angles(-math.rad(112) * lidOpen, 0, 0))
 		local glow = math.clamp((openP - 0.35) / 0.4, 0, 1)
-		local pulse = if t > TIMELINE.total then 0.06 * math.sin((t - TIMELINE.total) * 2.5) else 0
-		column.Transparency = if glow > 0 then 1 - 0.42 * glow + pulse else 1
+		local pulse = if t > TIMELINE.total then 0.03 * math.sin((t - TIMELINE.total) * 2.5) else 0
+		column.Transparency = if glow > 0 then 1 - COLUMN_OPACITY * glow + pulse else 1
 		if not opened and t >= openAt then
 			opened = true
 			if callbacks.onOpen then
