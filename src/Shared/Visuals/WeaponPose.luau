@@ -2,13 +2,15 @@
 --[[
 	WeaponPose : posture des armes tenues (calcul pur, testé).
 
-	Le serveur fixe l'arme devant le haut du torse (joint « WeaponGrip ») ; le
-	client calcule ici, à chaque image :
-	- où placer l'arme dans le repère du torse (visée en haut / en bas, recul,
-	  coup de mêlée, recharge, sprint, garde) : `WeaponPose.compute` ;
-	- comment plier chaque bras pour que la main rejoigne la poignée ou le
-	  garde-main : `WeaponPose.solveArm` (épaule libre, coude en charnière,
-	  poignet aligné sur l'avant-bras).
+	- Armes à distance : le serveur les fixe devant le haut du torse (joint
+	  « WeaponGrip ») ; `compute` place l'arme dans le repère du torse (visée,
+	  recul, recharge, sprint) et donne où vont les deux mains.
+	- Mêlée : l'arme reste soudée à la main droite (animations normales) ;
+	  `meleeSwing` donne, pendant un coup, la position et l'orientation de la
+	  main, la main gauche et la rotation du buste, avec le poids du geste
+	  (0 : animation, 1 : geste).
+	- `solveArm` plie un bras (épaule libre, coude en charnière) pour que la
+	  main rejoigne un point, ou une position et une orientation imposées.
 
 	Valeurs : Config/WeaponPoses (repères décrits en tête de ce fichier).
 ]]
@@ -31,17 +33,15 @@ export type ArmRig = {
 	wristC1: CFrame, -- dans la main
 }
 
+-- Arme à distance tenue.
 export type State = {
 	itemId: string,
 	pitch: number, -- visée (radians, > 0 vers le haut), par rapport à l'horizontale
 	prone: boolean,
 	sprint: number, -- 0..1
-	parry: number, -- 0..1
 	reload: number?, -- avancement de la recharge 0..1
 	kick: number, -- recul 0..1
 	jitter: number, -- -1..1 : côté de la bascule du recul
-	swing: number?, -- avancement du coup de mêlée 0..1
-	variant: number, -- coup alterné (1, 2…)
 	using: boolean, -- consommable dans la main gauche : elle lâche l'arme
 	scale: number, -- échelle de l'avatar (voir `scaleOf`)
 }
@@ -54,6 +54,17 @@ export type Pose = {
 	leftPole: Vector3,
 	waist: CFrame, -- rotation ajoutée à la taille (après l'animation)
 	neck: CFrame, -- rotation ajoutée au cou
+}
+
+-- Coup de mêlée en cours.
+export type MeleePose = {
+	weight: number, -- 0 : animation normale, 1 : geste du coup
+	hand: CFrame, -- main droite (position et orientation), repère du torse
+	weapon: CFrame, -- cœur de l'arme (soudée à la main), repère du torse
+	rightPole: Vector3,
+	left: Vector3?, -- nil : main gauche libre (animation)
+	leftPole: Vector3,
+	waist: CFrame, -- rotation du buste, déjà pondérée par `weight`
 }
 
 local X_AXIS = Vector3.new(1, 0, 0)
@@ -80,12 +91,12 @@ local function orient(tip: Vector3?, up: Vector3?): CFrame
 	return CFrame.lookAt(Vector3.zero, forward, hint)
 end
 
--- Prise (position de la main droite + orientation de l'arme), repère visée.
+-- Prise (position de la main droite + orientation de l'arme).
 local function frameOf(frame: PoseConfig.Frame, scale: number): CFrame
 	return CFrame.new(frame.hand * scale) * orient(frame.tip, frame.up)
 end
 
--- Main gauche libre d'une prise (poing de garde, cellule) : position, repère visée.
+-- Main gauche libre d'une prise (cellule, poing de garde).
 local function leftOf(frame: PoseConfig.Frame, scale: number): Vector3?
 	return if frame.left then frame.left * scale else nil
 end
@@ -102,10 +113,15 @@ function WeaponPose.scaleOf(torsoSize: Vector3): number
 	return torsoSize.Y / Poses.referenceTorsoHeight
 end
 
--- Style de prise d'une arme (nil : pas de posture, arme inconnue).
+-- Style de prise d'une arme à distance (nil : arme de mêlée ou inconnue).
 function WeaponPose.styleOf(itemId: string): PoseConfig.Style?
 	local entry = Poses.weapons[itemId]
 	return if entry then Poses.styles[entry.style] else nil
+end
+
+-- L'arme est-elle montée sur le torse (arme à distance) ?
+function WeaponPose.isMounted(itemId: string): boolean
+	return WeaponPose.styleOf(itemId) ~= nil
 end
 
 -- Main droite dans le repère de l'arme (d'après `gripOffset`, Config/Visuals).
@@ -122,9 +138,9 @@ function WeaponPose.swingDuration(itemId: string): number
 end
 
 --[[
-	Arme au repos (prise de base, visée horizontale, buste non tourné), repère
-	du torse : position donnée par le serveur au joint de l'arme, et posture
-	vue tant qu'un client ne pose pas le personnage.
+	Arme à distance au repos (prise de base, visée horizontale, buste non
+	tourné), repère du torse : position donnée par le serveur au joint de
+	l'arme, vue tant qu'un client ne pose pas le personnage.
 ]]
 function WeaponPose.rest(itemId: string, scale: number): CFrame
 	local style = WeaponPose.styleOf(itemId)
@@ -134,95 +150,52 @@ function WeaponPose.rest(itemId: string, scale: number): CFrame
 	return frameOf(style.ready, scale) * CFrame.new(-WeaponPose.handInWeapon(itemId))
 end
 
--- Prise pendant un coup : départ → armé → frappe → retour.
-local function swingFrame(
-	style: PoseConfig.Style,
-	base: CFrame,
-	baseLeft: Vector3?,
-	progress: number,
-	variant: number,
-	scale: number
-): (CFrame, Vector3?)
-	local swings = style.swings
-	if swings == nil or #swings == 0 then
-		return base, baseLeft
-	end
-	local swing = swings[(variant - 1) % #swings + 1]
-	local windup = frameOf(swing.windup, scale)
-	local strike = frameOf(swing.strike, scale)
-	local windupLeft = leftOf(swing.windup, scale) or baseLeft
-	local strikeLeft = leftOf(swing.strike, scale) or baseLeft
-	local timing = Poses.swingTiming
-	local p = clamp01(progress)
-	if p < timing.windup then
-		-- Armer : rapide puis ralenti.
-		local t = p / timing.windup
-		t = 1 - (1 - t) * (1 - t)
-		return base:Lerp(windup, t), lerpPoint(baseLeft, windupLeft, t)
-	elseif p < timing.strike then
-		-- Frapper : accélère jusqu'à l'impact.
-		local t = (p - timing.windup) / (timing.strike - timing.windup)
-		t = t * t
-		return windup:Lerp(strike, t), lerpPoint(windupLeft, strikeLeft, t)
-	end
-	local t = smooth((p - timing.strike) / (1 - timing.strike))
-	return strike:Lerp(base, t), lerpPoint(strikeLeft, baseLeft, t)
-end
-
 --[[
-	Posture complète d'une arme tenue (nil si l'arme n'a pas de style).
+	Posture d'une arme à distance tenue (nil si l'arme n'a pas de style).
+	`styleOverride`, `supportOverride` : prise et point de la main gauche à
+	essayer à la place de ceux de la config (outil tests/tools/weapon_pose_tune.luau).
 ]]
-function WeaponPose.compute(state: State): Pose?
+function WeaponPose.compute(state: State, styleOverride: PoseConfig.Style?, supportOverride: Vector3?): Pose?
 	local itemId = state.itemId
-	local style = WeaponPose.styleOf(itemId)
+	local style = styleOverride or WeaponPose.styleOf(itemId)
 	if style == nil then
 		return nil
 	end
 	local scale = state.scale
 	local rangedDef = Config.Weapons.ranged[itemId]
 
-	-- Prise de base, puis sprint, garde et recharge par-dessus.
+	-- Prise de base, puis sprint et recharge par-dessus.
 	local grip = frameOf(style.ready, scale)
-	local left = leftOf(style.ready, scale)
 	if state.sprint > 0 then
-		local t = smooth(state.sprint)
-		grip = grip:Lerp(frameOf(style.sprint, scale), t)
-		left = lerpPoint(left, leftOf(style.sprint, scale) or left, t)
+		grip = grip:Lerp(frameOf(style.sprint, scale), smooth(state.sprint))
 	end
-	local parryFrame = style.parry
-	if parryFrame and state.parry > 0 then
-		local t = smooth(state.parry)
-		grip = grip:Lerp(frameOf(parryFrame, scale), t)
-		left = lerpPoint(left, leftOf(parryFrame, scale) or left, t)
-	end
-	local reloadFrame = style.reload
 	local reloadLeft: Vector3? = nil
 	local reloadReach = 0
 	local reload = state.reload
-	if reloadFrame and reload then
+	if reload then
 		local ease = Poses.reloadEase
 		local t = smooth(math.min(reload / ease, (1 - reload) / ease, 1))
-		grip = grip:Lerp(frameOf(reloadFrame, scale), t)
+		grip = grip:Lerp(frameOf(style.reload, scale), t)
 		-- La main gauche quitte l'arme, va chercher une cellule et revient.
-		reloadLeft = leftOf(reloadFrame, scale)
+		reloadLeft = leftOf(style.reload, scale)
 		reloadReach = math.sin(math.pi * clamp01((reload - 0.2) / 0.6))
 	end
-	if state.swing then
-		grip, left = swingFrame(style, grip, left, state.swing, state.variant, scale)
-	end
 
-	-- Recul : l'arme recule et le canon se relève, autour de la poignée.
+	-- Recul : l'arme recule un peu et le canon se relève autour de la crosse.
 	if rangedDef and state.kick > 0 then
 		local recoil = Poses.recoil[rangedDef.class]
 		if recoil then
 			local k = state.kick
+			local stock = CFrame.new(0, 0, Poses.recoilPivotBack * scale)
 			grip = grip
 				* CFrame.new(0, 0, recoil.back * k * scale)
+				* stock
 				* CFrame.Angles(math.rad(recoil.angle) * k, 0, math.rad(recoil.roll) * k * state.jitter)
+				* stock:Inverse()
 		end
 	end
 
-	-- Visée en haut / en bas : le buste se penche un peu, l'arme fait le reste.
+	-- Visée en haut / en bas : le buste se penche, l'arme fait le reste.
 	local P = Poses.pitch
 	local pitch = math.clamp(state.pitch, -math.rad(P.max), math.rad(P.max))
 	local lean = if state.prone then 0 else pitch * P.waistShare
@@ -231,14 +204,11 @@ function WeaponPose.compute(state: State): Pose?
 		-- Couché, le torse est à l'horizontale : l'arme pivote d'un quart de tour,
 		-- ramenée vers le centre pour que les deux mains l'atteignent.
 		relative += math.rad(90)
-		local shift = CFrame.new(Poses.prone.shift * scale)
-		grip = shift * grip
-		left = if left then shift * left else nil
+		grip = CFrame.new(Poses.prone.shift * scale) * grip
 	end
 	local pivot = style.pivot * scale
 	local aim = CFrame.new(pivot) * CFrame.Angles(relative, 0, 0) * CFrame.new(-pivot)
 	local gripAim = aim * grip
-	local leftAim = if left then aim * left else nil
 
 	-- Buste tourné vers la droite (épaulé) : compensé pour viser droit devant.
 	local twist = if state.prone
@@ -249,13 +219,10 @@ function WeaponPose.compute(state: State): Pose?
 	local weapon = gripTorso * CFrame.new(-WeaponPose.handInWeapon(itemId))
 
 	local leftTarget: Vector3? = nil
-	if not state.using then
-		if style.left == "support" then
-			local support = Poses.weapons[itemId].support
-			leftTarget = if support then weapon * support else nil
-		elseif style.left == "fist" and leftAim then
-			leftTarget = toTorso * leftAim
-		end
+	if not state.using and style.left == "support" then
+		local entry = Poses.weapons[itemId]
+		local support = supportOverride or (if entry then entry.support else nil)
+		leftTarget = if support then weapon * support else nil
 		if leftTarget and reloadLeft and reloadReach > 0 then
 			leftTarget = leftTarget:Lerp(toTorso * reloadLeft, reloadReach)
 		end
@@ -273,6 +240,83 @@ function WeaponPose.compute(state: State): Pose?
 	}
 end
 
+--[[
+	Coup de mêlée à l'instant `progress` (0..1) du geste n° `variant` (nil si
+	l'arme n'a pas de geste). L'arme suit la main (même prise que dans les
+	animations : `gripOffset`) ; le poids passe de 0 à 1 pendant l'armé, puis
+	revient à 0 après la frappe (le bras retrouve son animation).
+]]
+function WeaponPose.meleeSwing(itemId: string, progress: number, variant: number, scale: number): MeleePose?
+	local entry = Poses.melee[itemId]
+	local set = if entry then Poses.swings[entry.swing] else nil
+	local shape = Visuals.weapons[itemId]
+	if entry == nil or set == nil or shape == nil or #set.swings == 0 then
+		return nil
+	end
+	local swing = set.swings[(variant - 1) % #set.swings + 1]
+	local timing = Poses.swingTiming
+	local p = clamp01(progress)
+
+	local windup = frameOf(swing.windup, scale)
+	local strike = frameOf(swing.strike, scale)
+	local windupLeft, strikeLeft = leftOf(swing.windup, scale), leftOf(swing.strike, scale)
+	local windupTwist, strikeTwist = swing.windup.twist or 0, swing.strike.twist or 0
+	local grip, left, twist, weight
+	if p < timing.windup then
+		-- Armer : le bras quitte l'animation, rapide puis ralenti.
+		local t = p / timing.windup
+		grip, left, twist, weight = windup, windupLeft, windupTwist, 1 - (1 - t) * (1 - t)
+	elseif p < timing.strike then
+		-- Frapper : accélère jusqu'à l'impact.
+		local t = (p - timing.windup) / (timing.strike - timing.windup)
+		t = t * t
+		local through = swing.through
+		if through then
+			-- Par le passage obligé : l'arme reste devant le personnage.
+			local mid = frameOf(through, scale)
+			local midLeft = leftOf(through, scale) or lerpPoint(windupLeft, strikeLeft, 0.5)
+			local midTwist = through.twist or (windupTwist + strikeTwist) / 2
+			if t < 0.5 then
+				local u = t * 2
+				grip, left = windup:Lerp(mid, u), lerpPoint(windupLeft, midLeft, u)
+				twist = windupTwist + (midTwist - windupTwist) * u
+			else
+				local u = t * 2 - 1
+				grip, left = mid:Lerp(strike, u), lerpPoint(midLeft, strikeLeft, u)
+				twist = midTwist + (strikeTwist - midTwist) * u
+			end
+		else
+			grip = windup:Lerp(strike, t)
+			left = lerpPoint(windupLeft, strikeLeft, t)
+			twist = windupTwist + (strikeTwist - windupTwist) * t
+		end
+		weight = 1
+	else
+		-- Revenir à l'animation.
+		grip, left, twist = strike, strikeLeft, strikeTwist
+		weight = 1 - smooth((p - timing.strike) / (1 - timing.strike))
+	end
+
+	-- Arme soudée à la main : main = arme * gripOffset⁻¹.
+	local weapon = grip * CFrame.new(-WeaponPose.handInWeapon(itemId))
+	local hand = weapon * shape.gripOffset:Inverse()
+	local leftTarget: Vector3? = nil
+	if set.left == "support" and entry.support then
+		leftTarget = weapon * entry.support
+	elseif set.left == "fist" then
+		leftTarget = left
+	end
+	return {
+		weight = weight,
+		hand = hand,
+		weapon = weapon,
+		rightPole = set.rightPole,
+		left = leftTarget,
+		leftPole = set.leftPole,
+		waist = CFrame.Angles(0, -math.rad(twist) * weight, 0),
+	}
+end
+
 -- Rotation qui amène le repère (xA, yA) sur (xB, yB) (axes unitaires et orthogonaux).
 local function alignFrames(xA: Vector3, yA: Vector3, xB: Vector3, yB: Vector3): CFrame
 	local a = CFrame.fromMatrix(Vector3.zero, xA, yA, xA:Cross(yA))
@@ -286,19 +330,30 @@ local function splitHinge(vector: Vector3): (number, Vector3)
 end
 
 --[[
-	Bras à deux segments (repère du torse) : la main (son centre) rejoint
-	`target`, le coude pointe vers `pole`. Retourne les Transform des Motor6D
-	de l'épaule, du coude et du poignet, et si la cible est à portée.
+	Bras à deux segments (repère du torse), coude orienté vers `pole`.
+	- Sans `handFrame` : le centre de la main rejoint `target`, la main dans
+	  l'axe de l'avant-bras.
+	- Avec `handFrame` (position et orientation voulues de la main) : le
+	  poignet rejoint sa place et tourne pour orienter la main (`target` est
+	  alors ignoré).
+	Retourne les Transform des Motor6D de l'épaule, du coude et du poignet, et
+	si la cible est à portée.
 
-	Le coude est une charnière (axe X du bras, comme le coude R15) ; le
-	poignet garde la main dans l'axe de l'avant-bras.
+	Le coude est une charnière (axe X du bras, comme le coude R15).
 ]]
-function WeaponPose.solveArm(rig: ArmRig, target: Vector3, pole: Vector3): (CFrame, CFrame, CFrame, boolean)
+function WeaponPose.solveArm(
+	rig: ArmRig,
+	target: Vector3,
+	pole: Vector3,
+	handFrame: CFrame?
+): (CFrame, CFrame, CFrame, boolean)
 	local shoulder = rig.shoulderC0.Position
-	-- Segments, dans le repère de chaque pièce : épaule → coude, coude → centre de la main.
+	-- Segments, dans le repère de chaque pièce : épaule → coude, coude → bout
+	-- (centre de la main, ou poignet si l'orientation de la main est imposée).
 	local upperBone = rig.elbowC0.Position - rig.shoulderC1.Position
-	local handInLower = (rig.wristC0 * rig.wristC1:Inverse()).Position
-	local lowerBone = handInLower - rig.elbowC1.Position
+	local endInLower = if handFrame then rig.wristC0.Position else (rig.wristC0 * rig.wristC1:Inverse()).Position
+	local lowerBone = endInLower - rig.elbowC1.Position
+	local goal = if handFrame then handFrame * rig.wristC1.Position else target
 	local upperSide, upperPlane = splitHinge(upperBone)
 	local lowerSide, lowerPlane = splitHinge(lowerBone)
 	local l1, l2 = upperPlane.Magnitude, lowerPlane.Magnitude
@@ -307,7 +362,7 @@ function WeaponPose.solveArm(rig: ArmRig, target: Vector3, pole: Vector3): (CFra
 	-- pli : l'axe est incliné vers la cible juste assez pour les absorber, et
 	-- le pli se résout dans le plan perpendiculaire.
 	local sides = upperSide + lowerSide
-	local toTarget = target - shoulder
+	local toTarget = goal - shoulder
 	local targetDistance = toTarget.Magnitude
 	local toward = if targetDistance > 1e-4 then toTarget / targetDistance else Vector3.new(0, -1, 0)
 	local side = pole - toward * pole:Dot(toward)
@@ -337,7 +392,11 @@ function WeaponPose.solveArm(rig: ArmRig, target: Vector3, pole: Vector3): (CFra
 
 	local shoulderTransform = rig.shoulderC0:Inverse() * upper * rig.shoulderC1
 	local elbowTransform = rig.elbowC0:Inverse() * upper:Inverse() * lower * rig.elbowC1
-	return shoulderTransform, elbowTransform, CFrame.new(), distance <= l1 + l2
+	local wristTransform = if handFrame
+		-- Rotation seule : hors de portée, la main reste au bout du bras.
+		then ((lower * rig.wristC0):Inverse() * handFrame * rig.wristC1).Rotation
+		else CFrame.new()
+	return shoulderTransform, elbowTransform, wristTransform, distance <= l1 + l2
 end
 
 return WeaponPose

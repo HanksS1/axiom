@@ -2,22 +2,24 @@
 --[[
 	WeaponPoseController : armes tenues comme dans la réalité (côté client).
 
-	Le serveur fixe l'arme devant le haut du torse (joint « WeaponGrip ») ;
-	ici, à chaque image et pour chaque combattant proche :
-	- l'arme est placée (visée en haut / en bas, recul des tirs, coup de
-	  mêlée, recharge, sprint, garde) ;
-	- les deux mains vont sur la poignée et le garde-main (bras calculés,
-	  Shared/Visuals/WeaponPose), le buste se tourne pour l'épaulé ;
-	- les jambes gardent leurs animations (marche, course, saut).
+	- Armes à distance : le serveur les fixe devant le haut du torse (joint
+	  « WeaponGrip ») ; ici, à chaque image et pour chaque combattant proche,
+	  l'arme est placée (visée en haut / en bas, recul, recharge, sprint), les
+	  deux mains vont dessus (bras calculés, Shared/Visuals/WeaponPose) et le
+	  buste se tourne pour l'épaulé.
+	- Mêlée : l'arme reste dans la main et suit les animations ; pendant un
+	  coup, le bras (et la main gauche, le buste) décrit le geste, puis rend la
+	  main à l'animation.
+	Les jambes gardent toujours leurs animations (marche, course, saut).
 
 	Chaque client pose tous les personnages qu'il voit, d'après leurs
-	attributs (AimPitch, Sprinting, Parrying, Stance, Using, ReloadUntil) et
-	les tirs / coups diffusés par le serveur (`kick`, `swing`). Le joueur local
-	envoie sa visée au serveur (SetAim) pour que les autres la voient.
+	attributs (AimPitch, Sprinting, Stance, Using, ReloadUntil) et les tirs /
+	coups diffusés par le serveur (`kick`, `swing`). Le joueur local envoie sa
+	visée au serveur (SetAim) pour que les autres la voient.
 
 	Les Transform des joints sont écrits après les animations (PreSimulation) :
-	ceux de la taille et du cou s'ajoutent à l'animation, ceux des bras la
-	remplacent.
+	ceux de la taille et du cou s'ajoutent à l'animation ; ceux des bras la
+	remplacent (armes à distance) ou s'y mélangent (coup de mêlée).
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -44,8 +46,9 @@ type Arm = {
 }
 
 type Joints = {
+	visual: Instance, -- modèle de l'arme (recréé par le serveur à chaque changement)
 	torso: BasePart,
-	grip: Motor6D,
+	grip: Motor6D?, -- arme à distance montée sur le torse (nil : arme de mêlée)
 	itemId: string,
 	scale: number,
 	right: Arm,
@@ -60,14 +63,13 @@ type Record = {
 	retryAt: number,
 	pitch: number,
 	sprint: number,
-	parry: number,
 	kick: number,
 	jitter: number,
 	swingStart: number?,
 	swingDuration: number,
 	variant: number,
-	-- Dernière valeur écrite par joint (et, pour la taille et le cou, celle de
-	-- l'animation à laquelle elle s'ajoute).
+	-- Dernière valeur écrite par joint, et celle de l'animation à laquelle elle
+	-- s'ajoute ou se mélange.
 	written: { [Motor6D]: CFrame },
 	base: { [Motor6D]: CFrame },
 }
@@ -108,21 +110,25 @@ local function armOf(model: Model, side: string): Arm?
 	}
 end
 
--- Joints d'un personnage R15 qui tient une arme montée sur le torse (sinon nil).
+-- Joints d'un personnage R15 qui tient une arme (sinon nil : pas d'arme, avatar R6).
 local function resolve(model: Model): Joints?
 	local visual = model:FindFirstChild("WeaponVisual")
-	local grip = motorIn(if visual then visual:FindFirstChild("Body") else nil, "WeaponGrip")
 	-- L'arme du modèle (et non l'attribut WeaponId, qui peut arriver avant le nouveau modèle).
 	local itemId = if visual then visual:GetAttribute("ItemId") else nil
 	local torso = model:FindFirstChild("UpperTorso")
-	if grip == nil or type(itemId) ~= "string" or torso == nil or not torso:IsA("BasePart") then
+	if visual == nil or type(itemId) ~= "string" or torso == nil or not torso:IsA("BasePart") then
 		return nil
+	end
+	local grip = motorIn(visual:FindFirstChild("Body"), "WeaponGrip")
+	if WeaponPose.isMounted(itemId) and grip == nil then
+		return nil -- arme à distance pas encore répliquée
 	end
 	local right, left = armOf(model, "Right"), armOf(model, "Left")
 	if right == nil or left == nil then
 		return nil
 	end
 	return {
+		visual = visual,
 		torso = torso,
 		grip = grip,
 		itemId = itemId,
@@ -139,15 +145,26 @@ local function write(record: Record, motor: Motor6D, value: CFrame)
 	record.written[motor] = value
 end
 
--- S'ajoute à l'animation : si l'animation n'a pas réécrit le joint depuis la
--- dernière image, on repart de la même base (sinon la rotation s'accumulerait).
-local function compose(record: Record, motor: Motor6D, extra: CFrame)
+-- Valeur donnée par l'animation à cette image. Si l'animation n'a pas réécrit
+-- le joint depuis la dernière image, on repart de la même base (sinon nos
+-- rotations s'accumuleraient).
+local function animated(record: Record, motor: Motor6D): CFrame
 	local last = record.written[motor]
 	local base = if last ~= nil and motor.Transform == last
 		then record.base[motor] or CFrame.identity
 		else motor.Transform
 	record.base[motor] = base
-	write(record, motor, base * extra)
+	return base
+end
+
+-- S'ajoute à l'animation (taille, cou).
+local function compose(record: Record, motor: Motor6D, extra: CFrame)
+	write(record, motor, animated(record, motor) * extra)
+end
+
+-- Mélange l'animation et une pose (0 : animation, 1 : pose).
+local function blend(record: Record, motor: Motor6D, target: CFrame, weight: number)
+	write(record, motor, animated(record, motor):Lerp(target, weight))
 end
 
 -- Rend un joint à l'animation (ou à sa position de repos si rien ne l'anime).
@@ -169,14 +186,27 @@ local function release(record: Record)
 	end
 end
 
-local function solve(record: Record, arm: Arm, target: Vector3, pole: Vector3)
-	local shoulder, elbow, wrist = WeaponPose.solveArm(arm.rig, target, pole)
-	write(record, arm.shoulder, shoulder)
-	write(record, arm.elbow, elbow)
-	write(record, arm.wrist, wrist)
+local function releaseArm(record: Record, arm: Arm)
+	releaseMotor(record, arm.shoulder)
+	releaseMotor(record, arm.elbow)
+	releaseMotor(record, arm.wrist)
 end
 
-local function pose(record: Record, joints: Joints, dt: number, clock: number, serverNow: number)
+local function solve(record: Record, arm: Arm, target: Vector3, pole: Vector3, handFrame: CFrame?, weight: number?)
+	local shoulder, elbow, wrist = WeaponPose.solveArm(arm.rig, target, pole, handFrame)
+	if weight then
+		blend(record, arm.shoulder, shoulder, weight)
+		blend(record, arm.elbow, elbow, weight)
+		blend(record, arm.wrist, wrist, weight)
+	else
+		write(record, arm.shoulder, shoulder)
+		write(record, arm.elbow, elbow)
+		write(record, arm.wrist, wrist)
+	end
+end
+
+-- Arme à distance montée sur le torse.
+local function poseRanged(record: Record, joints: Joints, grip: Motor6D, dt: number, serverNow: number)
 	local model = record.model
 	local itemId = joints.itemId
 
@@ -189,9 +219,8 @@ local function pose(record: Record, joints: Joints, dt: number, clock: number, s
 		local target = if type(degrees) == "number" then math.rad(degrees) else 0
 		record.pitch += (target - record.pitch) * (1 - math.exp(-Poses.aimSmoothing * dt))
 	end
-	local blend = 1 - math.exp(-Poses.blendRate * dt)
-	record.sprint += ((if model:GetAttribute("Sprinting") == true then 1 else 0) - record.sprint) * blend
-	record.parry += ((if model:GetAttribute("Parrying") == true then 1 else 0) - record.parry) * blend
+	local rate = 1 - math.exp(-Poses.blendRate * dt)
+	record.sprint += ((if model:GetAttribute("Sprinting") == true then 1 else 0) - record.sprint) * rate
 
 	local ranged = Config.Weapons.ranged[itemId]
 	if record.kick > 0 then
@@ -206,8 +235,7 @@ local function pose(record: Record, joints: Joints, dt: number, clock: number, s
 	local reloadUntil = model:GetAttribute("ReloadUntil")
 	local reloadTime = model:GetAttribute("ReloadTime")
 	if
-		ranged
-		and type(reloadUntil) == "number"
+		type(reloadUntil) == "number"
 		and type(reloadTime) == "number"
 		and reloadTime > 0
 		and serverNow < reloadUntil
@@ -215,28 +243,14 @@ local function pose(record: Record, joints: Joints, dt: number, clock: number, s
 		reload = math.clamp(1 - (reloadUntil - serverNow) / reloadTime, 0, 1)
 	end
 
-	local swing: number? = nil
-	local swingStart = record.swingStart
-	if swingStart then
-		local progress = (clock - swingStart) / record.swingDuration
-		if progress >= 1 then
-			record.swingStart = nil
-		else
-			swing = progress
-		end
-	end
-
 	local result = WeaponPose.compute({
 		itemId = itemId,
 		pitch = record.pitch,
 		prone = model:GetAttribute("Stance") == "prone",
 		sprint = record.sprint,
-		parry = record.parry,
 		reload = reload,
 		kick = record.kick,
 		jitter = record.jitter,
-		swing = swing,
-		variant = record.variant,
 		using = model:GetAttribute("Using") == true,
 		scale = joints.scale,
 	})
@@ -246,17 +260,13 @@ local function pose(record: Record, joints: Joints, dt: number, clock: number, s
 	end
 
 	-- Arme : Body = torse * C0 * Transform * C1⁻¹ = torse * result.weapon.
-	local grip = joints.grip
 	write(record, grip, grip.C0:Inverse() * result.weapon * grip.C1)
 	solve(record, joints.right, result.right, result.rightPole)
 	local left = result.left
 	if left then
 		solve(record, joints.left, left, result.leftPole)
 	else
-		-- Main gauche libre : elle reprend l'animation.
-		releaseMotor(record, joints.left.shoulder)
-		releaseMotor(record, joints.left.elbow)
-		releaseMotor(record, joints.left.wrist)
+		releaseArm(record, joints.left) -- main gauche libre : elle reprend l'animation
 	end
 	if joints.waist then
 		compose(record, joints.waist, result.waist)
@@ -266,11 +276,31 @@ local function pose(record: Record, joints: Joints, dt: number, clock: number, s
 	end
 end
 
+-- Coup de mêlée en cours : le geste se mélange à l'animation (poids 0 → 1 → 0).
+local function poseMelee(record: Record, joints: Joints, progress: number)
+	local result = WeaponPose.meleeSwing(joints.itemId, progress, record.variant, joints.scale)
+	if result == nil then
+		release(record)
+		return
+	end
+	local weight = result.weight
+	solve(record, joints.right, Vector3.zero, result.rightPole, result.hand, weight)
+	local left = result.left
+	if left then
+		solve(record, joints.left, left, result.leftPole, nil, weight)
+	else
+		releaseArm(record, joints.left)
+	end
+	if joints.waist then
+		compose(record, joints.waist, result.waist)
+	end
+end
+
 -- Visée du joueur local → serveur (attribut AimPitch vu par les autres).
 local function sendAim(clock: number)
 	local character = player.Character
 	local record = if character then records[character] else nil
-	if record == nil or record.joints == nil then
+	if record == nil or record.joints == nil or record.joints.grip == nil then
 		return
 	end
 	local degrees = math.clamp(math.round(math.deg(record.pitch)), -90, 90)
@@ -288,11 +318,12 @@ local function step(dt: number)
 	local serverNow = Workspace:GetServerTimeNow()
 	for model, record in records do
 		local joints = record.joints
-		if joints and joints.grip.Parent == nil then
+		if joints and joints.visual.Parent == nil then
 			-- Arme changée (le serveur a recréé son modèle) : on relit les joints.
 			release(record)
 			record.joints = nil
 			record.retryAt = 0
+			record.swingStart = nil
 			joints = nil
 		end
 		if joints == nil and clock >= record.retryAt then
@@ -310,7 +341,21 @@ local function step(dt: number)
 			end
 			continue
 		end
-		pose(record, joints, dt, clock, serverNow)
+		local grip = joints.grip
+		if grip then
+			poseRanged(record, joints, grip, dt, serverNow)
+		else
+			local swingStart = record.swingStart
+			local progress = if swingStart then (clock - swingStart) / record.swingDuration else 1
+			if progress < 1 then
+				poseMelee(record, joints, progress)
+			else
+				record.swingStart = nil
+				if next(record.written) ~= nil then
+					release(record) -- hors des coups : animations normales
+				end
+			end
+		end
 	end
 	sendAim(clock)
 end
@@ -325,7 +370,6 @@ local function track(instance: Instance)
 		retryAt = 0,
 		pitch = 0,
 		sprint = 0,
-		parry = 0,
 		kick = 0,
 		jitter = 0,
 		swingStart = nil,
@@ -354,9 +398,9 @@ function WeaponPoseController.kick(model: Model?)
 end
 
 --[[
-	Coup de mêlée : l'arme décrit son geste (armé, frappe, retour), les mains
-	suivent. Retourne false si le personnage n'a pas d'arme montée sur le
-	torse (avatar R6) : l'appelant garde alors l'ancienne animation.
+	Coup de mêlée : le bras décrit le geste (armé, frappe, retour à
+	l'animation). Retourne false si le personnage n'a pas de bras articulés
+	(avatar R6) : l'appelant garde alors l'ancienne animation.
 ]]
 function WeaponPoseController.swing(model: Model?): boolean
 	local record = if model then records[model] else nil
@@ -364,9 +408,10 @@ function WeaponPoseController.swing(model: Model?): boolean
 		return false
 	end
 	local joints = record.joints or resolve(record.model)
-	if joints == nil then
+	if joints == nil or joints.grip ~= nil then
 		return false
 	end
+	record.joints = joints
 	record.swingStart = os.clock()
 	record.swingDuration = WeaponPose.swingDuration(joints.itemId)
 	record.variant = record.variant % 2 + 1
