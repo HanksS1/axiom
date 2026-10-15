@@ -159,12 +159,20 @@ local function currentSpread(): number
 	if rangedDef == nil then
 		return 0
 	end
-	return Movement.spread(
+	local airborne = MovementController.isAirborne()
+	local spread = Movement.spread(
 		rangedDef.spread,
 		MovementController.stance(),
 		CameraController.isAiming(),
-		MovementController.isMoving()
+		MovementController.isMoving(),
+		airborne
 	)
+	-- Dans la lunette (une fois en place) : tir de précision. Jamais en l'air.
+	local scope = rangedDef.scope
+	if scope and not airborne and CameraController.scopeProgress() >= 0.9 then
+		spread *= scope.spreadMultiplier
+	end
+	return spread
 end
 
 -- Direction aléatoire dans un cône de `degrees` autour de `direction`.
@@ -344,6 +352,8 @@ local function update()
 		WeaponLogic.updateHeat(state, now)
 	end
 
+	-- Lunette de l'arme en main (la caméra s'en sert pour passer à la première personne).
+	CameraController.setScope(if activeSlot == "ranged" and rangedDef and alive() then rangedDef.scope else nil)
 	if not alive() or stunned() or PanelState.anyOpen() then
 		return
 	end

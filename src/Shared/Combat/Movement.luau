@@ -65,10 +65,20 @@ function Movement.jumpHeight(state: MoveState): number
 end
 
 --[[
-	Dispersion (degrés) d'une arme selon la posture, la visée et le mouvement.
-	La précision accrue (+15 % accroupi, +30 % couché) réduit la dispersion.
+	Dispersion (degrés) d'une arme selon la posture, la visée, le mouvement et
+	le saut. La précision accrue (+15 % accroupi, +30 % couché) réduit la
+	dispersion. En l'air, les tirs partent de travers, quoi qu'on fasse.
 ]]
-function Movement.spread(baseSpread: number, stance: Stance, aiming: boolean, moving: boolean): number
+function Movement.spread(
+	baseSpread: number,
+	stance: Stance,
+	aiming: boolean,
+	moving: boolean,
+	airborne: boolean?
+): number
+	if airborne then
+		return baseSpread * M.airborneSpreadMultiplier + M.airborneSpreadBonus
+	end
 	local spread = baseSpread
 	if stance == "crouch" then
 		spread *= 1 - M.crouchAccuracyBonus

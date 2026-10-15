@@ -27,6 +27,7 @@ local ItemRules = require(Shared.Items.ItemRules)
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local Create = require(script.Parent.Parent.UI.Create)
 local Theme = require(script.Parent.Parent.UI.Theme)
+local CameraController = require(script.Parent.CameraController)
 local ProfileController = require(script.Parent.ProfileController)
 local MovementController = require(script.Parent.MovementController)
 local WeaponController = require(script.Parent.WeaponController)
@@ -55,6 +56,11 @@ local crosshairLines: { Frame } = {}
 local hitmarker: Frame
 local centerLabel: TextLabel
 local damageArcs: Frame
+-- Lunette (Aiguille) : cercle net entouré de noir, réticule fin.
+local scopeOverlay: Frame
+local scopeStroke: UIStroke
+local scopeMarks: { Frame } = {}
+local scopeShades: { Frame } = {} -- bandes noires autour de la lentille
 local deathOverlay: Frame
 local deathTitle: TextLabel
 local deathSubtitle: TextLabel
@@ -298,6 +304,89 @@ local function buildCenter(parent: Instance)
 	})
 end
 
+-- Lunette : un cercle transparent dont le contour (très épais, noir) masque tout
+-- autour ; fines lignes de visée et point central.
+local function buildScope(parent: Instance)
+	scopeStroke = Create("UIStroke", {
+		Color = Color3.new(0, 0, 0),
+		Thickness = 400, -- arrondit les coins ; les bandes noires couvrent le reste
+		Transparency = 1,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+	})
+	local lens = Create("Frame", {
+		Name = "Lens",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(0.86, 0.86),
+		BackgroundTransparency = 1,
+	}, {
+		Ratio = Create("UIAspectRatioConstraint", { AspectRatio = 1, DominantAxis = Enum.DominantAxis.Height }),
+		Corner = Create("UICorner", { CornerRadius = UDim.new(1, 0) }),
+		Stroke = scopeStroke,
+	})
+	local function mark(size: UDim2, position: UDim2, color: Color3)
+		local frame = Create("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = position,
+			Size = size,
+			BackgroundColor3 = color,
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Parent = lens,
+		})
+		table.insert(scopeMarks, frame)
+	end
+	-- Lignes de visée (interrompues au centre), graduations et point rouge.
+	mark(UDim2.new(0.44, 0, 0, 1), UDim2.fromScale(0.25, 0.5), Color3.new(0, 0, 0))
+	mark(UDim2.new(0.44, 0, 0, 1), UDim2.fromScale(0.75, 0.5), Color3.new(0, 0, 0))
+	mark(UDim2.new(0, 1, 0.44, 0), UDim2.fromScale(0.5, 0.25), Color3.new(0, 0, 0))
+	mark(UDim2.new(0, 1, 0.44, 0), UDim2.fromScale(0.5, 0.75), Color3.new(0, 0, 0))
+	for index = 1, 3 do
+		local offset = 0.06 * index
+		mark(UDim2.fromOffset(1, 10), UDim2.fromScale(0.5 + offset, 0.5), Color3.new(0, 0, 0))
+		mark(UDim2.fromOffset(1, 10), UDim2.fromScale(0.5 - offset, 0.5), Color3.new(0, 0, 0))
+		mark(UDim2.fromOffset(10, 1), UDim2.fromScale(0.5, 0.5 + offset), Color3.new(0, 0, 0))
+	end
+	mark(UDim2.fromOffset(3, 3), UDim2.fromScale(0.5, 0.5), Theme.red)
+	scopeOverlay = Create("Frame", {
+		Name = "Scope",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		Visible = false,
+		ZIndex = 0,
+		Parent = parent,
+	}, { Lens = lens })
+	-- Bandes noires de part et d'autre de la lentille (suivent sa taille à l'écran).
+	local function shade(name: string): Frame
+		local frame = Create("Frame", {
+			Name = name,
+			BackgroundColor3 = Color3.new(0, 0, 0),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Parent = scopeOverlay,
+		})
+		table.insert(scopeShades, frame)
+		return frame
+	end
+	local top, bottom, left, right = shade("Top"), shade("Bottom"), shade("Left"), shade("Right")
+	local function layout()
+		local position, size = lens.AbsolutePosition - scopeOverlay.AbsolutePosition, lens.AbsoluteSize
+		local total = scopeOverlay.AbsoluteSize
+		top.Size = UDim2.new(1, 0, 0, math.max(0, position.Y + 1))
+		bottom.Position = UDim2.fromOffset(0, position.Y + size.Y - 1)
+		bottom.Size = UDim2.new(1, 0, 0, math.max(0, total.Y - position.Y - size.Y + 1))
+		left.Position = UDim2.fromOffset(0, position.Y)
+		left.Size = UDim2.fromOffset(math.max(0, position.X + 1), size.Y)
+		right.Position = UDim2.fromOffset(position.X + size.X - 1, position.Y)
+		right.Size = UDim2.fromOffset(math.max(0, total.X - position.X - size.X + 1), size.Y)
+	end
+	lens:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout)
+	lens:GetPropertyChangedSignal("AbsolutePosition"):Connect(layout)
+	scopeOverlay:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout)
+	layout()
+end
+
 local function buildDeathOverlay(parent: Instance)
 	deathTitle = Create("TextLabel", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -460,7 +549,18 @@ local function render()
 	local camera = Workspace.CurrentCamera
 	local pixelsPerDegree = camera.ViewportSize.Y / camera.FieldOfView
 	local gap = 4 + snap.spread * pixelsPerDegree
-	crosshair.Visible = isRanged
+	-- Lunette : le voile apparaît avec la bascule à la première personne ; le
+	-- réticule normal s'efface.
+	local scoped = CameraController.scopeProgress()
+	scopeOverlay.Visible = scoped > 0.02
+	scopeStroke.Transparency = 1 - scoped
+	for _, mark in scopeMarks do
+		mark.BackgroundTransparency = 1 - scoped * 0.9
+	end
+	for _, shade in scopeShades do
+		shade.BackgroundTransparency = 1 - scoped
+	end
+	crosshair.Visible = isRanged and scoped < 0.5
 	crosshairLines[1].Position = UDim2.fromOffset(-gap - 4, 0)
 	crosshairLines[2].Position = UDim2.fromOffset(gap + 4, 0)
 	crosshairLines[3].Position = UDim2.fromOffset(0, -gap - 4)
@@ -510,6 +610,7 @@ function HUDController.start()
 	buildBottomLeft(gui)
 	buildBottomRight(gui)
 	buildCenter(gui)
+	buildScope(gui)
 	buildDeathOverlay(gui)
 	gui.Parent = player:WaitForChild("PlayerGui")
 

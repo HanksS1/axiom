@@ -132,6 +132,33 @@ Traqueur : 4 tirs ; Sentinelle : 6 (Facile) / 8 (Moyen), soit moins d'un chargeu
 Les PV réels des robots : Mouche 30, Traqueur 80, Sentinelle 150, Tourelle 250, Exécuteur 340,
 Bastion 480, Gardien 1 500 (× 0,7 / 1 / 1,4 selon le mode).
 
+## Retours de test : lunette, fiche des armes, tir en sautant
+
+**Lunette de l'Aiguille.** Les armes avec un champ `scope` (`Config.Weapons`, l'Aiguille pour
+l'instant) basculent progressivement à la première personne quand on vise
+(`Combat.camera.scopeTransitionTime` = 0,3 s) : la caméra rentre dans la tête, le champ de vision
+passe à `scope.fieldOfView` (20°, zoom ×3,5 environ), le personnage et son arme sont masqués
+(localement), un voile de lunette apparaît (cercle net, bord noir, fines lignes de visée, point
+rouge) et le réticule normal s'efface. La sensibilité suit le zoom (une lunette ×3 tourne 3 fois
+moins vite). Une fois la lunette en place, la dispersion est multipliée par
+`scope.spreadMultiplier` (0,25), jamais en l'air.
+
+**Tir en sautant.** En l'air (saut, chute), la dispersion devient
+`dispersion × 2,5 + 4°` (`Combat.movement.airborneSpreadMultiplier`, `airborneSpreadBonus`),
+quels que soient la posture et la visée : même l'Aiguille tire de travers. Le réticule s'écarte
+en conséquence. *Limite* : la dispersion est tirée par le client ; le serveur ne vérifie pas la
+direction d'un tir par rapport à la visée (un client modifié pourrait l'ignorer). À traiter avec
+la validation des tirs (voir les risques réseau notés plus haut).
+
+**Fiche de détail.** Sur chaque carte d'arme (coffre, Marchand, sac, butin, tri), un bouton « i »
+ouvre sa fiche : vignette 3D, rareté, état, description, puis dégâts par tir, dégâts par seconde,
+cadence, chargeur et rechargement (ou surchauffe), précision, portée, munitions — avec une barre
+comparée aux autres armes de la même catégorie — et les particularités (tête, lunette, projectile,
+explosion, traverse les couverts, anti-robots, discrétion, parade…). Calcul pur et testé :
+`Shared/Combat/WeaponStats.luau`. Rareté d'après la valeur de base (`Config.Weapons.rarityByValue`) :
+commun < 500 ≤ rare < 1 000 ≤ épique < 2 000 ≤ légendaire < 2 800 ≤ mythique. Précision affichée :
+100 % − dispersion / 8° (`precisionSpreadZero`).
+
 ## Questions ouvertes
 
 1. **Temps pour tuer** : le document vise 0,6 à 1,2 s contre 100 PV + 100 de bouclier.

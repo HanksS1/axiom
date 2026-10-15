@@ -21,6 +21,7 @@ local Types = require(Shared.Types)
 local Create = require(script.Parent.Create)
 local ItemIcon = require(script.Parent.ItemIcon)
 local Theme = require(script.Parent.Theme)
+local WeaponDetail = require(script.Parent.WeaponDetail)
 
 local TweenService = game:GetService("TweenService")
 
@@ -249,6 +250,29 @@ function ItemCard.create(item: Types.ItemInstance, t: Translate, actions: { Acti
 		Details = detailLabel,
 		Actions = actionRow,
 	})
+
+	-- Arme : bouton « i » (coin de la vignette) vers sa fiche de détail.
+	if WeaponDetail.has(item.itemId) then
+		local infoButton = Create("TextButton", {
+			Name = "Info",
+			Position = UDim2.fromOffset(4, 4),
+			Size = UDim2.fromOffset(22, 22),
+			BackgroundColor3 = Theme.panel,
+			BackgroundTransparency = 0.1,
+			Font = Theme.fontTitle,
+			TextSize = 14,
+			TextColor3 = Theme.cyan,
+			Text = "i",
+			ZIndex = 4,
+			Parent = card,
+		}, {
+			Corner = Create("UICorner", { CornerRadius = UDim.new(1, 0) }),
+			Stroke = Create("UIStroke", { Color = Theme.cyan, Transparency = 0.3 }),
+		})
+		infoButton.Activated:Connect(function()
+			WeaponDetail.open(t, item.itemId, condition)
+		end)
+	end
 
 	-- Mise en page : avec vignette, ou sans sur un panneau étroit.
 	local function layout()

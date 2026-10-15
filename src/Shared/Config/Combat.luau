@@ -29,6 +29,11 @@ return Freeze.deep({
 		proneHoldThreshold = 0.35,
 		-- Dispersion supplémentaire en mouvement (× la dispersion de base).
 		movingSpreadMultiplier = 1.5,
+		-- En l'air (saut, chute) : les tirs partent de travers. Dispersion × multiplicateur
+		-- + bonus fixe (degrés), pour que même une arme très précise devienne imprécise.
+		-- Aucune posture ni visée ne compense (on ne vise pas en sautant).
+		airborneSpreadMultiplier = 2.5,
+		airborneSpreadBonus = 4,
 		-- Vitesse pendant un étourdissement (× la vitesse de marche).
 		stunMoveMultiplier = 0.2,
 		-- Hauteur des hanches (HipHeight) selon la posture, en studs.
@@ -57,6 +62,9 @@ return Freeze.deep({
 		crouchOffsetY = -1.1,
 		proneOffsetY = -2.2,
 		transitionTime = 0.15,
+		-- Lunette (armes avec `scope`, l'Aiguille) : passage progressif à la première
+		-- personne en visant (secondes pour basculer entièrement).
+		scopeTransitionTime = 0.3,
 	},
 
 	-- Hors partie (stand de tir, arène de test) : délai avant réapparition.

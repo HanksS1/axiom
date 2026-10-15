@@ -620,4 +620,96 @@ return function(T, H)
 			expect(dps("sentinel_rifle", 3) > dps("scrap_laser_pistol", 1) * 2).toBe(true)
 		end)
 	end)
+
+	describe("Saut et lunette", function()
+		local M = Config.Combat.movement
+		it("en l'air, les tirs partent de travers, même accroupi et en visant", function()
+			for _, def in W do
+				local ground = Movement.spread(def.spread, "stand", false, false, false)
+				local air = Movement.spread(def.spread, "crouch", true, false, true)
+				expect(air).toBeNear(def.spread * M.airborneSpreadMultiplier + M.airborneSpreadBonus)
+				expect(air >= ground + M.airborneSpreadBonus - 1e-6).toBe(true)
+			end
+			-- Même l'arme la plus précise devient imprécise en sautant.
+			expect(Movement.spread(W.needle.spread, "stand", true, false, true) >= M.airborneSpreadBonus).toBe(true)
+		end)
+
+		it("l'Aiguille a une lunette qui zoome et resserre la dispersion", function()
+			local scope = W.needle.scope
+			expect(scope ~= nil).toBe(true)
+			expect(scope.fieldOfView < Config.Combat.camera.aimFieldOfView).toBe(true)
+			expect(scope.spreadMultiplier > 0 and scope.spreadMultiplier < 1).toBe(true)
+			expect(Config.Combat.camera.scopeTransitionTime > 0).toBe(true)
+		end)
+	end)
+
+	describe("Fiche de détail des armes", function()
+		local WeaponStats = H.require("ReplicatedStorage/Shared/Combat/WeaponStats")
+		local Localization = H.require("ReplicatedStorage/Shared/Localization")
+		local all = {}
+		for id in W do
+			table.insert(all, id)
+		end
+		for id in Config.Weapons.melee do
+			table.insert(all, id)
+		end
+
+		it("chaque arme a une fiche complète, des barres entre 0 et 1, une rareté", function()
+			for _, id in all do
+				local sheet = WeaponStats.sheet(id, 4)
+				expect(sheet ~= nil).toBe(true)
+				expect(#sheet.lines >= 4).toBe(true)
+				for _, line in sheet.lines do
+					if line.ratio then
+						expect(line.ratio >= 0 and line.ratio <= 1 + 1e-6).toBe(true)
+					end
+				end
+				expect(Config.Monetization.rarityColors[sheet.rarity] ~= nil).toBe(true)
+			end
+			expect(WeaponStats.sheet("helmet")).toBeNil()
+			expect(table.find(WeaponStats.sheet("needle").traits, "scope") ~= nil).toBe(true)
+		end)
+
+		it("rareté croissante avec la valeur ; précision cohérente avec la dispersion", function()
+			local order = {}
+			for index, step in Config.Weapons.rarityByValue do
+				order[step.rarity] = index
+			end
+			for _, a in all do
+				for _, b in all do
+					local va = (W[a] or Config.Weapons.melee[a]).baseValue
+					local vb = (W[b] or Config.Weapons.melee[b]).baseValue
+					if va < vb then
+						expect(order[WeaponStats.rarity(a)] <= order[WeaponStats.rarity(b)]).toBe(true)
+					end
+				end
+			end
+			expect(WeaponStats.precision(0)).toBe(100)
+			expect(WeaponStats.precision(Config.Weapons.precisionSpreadZero)).toBe(0)
+			expect(WeaponStats.precision(W.needle.spread) > WeaponStats.precision(W.hullbreaker.spread)).toBe(true)
+		end)
+
+		it("l'état de l'arme change les dégâts affichés", function()
+			local worn = WeaponStats.sheet("sentinel_rifle", 1).lines[1].value
+			local pristine = WeaponStats.sheet("sentinel_rifle", 5).lines[1].value
+			expect(pristine > worn).toBe(true)
+		end)
+
+		it("tous les textes de la fiche existent en FR et en EN", function()
+			for _, lang in { "fr", "en" } do
+				for _, id in all do
+					expect(Localization.has(lang, "item." .. id .. ".desc")).toBe(true)
+					local sheet = WeaponStats.sheet(id, 4)
+					expect(Localization.has(lang, "weapon.category." .. sheet.category)).toBe(true)
+					for _, line in sheet.lines do
+						expect(Localization.has(lang, "weapon.stat." .. line.key)).toBe(true)
+						expect(Localization.has(lang, line.text)).toBe(true)
+					end
+					for _, trait in sheet.traits do
+						expect(Localization.has(lang, "weapon.trait." .. trait)).toBe(true)
+					end
+				end
+			end
+		end)
+	end)
 end
