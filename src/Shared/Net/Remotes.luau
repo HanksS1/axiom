@@ -34,13 +34,14 @@ local Remotes: { [string]: RemoteDef } = {
 	MeleeAttack = { kind = "event", toServer = true },
 	SetParry = { kind = "event", toServer = true },
 	SetMovement = { kind = "event", toServer = true },
+	SetAim = { kind = "event", toServer = true }, -- visée en haut / en bas (posture de l'arme)
 	-- Combat (serveur → client)
 	CombatState = { kind = "event", toServer = false }, -- état des armes (propriétaire)
 	HitConfirm = { kind = "event", toServer = false }, -- marqueur de touche (tireur)
 	DamageTaken = { kind = "event", toServer = false }, -- direction des dégâts (victime)
 	ParryResult = { kind = "event", toServer = false }, -- parade réussie / garde brisée
 	ShotFired = { kind = "unreliable", toServer = false }, -- tracés des tirs (autres joueurs)
-	MeleeSwing = { kind = "unreliable", toServer = false }, -- animation de coup (autres joueurs)
+	MeleeSwing = { kind = "unreliable", toServer = false }, -- animation de coup (autres combattants)
 	Knockback = { kind = "event", toServer = false }, -- repoussement (victime du Gantelet à impulsion)
 	ProjectileFired = { kind = "unreliable", toServer = false }, -- projectile lent en vol (autres joueurs)
 	ProjectileImpact = { kind = "event", toServer = false }, -- impact ou explosion d'un projectile

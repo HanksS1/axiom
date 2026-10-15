@@ -154,6 +154,7 @@ local function publishPublic(fighter: Fighter)
 	character:SetAttribute("Shield", fighter.shield)
 	character:SetAttribute("MaxShield", fighter.maxShield)
 	character:SetAttribute("Stance", fighter.move.stance)
+	character:SetAttribute("Sprinting", fighter.move.sprinting)
 	character:SetAttribute("Parrying", fighter.move.parrying)
 	character:SetAttribute("Stunned", fighter.move.stunned)
 	character:SetAttribute("Dead", fighter.dead)
@@ -161,6 +162,11 @@ local function publishPublic(fighter: Fighter)
 	local weapon = if fighter.activeSlot == "ranged" then fighter.ranged else fighter.melee
 	character:SetAttribute("WeaponId", if weapon then weapon.item.itemId else nil)
 	character:SetAttribute("WeaponCondition", if weapon then weapon.item.condition else nil)
+	-- Recharge en cours (heure serveur de fin et durée) : animation vue par tous.
+	local ranged = fighter.ranged
+	local reloadEndsAt = if ranged and fighter.activeSlot == "ranged" then ranged.state.reloadEndsAt else nil
+	character:SetAttribute("ReloadUntil", reloadEndsAt)
+	character:SetAttribute("ReloadTime", if reloadEndsAt and ranged then ranged.def.reloadTime else nil)
 	-- Armure et sac visibles (visuels greybox, skins cosmétiques).
 	local backpack = if fighter.bag then fighter.bag.equipped.backpack else nil
 	character:SetAttribute("HelmetId", if fighter.helmet then fighter.helmet.itemId else nil)
@@ -1054,6 +1060,7 @@ local function onReload(player: Player)
 	local time = now()
 	WeaponLogic.startReload(def, ranged.state, time)
 	queueOwnerState(fighter)
+	publishPublic(fighter)
 	local endsAt = ranged.state.reloadEndsAt :: number
 	task.delay(endsAt - time + 0.02, function()
 		if fighter.ranged == ranged and ranged.state.reloadEndsAt == endsAt then
@@ -1226,6 +1233,15 @@ local function onSetMovement(player: Player, stance: Movement.Stance, sprinting:
 	applyMovement(fighter)
 end
 
+-- Visée en haut / en bas (degrés) : l'arme des autres joueurs pointe où ils visent.
+local function onSetAim(player: Player, degrees: number)
+	local fighter = byPlayer[player]
+	if fighter == nil or not Fighter.isAlive(fighter) then
+		return
+	end
+	fighter.character:SetAttribute("AimPitch", math.round(degrees))
+end
+
 -- Fin de recharge due (mercenaires IA : pas de minuterie côté client).
 function CombatService.finishReload(fighter: Fighter)
 	finishReloadIfDue(fighter, now())
@@ -1244,6 +1260,7 @@ function CombatService.init()
 		Guard.tuple(Guard.enum({ "stand", "crouch", "prone" }), Guard.boolean(), Guard.number(0)),
 		onSetMovement
 	)
+	ServerNet.onEvent("SetAim", Guard.tuple(Guard.number(-90, 90)), onSetAim)
 end
 
 function CombatService.start()

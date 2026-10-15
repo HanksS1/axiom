@@ -5,7 +5,8 @@
 	- Tracés des tirs (les siens immédiatement, ceux des autres via ShotFired).
 	- Projectiles lents (Lance-clous, Court-Circuit) : image du projectile en
 	  vol, explosion à l'impact annoncé par le serveur.
-	- Coups de mêlée (bras animé de façon procédurale, en attendant les animations).
+	- Recul des tirs et coups de mêlée : posture de l'arme et des bras
+	  (WeaponPoseController ; ancienne animation de l'épaule pour un avatar R6).
 	- Flash de parade.
 	- Mort : désintégration en voxels néon (~1,2 s), sans gore (section 6.9).
 
@@ -28,6 +29,7 @@ local Projectiles = require(Shared.Combat.Projectiles)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local ProfileController = require(script.Parent.ProfileController)
+local WeaponPoseController = require(script.Parent.WeaponPoseController)
 
 local Visuals = Config.Visuals
 local Combat = Config.Combat
@@ -193,8 +195,12 @@ local function explosion(position: Vector3, radius: number, color: Color3)
 	Debris:AddItem(blast, 0.35)
 end
 
--- Coup de mêlée : rotation rapide de l'épaule droite (procédural, local).
+-- Coup de mêlée : geste de l'arme, les mains suivent (WeaponPoseController).
+-- Avatar R6 (arme dans la main) : rotation rapide de l'épaule droite.
 function EffectsController.playSwing(character: Model)
+	if WeaponPoseController.swing(character) then
+		return
+	end
 	local upperArm = character:FindFirstChild("RightUpperArm")
 	local shoulder = if upperArm then upperArm:FindFirstChild("RightShoulder") else nil
 	if shoulder == nil or not shoulder:IsA("Motor6D") then
@@ -340,24 +346,32 @@ function EffectsController.init()
 end
 
 function EffectsController.start()
-	ClientNet.on("ShotFired", function(shooter: Player?, itemId: string, origin: Vector3, endpoints: { Vector3 })
-		if
-			shooter == player
-			or type(itemId) ~= "string"
-			or typeof(origin) ~= "Vector3"
-			or type(endpoints) ~= "table"
-		then
-			return
+	-- `model` : personnage d'un tireur qui n'est pas un joueur (mercenaire).
+	ClientNet.on(
+		"ShotFired",
+		function(shooter: Player?, itemId: string, origin: Vector3, endpoints: { Vector3 }, model: Instance?)
+			if
+				shooter == player
+				or type(itemId) ~= "string"
+				or typeof(origin) ~= "Vector3"
+				or type(endpoints) ~= "table"
+			then
+				return
+			end
+			local muzzle = origin
+			local character = if shooter
+				then shooter.Character
+				elseif typeof(model) == "Instance" and model:IsA("Model") then model
+				else nil
+			WeaponPoseController.kick(character)
+			local visual = if character then character:FindFirstChild("WeaponVisual") else nil
+			local body = if visual then visual:FindFirstChild("Body") else nil
+			if body and body:IsA("BasePart") then
+				muzzle = (body.CFrame * CFrame.new(0, 0, -body.Size.Z / 2)).Position
+			end
+			EffectsController.playShot(itemId, muzzle, endpoints, false)
 		end
-		local muzzle = origin
-		local character = if shooter then shooter.Character else nil
-		local visual = if character then character:FindFirstChild("WeaponVisual") else nil
-		local body = if visual then visual:FindFirstChild("Body") else nil
-		if body and body:IsA("BasePart") then
-			muzzle = (body.CFrame * CFrame.new(0, 0, -body.Size.Z / 2)).Position
-		end
-		EffectsController.playShot(itemId, muzzle, endpoints, false)
-	end)
+	)
 
 	ClientNet.on("ProjectileFired", function(shooter: Player?, itemId: string, origin: Vector3, velocity: Vector3)
 		if
@@ -368,7 +382,9 @@ function EffectsController.start()
 		then
 			return
 		end
-		EffectsController.playProjectile(itemId, origin, velocity, if shooter then shooter.Character else nil)
+		local character = if shooter then shooter.Character else nil
+		WeaponPoseController.kick(character)
+		EffectsController.playProjectile(itemId, origin, velocity, character)
 	end)
 
 	ClientNet.on("ProjectileImpact", function(itemId: string, position: Vector3, radius: number)
@@ -406,9 +422,12 @@ function EffectsController.start()
 		Debris:AddItem(ring, 1.3)
 	end)
 
-	ClientNet.on("MeleeSwing", function(attacker: Player?)
+	-- `model` : personnage d'un combattant qui n'est pas un joueur (mercenaire).
+	ClientNet.on("MeleeSwing", function(attacker: Player?, _itemId: string?, model: Instance?)
 		if attacker and attacker ~= player and attacker.Character then
 			EffectsController.playSwing(attacker.Character)
+		elseif attacker == nil and typeof(model) == "Instance" and model:IsA("Model") then
+			EffectsController.playSwing(model)
 		end
 	end)
 

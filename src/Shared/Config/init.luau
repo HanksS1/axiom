@@ -30,6 +30,7 @@ local Config = {
 	Settings = require(script.Settings),
 	Hints = require(script.Hints),
 	Visuals = require(script.Visuals),
+	WeaponPoses = require(script.WeaponPoses),
 	Audio = require(script.Audio),
 	Dev = require(script.Dev),
 	Admin = require(script.Admin),

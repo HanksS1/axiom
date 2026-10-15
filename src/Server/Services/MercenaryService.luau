@@ -260,6 +260,7 @@ local function shoot(merc: Mercenary, target: Fighter, distance: number, time: n
 	if not canFire then
 		if block == "empty" and WeaponLogic.canReload(def, state, cells) then
 			WeaponLogic.startReload(def, state, time)
+			CombatService.publish(fighter) -- animation de recharge
 		end
 		return
 	end
@@ -268,6 +269,11 @@ local function shoot(merc: Mercenary, target: Fighter, distance: number, time: n
 		fighter.inventory:takeCells(def.cell, fired.cellsConsumed)
 	end
 	local origin = headOf(fighter)
+	-- L'arme pointe vers la cible (posture vue par les joueurs).
+	local aim = target.root.Position - origin
+	if aim.Magnitude > 0.1 then
+		fighter.character:SetAttribute("AimPitch", math.round(math.deg(math.asin(math.clamp(aim.Unit.Y, -1, 1)))))
+	end
 	CombatService.NoiseMade:Fire(origin, def.noiseRadius)
 
 	-- Précision : selon le mode, baisse avec la distance (au-delà de la portée efficace).
@@ -312,11 +318,12 @@ local function shoot(merc: Mercenary, target: Fighter, distance: number, time: n
 	while #endpoints > 4 do
 		table.remove(endpoints)
 	end
-	ServerNet.fireAll("ShotFired", nil, ranged.item.itemId, origin, endpoints)
+	ServerNet.fireAll("ShotFired", nil, ranged.item.itemId, origin, endpoints, fighter.character)
 	if state.ammo <= 0 and def.capacity then
 		local remaining = fighter.inventory:countCells(def.cell)
 		if WeaponLogic.canReload(def, state, remaining) then
 			WeaponLogic.startReload(def, state, time)
+			CombatService.publish(fighter)
 		end
 	end
 end
@@ -328,7 +335,7 @@ local function melee(merc: Mercenary, target: Fighter, time: number)
 		return
 	end
 	weapon.lastAttackAt = time
-	ServerNet.fireAll("MeleeSwing", nil, weapon.item.itemId)
+	ServerNet.fireAll("MeleeSwing", nil, weapon.item.itemId, fighter.character)
 	CombatService.meleeHit(fighter, target, Damage.melee(weapon.def, weapon.item.condition :: number), {
 		breaksParry = weapon.def.breaksParry,
 		parryBreakStun = weapon.def.parryBreakStun,

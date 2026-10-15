@@ -27,6 +27,7 @@ return Freeze.deep({
 		MeleeAttack = { rate = 4, burst = 6 },
 		SetParry = { rate = 6, burst = 10 },
 		SetMovement = { rate = 10, burst = 15 },
+		SetAim = { rate = 8, burst = 12 }, -- au plus ~7/s (Config.WeaponPoses.aimSendInterval)
 		-- Loot et inventaire
 		TakeItem = { rate = 8, burst = 12 },
 		TakeAll = { rate = 1, burst = 3 },

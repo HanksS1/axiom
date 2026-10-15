@@ -9,8 +9,9 @@
 	  réellement la silhouette.
 	- Création du combattant à partir de l'équipement du profil (ou du kit
 	  de base s'il est vide).
-	- Visuels provisoires : arme tenue en main, casque, gilet et sac portés,
-	  postures accroupi / couché. Les skins cosmétiques équipés (P9) en
+	- Visuels provisoires : arme tenue (R15 : montée devant le torse, les
+	  clients y posent les mains, voir WeaponPoseController), casque, gilet et
+	  sac portés, postures accroupi / couché. Les skins cosmétiques équipés (P9) en
 	  changent les couleurs et la matière (aucun effet sur le jeu).
 ]]
 
@@ -26,6 +27,7 @@ local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
 local CombatService = require(script.Parent.CombatService)
 local ItemModels = require(Shared.Visuals.ItemModels)
+local WeaponPose = require(Shared.Visuals.WeaponPose)
 local DataService = require(script.Parent.DataService)
 local InventoryService = require(script.Parent.InventoryService)
 
@@ -87,22 +89,59 @@ local function setVisual(character: Model, name: string, fill: ((model: Model) -
 	end
 end
 
--- Arme tenue en main (même modèle que les icônes : Shared/Visuals/ItemModels),
--- mise à jour quand l'arme active ou son skin change.
+--[[
+	Arme tenue (même modèle que les icônes : Shared/Visuals/ItemModels), mise à
+	jour quand l'arme active ou son skin change.
+
+	R15 : l'arme est montée devant le haut du torse par un joint « WeaponGrip »
+	(position de repos : Shared/Visuals/WeaponPose) ; chaque client l'anime et
+	y pose les deux mains. Elle ne suit donc plus le balancement des bras.
+	R6 (pas de bras articulés) : soudée à la main droite, comme avant.
+]]
 local function updateWeaponVisual(character: Model)
 	local weaponId = character:GetAttribute("WeaponId")
+	local torso = bodyPart(character, { "UpperTorso" })
 	local hand = bodyPart(character, { "RightHand", "Right Arm" })
 	local shape = if type(weaponId) == "string" then Visuals.weapons[weaponId] else nil
 	if hand == nil or shape == nil then
 		setVisual(character, "WeaponVisual", nil)
 		return
 	end
+	local mounted = torso ~= nil and character:FindFirstChild("RightUpperArm") ~= nil
 	setVisual(character, "WeaponVisual", function(model)
-		-- Le cœur de l'arme (« Body ») se place par rapport à la main ; tout le reste suit.
-		ItemModels.place(weaponId :: string, model, hand.CFrame * shape.gripOffset, {
-			skin = skinOf(character, "WeaponSkin"),
-			weldTo = hand,
-		})
+		model:SetAttribute("ItemId", weaponId)
+		local skin = skinOf(character, "WeaponSkin")
+		if not mounted or torso == nil then
+			-- Le cœur de l'arme (« Body ») se place par rapport à la main ; tout le reste suit.
+			ItemModels.place(weaponId :: string, model, hand.CFrame * shape.gripOffset, {
+				skin = skin,
+				weldTo = hand,
+			})
+			return
+		end
+		local rest = WeaponPose.rest(weaponId :: string, WeaponPose.scaleOf(torso.Size))
+		local parts = ItemModels.place(weaponId :: string, model, torso.CFrame * rest, { skin = skin })
+		local body = model:FindFirstChild("Body")
+		if body == nil or not body:IsA("BasePart") then
+			return
+		end
+		-- Toutes les pièces suivent le cœur ; le cœur suit le torse par le joint.
+		for _, part in parts do
+			if part ~= body then
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = body
+				weld.Part1 = part
+				weld.Parent = part
+			end
+			part.Anchored = false
+		end
+		local joint = Instance.new("Motor6D")
+		joint.Name = "WeaponGrip"
+		joint.Part0 = torso
+		joint.Part1 = body
+		joint.C0 = rest
+		joint.C1 = CFrame.identity
+		joint.Parent = body
 	end)
 end
 

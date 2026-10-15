@@ -159,6 +159,46 @@ explosion, traverse les couverts, anti-robots, discrétion, parade…). Calcul p
 commun < 500 ≤ rare < 1 000 ≤ épique < 2 000 ≤ légendaire < 2 800 ≤ mythique. Précision affichée :
 100 % − dispersion / 8° (`precisionSpreadZero`).
 
+## Retours de test : arme tenue, tirs et coups animés
+
+**Arme tenue comme dans la réalité.** Avatar R15 : le serveur ne soude plus l'arme à la main
+droite (elle suivait le balancement de la marche) mais la monte devant le haut du torse par un
+joint `WeaponGrip` (`CharacterService`). Chaque client (`WeaponPoseController`), après les
+animations et à chaque image, place l'arme puis pose les deux mains dessus : main droite sur la
+poignée, main gauche sur le garde-main (bras calculés, coude orienté, poignet dans l'axe de
+l'avant-bras : `Shared/Visuals/WeaponPose`, testé). Les jambes gardent leurs animations. Avatar
+R6 : ancien comportement (arme dans la main).
+
+Prises (`Config/WeaponPoses`, positions commentées, à régler en jeu) : pistolets à deux mains bras
+tendus ; fusils, mitraillettes, fusil à pompe, Lance-clous, Aiguille, Court-Circuit épaulés, buste
+tourné de 35° (l'épaule gauche avance) ; armes lourdes à la hanche ; mêlée à une main levée
+devant soi ; Marteau à deux mains au-dessus de l'épaule ; Gantelet en garde de boxeur. En sprint :
+arme en travers de la poitrine (fusils), basse (pistolets, armes lourdes), le long du corps
+(mêlée). Garde (parade) : arme à l'horizontale devant soi. Couché : arme devant la tête.
+
+**Visée.** L'arme et la tête suivent la visée en haut / en bas (le buste en prend 35 %). Le joueur
+local envoie sa visée au serveur (`SetAim`, au plus ~7 fois par seconde et seulement si elle a
+changé de 3° ou plus), qui la publie dans l'attribut `AimPitch` : les autres la voient. Les
+mercenaires pointent leur arme vers leur cible.
+
+**Tirs.** Chaque tir donne un recul : l'arme recule et le canon se relève, selon la famille
+d'arme (`Config.WeaponPoses.recoil` : fort au fusil à pompe et à l'Aiguille, faible à la
+mitraillette, tremblement à la Mitrailleuse). Vu par tous : le serveur diffuse déjà les tirs
+(`ShotFired`, qui transporte maintenant aussi le personnage d'un mercenaire).
+
+**Coups de mêlée.** L'arme décrit un vrai geste : armé, frappe accélérée, retour (`swingTiming`),
+en alternant deux gestes (coup en diagonale puis revers ; frappe par le haut puis balayage au
+Marteau ; direct puis crochet au Gantelet). Durée = 0,75 / coups par seconde, entre 0,3 et 0,65 s.
+
+**Recharge.** L'arme bascule sur le côté et la main gauche va chercher une cellule à la ceinture
+puis revient. Vu par tous : attributs `ReloadUntil` (heure serveur) et `ReloadTime`.
+
+*Limites* : les mesures des prises sont faites pour un avatar R15 standard et mises à l'échelle
+de la hauteur du torse ; un avatar aux proportions très différentes (Rthro) peut avoir une main
+qui n'atteint pas tout à fait le garde-main. Au-delà de 250 studs, les personnages ne sont plus
+posés (bras animés par défaut). Le serveur, lui, ne voit pas ces postures (sans effet sur les
+touches : l'arme ne se touche pas, et les bras restent proches du corps).
+
 ## Questions ouvertes
 
 1. **Temps pour tuer** : le document vise 0,6 à 1,2 s contre 100 PV + 100 de bouclier.
