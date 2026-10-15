@@ -109,6 +109,18 @@ function MovementController.isMoving(): boolean
 	return moveVector().Magnitude > 0.1
 end
 
+-- Le personnage est-il en l'air (saut, chute) ?
+function MovementController.isAirborne(): boolean
+	local _, humanoid = character()
+	if humanoid == nil then
+		return false
+	end
+	local state = humanoid:GetState()
+	return humanoid.FloorMaterial == Enum.Material.Air
+		or state == Enum.HumanoidStateType.Jumping
+		or state == Enum.HumanoidStateType.Freefall
+end
+
 -- Arrête le sprint (le tir et la garde l'interrompent).
 function MovementController.stopSprint()
 	sprintWanted = false

@@ -63,6 +63,9 @@ export type RangedDef = {
 	-- Aiguille et armes lourdes : aucun · Court-Circuit 2,5 (arme anti-robot, plafond).
 	robotDamageMultiplier: number?,
 	slowOnHit: { multiplier: number, duration: number }?,
+	-- Lunette : en visant, la vue passe à la première personne, zoomée (`fieldOfView`),
+	-- et la dispersion est réduite (× `spreadMultiplier`) une fois la lunette en place.
+	scope: { fieldOfView: number, spreadMultiplier: number }?,
 	up: number,
 	baseValue: number,
 }
@@ -232,6 +235,8 @@ local ranged: { [string]: RangedDef } = {
 		noiseRadius = DEFAULT_NOISE,
 		tracerDuration = 0.5,
 		up = 5,
+		-- Lunette de tireur d'élite : première personne, zoom ×3,5 environ.
+		scope = { fieldOfView = 20, spreadMultiplier = 0.25 },
 		baseValue = 1500,
 	},
 	bastion_minigun = {
@@ -360,4 +365,16 @@ local melee: { [string]: MeleeDef } = {
 return Freeze.deep({
 	ranged = ranged,
 	melee = melee,
+
+	-- Fiche de détail des armes : rareté selon la valeur de base (seuil minimal de chaque
+	-- rareté, dans l'ordre), et précision affichée = 100 % − dispersion / `precisionSpreadZero`
+	-- (une dispersion de 8° ou plus vaut 0 %).
+	rarityByValue = {
+		{ rarity = "common", minValue = 0 },
+		{ rarity = "rare", minValue = 500 },
+		{ rarity = "epic", minValue = 1000 },
+		{ rarity = "legendary", minValue = 2000 },
+		{ rarity = "mythic", minValue = 2800 },
+	},
+	precisionSpreadZero = 8,
 })

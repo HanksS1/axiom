@@ -46,6 +46,16 @@ local currentFov = CameraConfig.fieldOfView
 local currentStanceY = 0
 local enabled = true
 local mouseFree = false
+-- Lunette de l'arme en main (nil : aucune) et progression du passage à la première
+-- personne (0 : vue à l'épaule, 1 : dans la lunette).
+local scope: { fieldOfView: number, spreadMultiplier: number }? = nil
+local scopeProgress = 0
+local hiddenForScope = false
+
+-- Sensibilité réduite à proportion du zoom (une lunette ×3 tourne 3 fois moins vite).
+local function zoomFactor(): number
+	return math.clamp(currentFov / CameraConfig.fieldOfView, 0.15, 1)
+end
 -- Tremblement (effondrements, grondements, Gardien qui surgit).
 local shakeIntensity = 0
 local shakeUntil = 0
@@ -111,7 +121,11 @@ end
 
 function CameraController.addTouchDelta(delta: Vector2)
 	lastLookInputAt = os.clock()
-	local factor = TOUCH_FACTOR * setting("touchSensitivity", 1) * (if aiming then 0.6 else 1) * assistSlowdown()
+	local factor = TOUCH_FACTOR
+		* setting("touchSensitivity", 1)
+		* (if aiming then 0.6 else 1)
+		* (if scopeProgress > 0 then zoomFactor() else 1)
+		* assistSlowdown()
 	CameraController.addLookDelta(delta.X * factor, delta.Y * factor)
 end
 
@@ -121,6 +135,33 @@ end
 
 function CameraController.isAiming(): boolean
 	return aiming
+end
+
+-- Lunette de l'arme en main (WeaponController la renseigne à chaque image).
+function CameraController.setScope(value: { fieldOfView: number, spreadMultiplier: number }?)
+	scope = value
+end
+
+-- 0 : vue normale ; 1 : complètement dans la lunette (première personne, zoom).
+function CameraController.scopeProgress(): number
+	return scopeProgress
+end
+
+-- Première personne dans la lunette : le personnage (et son arme) ne doit pas boucher la vue.
+local function hideCharacter(hidden: boolean)
+	if hidden == hiddenForScope then
+		return
+	end
+	hiddenForScope = hidden
+	local character = player.Character
+	if character == nil then
+		return
+	end
+	for _, descendant in character:GetDescendants() do
+		if descendant:IsA("BasePart") or descendant:IsA("Decal") then
+			descendant.LocalTransparencyModifier = if hidden then 1 else 0
+		end
+	end
 end
 
 function CameraController.setStanceOffset(offsetY: number)
@@ -202,7 +243,10 @@ local function update(dt: number)
 	-- Manette : stick droit.
 	if gamepadLook.Magnitude > 0.15 then
 		lastLookInputAt = os.clock()
-		local sensitivity = setting("gamepadSensitivity", 1) * (if aiming then 0.55 else 1) * assistSlowdown()
+		local sensitivity = setting("gamepadSensitivity", 1)
+			* (if aiming then 0.55 else 1)
+			* (if scopeProgress > 0 then zoomFactor() else 1)
+			* assistSlowdown()
 		local stick = gamepadLook * gamepadLook.Magnitude -- courbe quadratique (précision)
 		CameraController.addLookDelta(
 			stick.X * GAMEPAD_RATE * sensitivity * dt,
@@ -212,12 +256,21 @@ local function update(dt: number)
 
 	-- Transitions douces (visée, posture).
 	local alpha = math.clamp(dt / CameraConfig.transitionTime, 0, 1)
+	-- Lunette : en visant avec une arme à lunette, passage progressif à la première personne.
+	local scoped = aiming and scope ~= nil
+	local step = dt / CameraConfig.scopeTransitionTime
+	scopeProgress = math.clamp(scopeProgress + (if scoped then step else -step), 0, 1)
+	local s = scopeProgress * scopeProgress * (3 - 2 * scopeProgress) -- départ et arrivée en douceur
 	local targetOffset = if aiming then CameraConfig.aimShoulderOffset else CameraConfig.shoulderOffset
-	currentOffset = currentOffset:Lerp(targetOffset, alpha)
-	currentDistance = lerp(currentDistance, if aiming then CameraConfig.aimDistance else CameraConfig.distance, alpha)
-	currentFov = lerp(currentFov, if aiming then CameraConfig.aimFieldOfView else CameraConfig.fieldOfView, alpha)
+	currentOffset = currentOffset:Lerp(targetOffset:Lerp(Vector3.zero, s), alpha)
+	local aimDistance = lerp(CameraConfig.aimDistance, 0, s)
+	currentDistance = lerp(currentDistance, if aiming then aimDistance else CameraConfig.distance, alpha)
+	local scopeFov = if scope then scope.fieldOfView else CameraConfig.aimFieldOfView
+	local aimFov = lerp(CameraConfig.aimFieldOfView, scopeFov, s)
+	currentFov = lerp(currentFov, if aiming then aimFov else CameraConfig.fieldOfView, alpha)
 	currentStanceY = lerp(currentStanceY, stanceOffsetY, alpha)
 	camera.FieldOfView = currentFov
+	hideCharacter(scopeProgress > 0.7)
 
 	local focus = root.Position + Vector3.new(0, 1.5 + currentStanceY, 0)
 	local rotation = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
@@ -320,7 +373,10 @@ function CameraController.start()
 	UserInputService.InputChanged:Connect(function(input: InputObject, processed: boolean)
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
 			if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-				local factor = MOUSE_FACTOR * setting("mouseSensitivity", 1) * (if aiming then 0.6 else 1)
+				local factor = MOUSE_FACTOR
+					* setting("mouseSensitivity", 1)
+					* (if aiming then 0.6 else 1)
+					* (if scopeProgress > 0 then zoomFactor() else 1)
 				CameraController.addLookDelta(input.Delta.X * factor, input.Delta.Y * factor)
 			end
 		elseif input.KeyCode == Enum.KeyCode.Thumbstick2 then
@@ -345,6 +401,8 @@ function CameraController.start()
 	end)
 
 	player.CharacterAdded:Connect(function(character)
+		hiddenForScope = false
+		scopeProgress = 0
 		local root = character:WaitForChild("HumanoidRootPart", 10) :: BasePart?
 		if root then
 			local _, rootYaw, _ = root.CFrame:ToEulerAnglesYXZ()
