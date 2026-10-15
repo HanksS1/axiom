@@ -258,12 +258,46 @@ function EconomyRules.buy(
 	if profile.credits < price then
 		return false, "not_enough_credits", nil
 	end
+	local stackSize = info.stackSize
+	if stackSize then
+		-- Objet empilable : on complète d'abord les piles entamées du coffre (la
+		-- place se compte par pile : acheter à l'unité ne doit pas en coûter plus).
+		local amount = math.clamp(quantity or stackSize, 1, stackSize)
+		local room = 0
+		for _, owned in profile.vault do
+			if owned.itemId == itemId then
+				room += math.max(0, stackSize - (owned.stack or 1))
+			end
+		end
+		if amount > room and EconomyRules.vaultFree(profile) < info.up then
+			return false, "vault_full", nil
+		end
+		profile.credits -= price
+		local remaining = amount
+		local last: ItemInstance? = nil
+		for _, owned in profile.vault do
+			if remaining <= 0 then
+				break
+			end
+			if owned.itemId == itemId and (owned.stack or 1) < stackSize then
+				local added = math.min(remaining, stackSize - (owned.stack or 1))
+				owned.stack = (owned.stack or 1) + added
+				remaining -= added
+				last = owned
+			end
+		end
+		if remaining > 0 then
+			local item = create(itemId, { stack = remaining })
+			table.insert(profile.vault, item)
+			last = item
+		end
+		return true, nil, last
+	end
 	if EconomyRules.vaultFree(profile) < info.up then
 		return false, "vault_full", nil
 	end
 	local item = create(itemId, {
 		condition = if info.hasCondition then condition else nil,
-		stack = if info.stackSize then math.clamp(quantity or info.stackSize, 1, info.stackSize) else nil,
 	})
 	profile.credits -= price
 	table.insert(profile.vault, item)

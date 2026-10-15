@@ -33,6 +33,7 @@ local Movement = require(Shared.Combat.Movement)
 local Projectiles = require(Shared.Combat.Projectiles)
 local Signal = require(Shared.Util.Signal)
 local WeaponLogic = require(Shared.Combat.WeaponLogic)
+local ConsumableRules = require(Shared.Items.ConsumableRules)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local HitValidator = require(script.Parent.Parent.Combat.HitValidator)
@@ -410,7 +411,8 @@ end
 	Utilisation d'un consommable du sac (section 8.6). Pendant le temps
 	d'utilisation, le joueur est ralenti et ne peut ni tirer, ni frapper, ni
 	parer ; l'effet s'applique à la fin (annulé en cas de mort).
-	Retourne (succès, raison) : "dead", "busy", "missing", "useless".
+	Retourne (succès, raison) : "dead", "busy", "missing", ou une raison de
+	Shared/Items/ConsumableRules ("useless", "exo_used").
 ]]
 function CombatService.useConsumable(fighter: Fighter, itemId: string): (boolean, string?)
 	local bag = fighter.bag
@@ -427,14 +429,9 @@ function CombatService.useConsumable(fighter: Fighter, itemId: string): (boolean
 		return false, "missing"
 	end
 	local effect = def.effect
-	if effect.heal and fighter.health >= fighter.maxHealth then
-		return false, "useless"
-	end
-	if effect.shield and (fighter.maxShield <= 0 or fighter.shield >= fighter.maxShield) then
-		return false, "useless"
-	end
-	if effect.bonusUp and fighter.exoUsed then
-		return false, "useless"
+	local refusal = ConsumableRules.refusal(effect, fighter)
+	if refusal then
+		return false, refusal
 	end
 
 	local function apply()
@@ -455,6 +452,10 @@ function CombatService.useConsumable(fighter: Fighter, itemId: string): (boolean
 		if effect.bonusUp then
 			fighter.exoUsed = true
 			bag.bonusUp += effect.bonusUp
+			-- Retour visible : la jauge du sac grandit, et on dit de combien.
+			if fighter.player then
+				ServerNet.notify(fighter.player, "consumable.exo.used", { up = effect.bonusUp })
+			end
 		end
 		if fighter.onInventoryChanged then
 			fighter.onInventoryChanged()

@@ -69,6 +69,27 @@ task.spawn(function()
 	game:GetService("Players").LocalPlayer:SetAttribute("AxiomReady", true)
 end)
 
+--[[
+	Démarrage dans l'ordre. Une erreur est déjà isolée par `guarded` ; une
+	attente qui ne finit pas (WaitForChild sans délai…) ne doit pas non plus
+	bloquer les contrôleurs suivants : chaque `start` tourne dans sa propre
+	tâche, on l'attend au plus START_TIMEOUT secondes (les suivants peuvent
+	compter sur lui : ordre conservé tant qu'il répond), puis on continue.
+]]
+local START_TIMEOUT = 5
 for _, entry in loaded do
-	guarded(entry.name, "start", entry.controller.start)
+	local done = false
+	task.spawn(function()
+		guarded(entry.name, "start", entry.controller.start)
+		done = true
+	end)
+	local began = os.clock()
+	while not done and os.clock() - began < START_TIMEOUT do
+		task.wait()
+	end
+	if not done then
+		warn(
+			`[Axiom] start de {entry.name} toujours en attente après {START_TIMEOUT} s : les contrôleurs suivants démarrent quand même`
+		)
+	end
 end

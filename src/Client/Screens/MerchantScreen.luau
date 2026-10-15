@@ -154,23 +154,82 @@ function MerchantScreen.create(parent: Instance, t: Translate): Screen
 		return cells
 	end
 
+	-- Exemplaires possédés (coffre, sac préparé) d'un objet empilable.
+	local function ownedCount(view: Types.ProfileView, itemId: string): number
+		local total = 0
+		for _, items in { view.vault, view.bag } do
+			for _, item in items do
+				if item.itemId == itemId then
+					total += item.stack or 1
+				end
+			end
+		end
+		return total
+	end
+
+	local function sectionTitle(order: number, key: string)
+		Create("TextLabel", {
+			LayoutOrder = order,
+			Size = UDim2.new(1, 0, 0, 26),
+			BackgroundTransparency = 1,
+			Font = Theme.fontTitle,
+			TextSize = 15,
+			TextColor3 = Theme.orange,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Text = t(key),
+			Parent = list,
+		})
+	end
+
 	local function renderBuy(view: Types.ProfileView)
 		local order = 0
+		-- Survie (soins, batterie, Surcharge, exo-harnais) : achats de routine avant
+		-- chaque partie, à l'unité ou par pile, avec le nombre déjà possédé.
+		local survival = Config.Economy.merchant.survivalItems
+		order += 1
+		sectionTitle(order, "merchant.survival")
+		for _, itemId in survival do
+			local info = ItemCatalog.get(itemId)
+			local stackSize = if info then info.stackSize or 1 else 1
+			local unitPrice = Pricing.merchantPrice(itemId, nil, 1)
+			local stackPrice = Pricing.merchantPrice(itemId, nil, stackSize)
+			if info == nil or unitPrice == nil or stackPrice == nil then
+				continue
+			end
+			order += 1
+			local preview: Types.ItemInstance = {
+				uid = `survival_{itemId}`,
+				itemId = itemId,
+			}
+			local owned = ownedCount(view, itemId)
+			local function buyAction(quantity: number, price: number, key: string)
+				return {
+					label = t(key, { credits = price, count = quantity }),
+					color = if view.credits >= price then Theme.green else Theme.textDim,
+					callback = function()
+						confirmIfNeeded(price, "merchant.confirmBuy", function(confirmed)
+							ClientNet.fire("MerchantBuy", itemId, nil, quantity, confirmed)
+						end)
+					end,
+				}
+			end
+			local card = ItemCard.create(preview, t, {
+				buyAction(1, unitPrice, "merchant.buyOne"),
+				buyAction(stackSize, stackPrice, "merchant.buyStack"),
+			}, order)
+			-- Ce que l'on possède déjà (coffre et sac préparé), en tête des détails.
+			local details = card:FindFirstChild("Details", true)
+			if details and details:IsA("TextLabel") then
+				details.Text = t("merchant.owned", { count = owned }) .. "  ·  " .. details.Text
+			end
+			card.Parent = list
+		end
+		-- En tête : les munitions de VOS armes (le reste du catalogue suit).
 		-- En tête : les munitions de VOS armes (le reste du catalogue suit).
 		local cells = ammoNeeded(view)
 		if #cells > 0 then
 			order += 1
-			Create("TextLabel", {
-				LayoutOrder = order,
-				Size = UDim2.new(1, 0, 0, 26),
-				BackgroundTransparency = 1,
-				Font = Theme.fontTitle,
-				TextSize = 15,
-				TextColor3 = Theme.orange,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				Text = t("merchant.yourAmmo"),
-				Parent = list,
-			})
+			sectionTitle(order, "merchant.yourAmmo")
 			for _, cellId in cells do
 				local info = ItemCatalog.get(cellId) :: ItemCatalog.ItemInfo
 				local price = Pricing.merchantPrice(cellId, nil)
@@ -209,10 +268,15 @@ function MerchantScreen.create(parent: Instance, t: Translate): Screen
 			end
 			return a < b
 		end)
+		order += 1
+		sectionTitle(order, "merchant.catalog")
 		for _, itemId in ids do
 			local info = ItemCatalog.get(itemId) :: ItemCatalog.ItemInfo
 			if info.def.dropOnlyFromElites then
 				continue -- Lame vibrante : lâchée uniquement par les élites
+			end
+			if table.find(survival, itemId) then
+				continue -- déjà en tête (Survie)
 			end
 			local conditions: { number? } = if info.hasCondition
 				then Config.Economy.merchant.sellsConditions :: any

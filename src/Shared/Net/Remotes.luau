@@ -22,6 +22,7 @@ local Remotes: { [string]: RemoteDef } = {
 	ProfileSync = { kind = "event", toServer = false },
 	RequestProfile = { kind = "function", toServer = true },
 	UpdateSetting = { kind = "event", toServer = true },
+	GuideSeen = { kind = "event", toServer = true }, -- aide de station lue (« Compris »)
 	-- Notifications localisées (clé + paramètres)
 	Notify = { kind = "event", toServer = false },
 	-- Outils de développement (Studio uniquement, ignorés en production)

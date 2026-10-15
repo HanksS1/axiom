@@ -26,6 +26,66 @@ return function(T, H)
 		return ProfileTemplate.new(1000)
 	end
 
+	describe("Marchand : consommables de survie", function()
+		local Pricing = H.require("ReplicatedStorage/Shared/Economy/Pricing")
+
+		it("achat à l'unité : complète la pile entamée sans prendre plus de place", function()
+			local p = profile()
+			p.credits = 100000
+			local ok = EconomyRules.buy(p, "nanite_injector", nil, 1, create)
+			expect(ok).toBe(true)
+			local free = EconomyRules.vaultFree(p)
+			EconomyRules.buy(p, "nanite_injector", nil, 1, create)
+			EconomyRules.buy(p, "nanite_injector", nil, 1, create)
+			expect(EconomyRules.vaultFree(p)).toBe(free) -- une seule pile de 3
+			local stacks = 0
+			for _, item in p.vault do
+				if item.itemId == "nanite_injector" then
+					stacks += 1
+					expect(item.stack).toBe(3)
+				end
+			end
+			expect(stacks).toBe(1)
+			-- La 4e unité ouvre une nouvelle pile.
+			EconomyRules.buy(p, "nanite_injector", nil, 1, create)
+			expect(EconomyRules.vaultFree(p)).toBe(free - Config.Equipment.consumables.nanite_injector.up)
+		end)
+
+		it("pile complète en un achat ; prix au prorata de la quantité", function()
+			local p = profile()
+			p.credits = 100000
+			local before = p.credits
+			local stackPrice = Pricing.merchantPrice("shield_battery", nil, 3)
+			local unitPrice = Pricing.merchantPrice("shield_battery", nil, 1)
+			expect(EconomyRules.buy(p, "shield_battery", nil, 3, create)).toBe(true)
+			expect(p.credits).toBe(before - stackPrice)
+			expect(math.abs(unitPrice * 3 - stackPrice) <= 1).toBe(true)
+		end)
+
+		it("pile entamée complétée même coffre plein", function()
+			local p = profile()
+			p.credits = 100000
+			EconomyRules.buy(p, "overdrive", nil, 1, create)
+			-- Remplit le coffre avec des objets quelconques.
+			while EconomyRules.vaultFree(p) > 0 do
+				table.insert(p.vault, create("sentinel_rifle"))
+			end
+			local ok = EconomyRules.buy(p, "overdrive", nil, 2, create)
+			expect(ok).toBe(true)
+			local ok2, why = EconomyRules.buy(p, "overdrive", nil, 1, create)
+			expect(ok2).toBe(false)
+			expect(why).toBe("vault_full")
+		end)
+
+		it("accessibles en début de progression (prix à l'unité sous une partie extraite)", function()
+			local C = Config.Progression.credits
+			local extraction = C.participation + C.extractionBonus
+			for _, itemId in Config.Economy.merchant.survivalItems do
+				expect(Pricing.merchantPrice(itemId, nil, 1) < extraction).toBe(true)
+			end
+		end)
+	end)
+
 	describe("Coffre et équipement", function()
 		it("équiper depuis le coffre, l'ancien objet revient au coffre", function()
 			local p = profile()

@@ -258,12 +258,12 @@ function DeployScreen.create(parent: Instance, t: Translate, hooks: Hooks?): Scr
 		end
 
 		local header = Panel.label(t("deploy.score", { score = score }), 18, Theme.text)
-		header.LayoutOrder = 0
+		header.LayoutOrder = -2
 		header.Parent = content
 
 		-- Butin de la partie précédente à trier : il bloque tous les modes, on peut le trier d'ici.
 		if #view.pendingLoot > 0 then
-			local pendingRow = row(1, 48)
+			local pendingRow = row(-1, 48)
 			local pendingLabel = Panel.label(t("deploy.pendingLoot", { count = #view.pendingLoot }), 15, Theme.orange)
 			pendingLabel.LayoutOrder = 1
 			pendingLabel.Size = UDim2.new(1, -230, 1, 0)
@@ -279,7 +279,14 @@ function DeployScreen.create(parent: Instance, t: Translate, hooks: Hooks?): Scr
 			end)
 		end
 
-		-- Modes : cartes avec plage de SE et raison éventuelle du refus.
+		-- Modes : cartes avec plage de SE et raison éventuelle du refus. Le niveau
+		-- (choisi ici) et les cartes (plus bas) sont deux choix distincts.
+		local levelTitle = Panel.label(t("deploy.levelTitle"), 16, Theme.text)
+		levelTitle.LayoutOrder = 0
+		levelTitle.TextWrapped = true
+		levelTitle.AutomaticSize = Enum.AutomaticSize.Y
+		levelTitle.Size = UDim2.new(1, -8, 0, 0)
+		levelTitle.Parent = content
 		local modesRow = row(2, 96)
 		for index, modeId in Config.Modes.list do
 			local mode = Config.Modes.byId[modeId]
@@ -291,9 +298,10 @@ function DeployScreen.create(parent: Instance, t: Translate, hooks: Hooks?): Scr
 			local range = if mode.maxScore
 				then t("deploy.range", { min = mode.minScore, max = mode.maxScore })
 				else t("deploy.rangeOpen", { min = mode.minScore })
+			-- Largeur proportionnelle : les trois modes restent visibles sur un petit écran.
 			local card = Create("TextButton", {
 				LayoutOrder = index,
-				Size = UDim2.fromOffset(220, 90),
+				Size = UDim2.new(1 / #Config.Modes.list, -8, 0, 90),
 				BackgroundColor3 = Theme.panel,
 				BackgroundTransparency = if chosen then 0 else 0.35,
 				AutoButtonColor = refusal == nil,

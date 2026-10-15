@@ -6,6 +6,10 @@
 	une valeur brute, un texte (clé + paramètres à traduire) et, pour les
 	barres, une part de 0 à 1 par rapport à la meilleure arme de la même
 	catégorie. L'état de l'objet (efficacité) s'applique aux dégâts.
+
+	Place dans le sac (`up`) : sans barre (une barre plus longue voudrait
+	dire « mieux », or ici c'est l'inverse), avec un qualificatif relatif aux
+	armes de la même catégorie : léger, moyen, encombrant.
 ]]
 
 local Config = require(script.Parent.Parent.Config)
@@ -88,6 +92,25 @@ local function maxOf(list: { [string]: any }, read: (def: any) -> number?): numb
 		end
 	end
 	return math.max(best, 1e-6)
+end
+
+-- Ligne « place dans le sac » : UP de l'arme, qualifiée par rapport à sa catégorie
+-- (tiers inférieur : légère, tiers supérieur : encombrante).
+local function spaceLine(def: any, list: { [string]: any }): Line
+	local low, high = math.huge, -math.huge
+	for _, other in list do
+		low = math.min(low, other.up)
+		high = math.max(high, other.up)
+	end
+	local span = math.max(high - low, 1)
+	local tier = if def.up <= low + span / 3 then "light" elseif def.up >= high - span / 3 then "bulky" else "medium"
+	return {
+		key = "space",
+		value = def.up,
+		text = "weapon.value.space." .. tier,
+		params = { value = def.up },
+		ratio = nil,
+	}
 end
 
 local function round(value: number, decimals: number): number
@@ -180,6 +203,7 @@ function WeaponStats.sheet(itemId: string, condition: number?): Sheet?
 			key = "ammo",
 			text = "item." .. def.cell,
 		})
+		table.insert(lines, spaceLine(def, list))
 		if def.headshots then
 			table.insert(traits, "headshots")
 		end
@@ -244,6 +268,7 @@ function WeaponStats.sheet(itemId: string, condition: number?): Sheet?
 				return d.range
 			end),
 		})
+		table.insert(lines, spaceLine(def, list))
 		table.insert(traits, "parry")
 		if def.breaksParry then
 			table.insert(traits, "breaksParry")

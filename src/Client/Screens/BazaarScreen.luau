@@ -23,6 +23,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Shop = require(Shared.Monetization.Shop)
+local SkinSort = require(Shared.Monetization.SkinSort)
 local Types = require(Shared.Types)
 
 local Create = require(script.Parent.Parent.UI.Create)
@@ -111,6 +112,9 @@ end
 function BazaarScreen.create(parent: Instance, t: Translate, hooks: Hooks): Screen
 	local panel = Panel.create("BazaarScreen", parent, Theme.magenta)
 	local tab = "featured"
+	-- Collection : classement (par type d'objet ou par rareté) et skins montrés.
+	local collectionMode: SkinSort.Mode = "type"
+	local collectionShow: "owned" | "all" = "owned"
 	local expanded: { [string]: boolean } = {}
 
 	local tabs = Panel.list("Tabs")
@@ -177,7 +181,7 @@ function BazaarScreen.create(parent: Instance, t: Translate, hooks: Hooks): Scre
 			TextSize = 18,
 			TextColor3 = Theme.magenta,
 		})
-		for _, cosmeticId in Shop.rotation(Shop.dayIndex(os.time())) do
+		for _, cosmeticId in SkinSort.sort(Shop.rotation(Shop.dayIndex(os.time()))) do
 			local def = Config.Cosmetics.byId[cosmeticId]
 			local owned = view.cosmeticsOwned[cosmeticId] == true
 			local price = Shop.directPrice(cosmeticId) or 0
@@ -303,7 +307,7 @@ function BazaarScreen.create(parent: Instance, t: Translate, hooks: Hooks): Scre
 				for _, rarity in M.rarities do
 					if crate.odds[rarity] > 0 then
 						local names = {}
-						for _, id in Shop.cosmeticsOfRarity(rarity) do
+						for _, id in SkinSort.sort(Shop.cosmeticsOfRarity(rarity)) do
 							table.insert(names, BazaarScreen.cosmeticName(t, id))
 						end
 						text(
@@ -374,53 +378,171 @@ function BazaarScreen.create(parent: Instance, t: Translate, hooks: Hooks): Scre
 		})
 	end
 
+	-- Choix d'affichage de la collection (deux bascules).
+	local function collectionControls(view: Types.ProfileView)
+		local row = Create("Frame", {
+			LayoutOrder = nextOrder(),
+			Size = UDim2.new(1, -8, 0, 40),
+			BackgroundTransparency = 1,
+			Parent = list,
+		}, {
+			Layout = Create("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				Padding = UDim.new(0, 8),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+		})
+		local function toggle(position: number, label: string, active: boolean, onPick: () -> ())
+			local button = Panel.button(label, if active then Theme.magenta else Theme.textDim, 150)
+			button.LayoutOrder = position
+			button.Parent = row
+			button.Activated:Connect(function()
+				onPick()
+				render_(view)
+			end)
+		end
+		toggle(1, t("shop.sort.type"), collectionMode == "type", function()
+			collectionMode = "type"
+		end)
+		toggle(2, t("shop.sort.rarity"), collectionMode == "rarity", function()
+			collectionMode = "rarity"
+		end)
+		toggle(3, t("shop.show.owned"), collectionShow == "owned", function()
+			collectionShow = "owned"
+		end)
+		toggle(4, t("shop.show.all"), collectionShow == "all", function()
+			collectionShow = "all"
+		end)
+	end
+
+	-- En-tête de groupe : type d'objet, objet ciblé (et s'il est possédé), ou rareté.
+	local function groupHeader(view: Types.ProfileView, group: SkinSort.Group, previous: SkinSort.Group?)
+		if group.rarity then
+			text(list, t("rarity." .. group.rarity), UDim2.new(), UDim2.new(1, -8, 0, 30), {
+				LayoutOrder = nextOrder(),
+				Font = Theme.fontTitle,
+				TextSize = 20,
+				TextColor3 = BazaarScreen.rarityColor(group.rarity),
+			})
+			return
+		end
+		if previous == nil or previous.category ~= group.category then
+			text(list, t("shop.group." .. group.category), UDim2.new(), UDim2.new(1, -8, 0, 32), {
+				LayoutOrder = nextOrder(),
+				Font = Theme.fontTitle,
+				TextSize = 20,
+				TextColor3 = Theme.magenta,
+			})
+		end
+		local first = group.ids[1]
+		local title = BazaarScreen.targetName(t, first)
+		-- Skin d'arme sans l'arme : acquis, mais invisible tant qu'on ne l'a pas.
+		local status = if group.category == "weapon" then BazaarScreen.skinStatus(view, first) else nil
+		if status == "missing" then
+			title ..= "  ·  " .. t("shop.weaponMissing")
+		end
+		text(list, title, UDim2.new(), UDim2.new(1, -8, 0, 24), {
+			LayoutOrder = nextOrder(),
+			Font = Theme.fontTitle,
+			TextSize = 16,
+			TextColor3 = if status == "missing" then Theme.orange else Theme.text,
+		})
+	end
+
 	local function renderCollection(view: Types.ProfileView)
-		local owned = {}
+		local shown = {}
+		local ownedCount = 0
 		for _, id in Config.Cosmetics.list do
-			if view.cosmeticsOwned[id] then
-				table.insert(owned, id)
+			local isOwned = view.cosmeticsOwned[id] == true
+			if isOwned then
+				ownedCount += 1
+			end
+			if isOwned or collectionShow == "all" then
+				table.insert(shown, id)
 			end
 		end
-		if #owned == 0 then
+		collectionControls(view)
+		text(
+			list,
+			t("shop.collectionCount", { owned = ownedCount, total = #Config.Cosmetics.list }),
+			UDim2.new(),
+			UDim2.new(1, -8, 0, 22),
+			{ LayoutOrder = nextOrder(), TextColor3 = Theme.textDim, TextSize = 13 }
+		)
+		if #shown == 0 then
 			text(list, t("shop.collectionEmpty"), UDim2.new(), UDim2.new(1, -8, 0, 40), {
 				LayoutOrder = nextOrder(),
 				TextColor3 = Theme.textDim,
 			})
 			return
 		end
-		for _, cosmeticId in owned do
-			local def = Config.Cosmetics.byId[cosmeticId]
-			local slot = Shop.slotOf(cosmeticId) :: string
-			local equipped = view.cosmeticsEquipped[slot] == cosmeticId
-			local frame = card(70, def.rarity)
-			local viewport = preview(def, UDim2.fromOffset(60, 60), false)
-			viewport.Position = UDim2.fromOffset(5, 5)
-			viewport.Parent = frame
-			text(frame, BazaarScreen.cosmeticName(t, cosmeticId), UDim2.fromOffset(74, 6), UDim2.new(1, -260, 0, 30), {
-				Font = Theme.fontTitle,
-			})
-			text(frame, t("rarity." .. def.rarity), UDim2.fromOffset(74, 38), UDim2.new(0, 110, 0, 22), {
-				TextColor3 = BazaarScreen.rarityColor(def.rarity),
-			})
-			-- Le skin ne se voit que sur l'objet qu'il habille : le rappeler.
-			local status = BazaarScreen.skinStatus(view, cosmeticId)
-			if status then
-				text(frame, t("shop.status." .. status), UDim2.fromOffset(188, 38), UDim2.new(1, -370, 0, 22), {
-					TextColor3 = if status == "missing" then Theme.orange else Theme.textDim,
-					TextSize = 13,
+		local previous: SkinSort.Group? = nil
+		for _, group in SkinSort.groups(shown, collectionMode) do
+			groupHeader(view, group, previous)
+			previous = group
+			for _, cosmeticId in group.ids do
+				local def = Config.Cosmetics.byId[cosmeticId]
+				local slot = Shop.slotOf(cosmeticId) :: string
+				local equipped = view.cosmeticsEquipped[slot] == cosmeticId
+				local isOwned = view.cosmeticsOwned[cosmeticId] == true
+				local frame = card(70, def.rarity)
+				if not isOwned then
+					-- Pas encore obtenu : visible pour savoir ce qui existe, sans bouton.
+					frame.BackgroundTransparency = 0.6
+					local viewport = preview(def, UDim2.fromOffset(60, 60), false)
+					viewport.Position = UDim2.fromOffset(5, 5)
+					viewport.Parent = frame
+					text(
+						frame,
+						BazaarScreen.cosmeticName(t, cosmeticId),
+						UDim2.fromOffset(74, 6),
+						UDim2.new(1, -90, 0, 30),
+						{ Font = Theme.fontTitle, TextColor3 = Theme.textDim }
+					)
+					text(
+						frame,
+						t("rarity." .. def.rarity) .. "  ·  " .. t("shop.notOwned"),
+						UDim2.fromOffset(74, 38),
+						UDim2.new(1, -90, 0, 22),
+						{ TextColor3 = BazaarScreen.rarityColor(def.rarity), TextSize = 13 }
+					)
+					continue
+				end
+				local viewport = preview(def, UDim2.fromOffset(60, 60), false)
+				viewport.Position = UDim2.fromOffset(5, 5)
+				viewport.Parent = frame
+				text(
+					frame,
+					BazaarScreen.cosmeticName(t, cosmeticId),
+					UDim2.fromOffset(74, 6),
+					UDim2.new(1, -260, 0, 30),
+					{
+						Font = Theme.fontTitle,
+					}
+				)
+				text(frame, t("rarity." .. def.rarity), UDim2.fromOffset(74, 38), UDim2.new(0, 110, 0, 22), {
+					TextColor3 = BazaarScreen.rarityColor(def.rarity),
 				})
+				-- Le skin ne se voit que sur l'objet qu'il habille : le rappeler.
+				local status = BazaarScreen.skinStatus(view, cosmeticId)
+				if status then
+					text(frame, t("shop.status." .. status), UDim2.fromOffset(188, 38), UDim2.new(1, -370, 0, 22), {
+						TextColor3 = if status == "missing" then Theme.orange else Theme.textDim,
+						TextSize = 13,
+					})
+				end
+				local button = Panel.button(
+					if equipped then t("shop.unequip") else t("shop.equip"),
+					if equipped then Theme.green else Theme.cyan,
+					160
+				)
+				button.AnchorPoint = Vector2.new(1, 0.5)
+				button.Position = UDim2.new(1, -10, 0.5, 0)
+				button.Parent = frame
+				button.Activated:Connect(function()
+					hooks.equip(slot, if equipped then nil else cosmeticId)
+				end)
 			end
-			local button = Panel.button(
-				if equipped then t("shop.unequip") else t("shop.equip"),
-				if equipped then Theme.green else Theme.cyan,
-				160
-			)
-			button.AnchorPoint = Vector2.new(1, 0.5)
-			button.Position = UDim2.new(1, -10, 0.5, 0)
-			button.Parent = frame
-			button.Activated:Connect(function()
-				hooks.equip(slot, if equipped then nil else cosmeticId)
-			end)
 		end
 	end
 

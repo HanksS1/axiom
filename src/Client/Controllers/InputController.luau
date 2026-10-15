@@ -37,6 +37,7 @@ export type Action =
 	| "heal"
 	| "battery"
 	| "boost"
+	| "exo"
 	| "quickCycle"
 	| "interact"
 	| "ping"
