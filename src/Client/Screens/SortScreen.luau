@@ -46,6 +46,12 @@ function SortScreen.create(parent: Instance, t: Translate): Screen
 	vaultGauge.frame.Parent = panel.footer
 	local sellWrecked = Panel.button("", Theme.orange, 260)
 	sellWrecked.Parent = panel.footer
+	-- Tout garder : ce qui tient dans le coffre, le plus précieux d'abord (le reste attend).
+	local keepAll = Panel.button("", Theme.green, 200)
+	keepAll.Parent = panel.footer
+	keepAll.Activated:Connect(function()
+		ClientNet.fire("VaultAction", "keepAll", nil, nil)
+	end)
 
 	local current: Types.ProfileView? = nil
 
@@ -90,6 +96,8 @@ function SortScreen.create(parent: Instance, t: Translate): Screen
 		current = view
 		panel.title.Text = t("sort.title")
 		sellWrecked.Text = t("merchant.sellWrecked")
+		keepAll.Text = t("sort.keepAll")
+		keepAll.Visible = #view.pendingLoot > 0
 		Panel.clear(list)
 		local vaultUsed = ItemRules.totalUp(view.vault)
 		local free = view.vaultCapacity - vaultUsed

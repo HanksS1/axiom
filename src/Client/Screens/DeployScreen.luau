@@ -61,7 +61,11 @@ local function refusalText(t: Translate, refusal: Matchmaking.Refusal): string
 	return t("deploy.reason." .. refusal.reason)
 end
 
-function DeployScreen.create(parent: Instance, t: Translate): Screen
+export type Hooks = {
+	openSort: () -> (), -- ouvre l'écran de tri du butin en attente
+}
+
+function DeployScreen.create(parent: Instance, t: Translate, hooks: Hooks?): Screen
 	local panel = Panel.create("DeployScreen", parent, Theme.red)
 	local content = Panel.list("Content")
 	content.Size = UDim2.fromScale(1, 1)
@@ -254,8 +258,26 @@ function DeployScreen.create(parent: Instance, t: Translate): Screen
 		end
 
 		local header = Panel.label(t("deploy.score", { score = score }), 18, Theme.text)
-		header.LayoutOrder = 1
+		header.LayoutOrder = 0
 		header.Parent = content
+
+		-- Butin de la partie précédente à trier : il bloque tous les modes, on peut le trier d'ici.
+		if #view.pendingLoot > 0 then
+			local pendingRow = row(1, 48)
+			local pendingLabel = Panel.label(t("deploy.pendingLoot", { count = #view.pendingLoot }), 15, Theme.orange)
+			pendingLabel.LayoutOrder = 1
+			pendingLabel.Size = UDim2.new(1, -230, 1, 0)
+			pendingLabel.TextWrapped = true
+			pendingLabel.Parent = pendingRow
+			local sortNow = Panel.button(t("deploy.sortNow"), Theme.orange, 210)
+			sortNow.LayoutOrder = 2
+			sortNow.Parent = pendingRow
+			sortNow.Activated:Connect(function()
+				if hooks then
+					hooks.openSort()
+				end
+			end)
+		end
 
 		-- Modes : cartes avec plage de SE et raison éventuelle du refus.
 		local modesRow = row(2, 96)

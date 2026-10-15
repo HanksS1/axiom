@@ -52,6 +52,7 @@ local screens: { [string]: Screen } = {}
 local topBar: Frame
 local labels: { [string]: TextLabel } = {}
 local crateButton: TextButton
+local sortButton: TextButton -- « Butin à trier (N) » : toujours un moyen de rouvrir le tri
 local quickMenu: Panel.Panel
 local sortDismissed = false
 local profileScreen: ProfileScreen.Screen
@@ -106,6 +107,16 @@ local function renderTopBar(view: Types.ProfileView)
 	labels.rank.Text = t("rank." .. view.rank)
 	labels.credits.Text = t("topbar.credits", { credits = view.credits })
 	labels.noyaux.Text = t("topbar.noyaux", { noyaux = view.noyaux })
+	-- Butin en attente : il bloque le départ en partie tant qu'il n'est pas trié.
+	local pending = #view.pendingLoot
+	sortButton.Visible = pending > 0
+	sortButton.Text = t("topbar.sort", { count = pending })
+end
+
+-- Ouvre l'écran de tri (bouton de la barre du haut, Porte de déploiement).
+function TerminusController.openSort()
+	sortDismissed = false
+	TerminusController.open("sort")
 end
 
 -- Minuteur de la caisse gratuite (mis à jour chaque image).
@@ -325,12 +336,19 @@ local function buildTopBar(root: Instance)
 	plus.Activated:Connect(function()
 		TerminusController.open("bazaar")
 	end)
+	sortButton = Panel.button("", Theme.orange, 190)
+	sortButton.LayoutOrder = 7
+	sortButton.Visible = false
+	sortButton.Parent = topBar
+	sortButton.Activated:Connect(function()
+		TerminusController.openSort()
+	end)
 	crateButton = Panel.button("", Theme.green, 170)
-	crateButton.LayoutOrder = 7
+	crateButton.LayoutOrder = 8
 	crateButton.Parent = topBar
 	crateButton.Activated:Connect(openCrate)
 	local menu = Panel.button("☰", Theme.cyan, 44)
-	menu.LayoutOrder = 8
+	menu.LayoutOrder = 9
 	menu.Parent = topBar
 	menu.Activated:Connect(function()
 		if quickMenu:isOpen() then
