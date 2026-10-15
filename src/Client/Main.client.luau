@@ -10,6 +10,7 @@ local order = {
 	"InputController",
 	"CameraController",
 	"MovementController",
+	"WeaponPoseController",
 	"EffectsController",
 	"WeaponController",
 	"HUDController",

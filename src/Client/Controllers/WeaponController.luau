@@ -35,6 +35,7 @@ local EffectsController = require(script.Parent.EffectsController)
 local InputController = require(script.Parent.InputController)
 local MovementController = require(script.Parent.MovementController)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
+local WeaponPoseController = require(script.Parent.WeaponPoseController)
 
 local Combat = Config.Combat
 
@@ -271,6 +272,7 @@ local function fireRanged()
 			then Projectiles.ballisticDirection(origin, aimPoint, def.projectileSpeed, def.arcGravity)
 			else baseDirection
 		local direction = spreadDirection(aim, spread)
+		WeaponPoseController.kick(character)
 		EffectsController.playProjectile(rangedId :: string, origin, direction * def.projectileSpeed, character)
 		ClientNet.fire("FireWeapon", { t = now, origin = origin, direction = direction, hits = {} })
 		WeaponController.Fired:Fire()
@@ -295,6 +297,7 @@ local function fireRanged()
 		end
 	end
 
+	WeaponPoseController.kick(character)
 	EffectsController.playShot(rangedId :: string, muzzlePosition(character, origin), endpoints, true)
 	ClientNet.fire("FireWeapon", {
 		t = now,
