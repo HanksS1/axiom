@@ -1,40 +1,30 @@
 --!nocheck
--- Posture des armes tenues : bras calculés, prises, recul, coups de mêlée, recharge.
+-- Posture des armes tenues : bras calculés, prises des armes à distance, coups de mêlée.
+-- Mannequin R15 « bloc » et tests de volumes : tests/lib/Body.luau.
 
 return function(T, H)
 	local describe, it, expect = T.describe, T.it, T.expect
 	local roblox = require("@lune/roblox")
 	local CFrame, Vector3 = roblox.CFrame, roblox.Vector3
+	local Body = require("../lib/Body")
 	local Config = H.require("ReplicatedStorage/Shared/Config")
+	local ItemModels = H.require("ReplicatedStorage/Shared/Visuals/ItemModels")
 	local WeaponPose = H.require("ReplicatedStorage/Shared/Visuals/WeaponPose")
 
 	local Poses = Config.WeaponPoses
+	local RIGHT, LEFT = Body.right, Body.left
 
-	-- Bras R15 standard (« bloc ») : l'épaule est au bord du torse, le haut du
-	-- bras décalé de 0,5 vers l'extérieur (décalage le long de l'axe du coude).
-	local function rig(sign)
-		return {
-			shoulderC0 = CFrame.new(sign * 1, 0.563, 0),
-			shoulderC1 = CFrame.new(-sign * 0.5, 0.42, 0),
-			elbowC0 = CFrame.new(0, -0.334, 0),
-			elbowC1 = CFrame.new(0, 0.2, 0),
-			wristC0 = CFrame.new(0, -0.501, 0),
-			wristC1 = CFrame.new(0, 0.125, 0),
-		}
-	end
-	local RIGHT, LEFT = rig(1), rig(-1)
+	-- Seuils visuels : une arme qui effleure le corps (joue contre la crosse) ou
+	-- une main à quelques centimètres de sa place ne se voient pas ; au-delà, si.
+	local MAX_CONTACT = 0.1
+	local MAX_HAND_GAP = 0.12
+	-- Mêlée, transitions avec l'animation (~0,1 s, mélangées à l'animation réelle
+	-- que le mannequin au repos ne fait qu'approcher).
+	local MAX_BLEND_CONTACT = 0.2
 
-	-- Pièces du bras d'après les Transform (comme le moteur : Part0 * C0 * T * C1⁻¹).
-	local function forward(r, shoulder, elbow, wrist)
-		local upper = r.shoulderC0 * shoulder * r.shoulderC1:Inverse()
-		local lower = upper * r.elbowC0 * elbow * r.elbowC1:Inverse()
-		local hand = lower * r.wristC0 * wrist * r.wristC1:Inverse()
-		return upper, lower, hand
-	end
-
-	local function handError(r, target, pole)
-		local a, b, c = WeaponPose.solveArm(r, target, pole)
-		local _, _, hand = forward(r, a, b, c)
+	local function handGap(rig, target, pole)
+		local a, b, c = WeaponPose.solveArm(rig, target, pole)
+		local _, _, hand = Body.forward(rig, a, b, c)
 		return (hand.Position - target).Magnitude
 	end
 
@@ -44,12 +34,9 @@ return function(T, H)
 			pitch = 0,
 			prone = false,
 			sprint = 0,
-			parry = 0,
 			reload = nil,
 			kick = 0,
 			jitter = 0,
-			swing = nil,
-			variant = 1,
 			using = false,
 			scale = 1,
 		}
@@ -59,23 +46,46 @@ return function(T, H)
 		return s
 	end
 
+	-- Cas hors limites (`check() -> (contact, main, limite de contact?)`), affichés.
+	local function failures(cases)
+		local count = 0
+		for _, case in cases do
+			local contact, gap, limit = case.check()
+			if contact > (limit or MAX_CONTACT) or gap > MAX_HAND_GAP then
+				count += 1
+				print(string.format("    %s : contact %.2f, main à %.2f", case.label, contact, gap))
+			end
+		end
+		return count
+	end
+
+	local function sortedKeys(t)
+		local keys = {}
+		for key in t do
+			table.insert(keys, key)
+		end
+		table.sort(keys)
+		return keys
+	end
+
 	describe("Prises des armes (config)", function()
-		it("chaque arme a une prise, chaque famille d'arme à distance un recul", function()
-			for id in Config.Visuals.weapons do
+		it("chaque arme à distance a une prise, chaque arme de mêlée un geste", function()
+			for id, def in Config.Weapons.ranged do
 				local entry = Poses.weapons[id]
 				expect(entry ~= nil).toBe(true)
-				local style = Poses.styles[entry.style]
-				expect(style ~= nil).toBe(true)
-				if style.left == "support" then
+				expect(Poses.styles[entry.style] ~= nil).toBe(true)
+				expect(Poses.recoil[def.class] ~= nil).toBe(true)
+				expect(WeaponPose.isMounted(id)).toBe(true)
+			end
+			for id in Config.Weapons.melee do
+				local entry = Poses.melee[id]
+				expect(entry ~= nil).toBe(true)
+				local set = Poses.swings[entry.swing]
+				expect(set ~= nil and #set.swings >= 1).toBe(true)
+				if set.left == "support" then
 					expect(entry.support ~= nil).toBe(true)
 				end
-				local ranged = Config.Weapons.ranged[id]
-				if ranged then
-					expect(Poses.recoil[ranged.class] ~= nil).toBe(true)
-					expect(style.reload ~= nil).toBe(true)
-				else
-					expect(style.swings ~= nil and #style.swings >= 1).toBe(true)
-				end
+				expect(WeaponPose.isMounted(id)).toBe(false)
 			end
 		end)
 
@@ -100,15 +110,23 @@ return function(T, H)
 			do
 				local a, b, c, reached = WeaponPose.solveArm(RIGHT, target, pole)
 				expect(reached).toBe(true)
-				local upper, _, hand = forward(RIGHT, a, b, c)
+				local upper, _, hand = Body.forward(RIGHT, a, b, c)
 				expect((hand.Position - target).Magnitude < 0.02).toBe(true)
-				-- Coude du côté du pôle par rapport à la ligne épaule → main.
 				local elbow = (upper * RIGHT.elbowC0).Position
 				local shoulder = RIGHT.shoulderC0.Position
 				local line = (target - shoulder).Unit
 				local offset = (elbow - shoulder) - line * (elbow - shoulder):Dot(line)
 				expect(offset:Dot(pole - line * pole:Dot(line)) > 0).toBe(true)
 			end
+		end)
+
+		it("main imposée (position et orientation) : le poignet l'oriente", function()
+			local wanted = CFrame.new(0.6, 0.7, -1.1) * CFrame.Angles(math.rad(70), math.rad(-30), math.rad(20))
+			local a, b, c = WeaponPose.solveArm(RIGHT, Vector3.zero, Vector3.new(1, -1, 0.3), wanted)
+			local _, _, hand = Body.forward(RIGHT, a, b, c)
+			expect((hand.Position - wanted.Position).Magnitude < 0.02).toBe(true)
+			expect(hand.LookVector:Dot(wanted.LookVector) > 0.999).toBe(true)
+			expect(hand.UpVector:Dot(wanted.UpVector) > 0.999).toBe(true)
 		end)
 
 		it("le coude est une charnière (rotation autour de l'axe X, sans décalage)", function()
@@ -121,47 +139,67 @@ return function(T, H)
 			local target = Vector3.new(0.5, 0.5, -4)
 			local a, b, c, reached = WeaponPose.solveArm(RIGHT, target, Vector3.new(1, -1, 0.3))
 			expect(reached).toBe(false)
-			local _, _, hand = forward(RIGHT, a, b, c)
+			local _, _, hand = Body.forward(RIGHT, a, b, c)
 			local shoulder = RIGHT.shoulderC0.Position
 			expect((hand.Position - shoulder).Unit:Dot((target - shoulder).Unit) > 0.97).toBe(true)
 		end)
+	end)
 
-		it("toutes les prises sont à portée d'un bras R15 standard", function()
-			local worst, where = 0, ""
-			local function check(id, label, s)
-				local pose = WeaponPose.compute(s)
-				local err = handError(RIGHT, pose.right, pose.rightPole)
-				if pose.left then
-					err = math.max(err, handError(LEFT, pose.left, pose.leftPole))
-				end
-				if err > worst then
-					worst, where = err, id .. " " .. label
+	describe("Armes à distance : volumes", function()
+		local situations = {
+			{ "prise", {} },
+			{ "visée +45°", { pitch = math.rad(45) } },
+			{ "visée -45°", { pitch = math.rad(-45) } },
+			{ "recul", { kick = 1, jitter = 1 } },
+			{ "recul (autre côté)", { kick = 1, jitter = -1 } },
+			{ "sprint", { sprint = 1 } },
+			{ "entrée en sprint", { sprint = 0.5 } },
+			{ "début de recharge", { reload = 0.1 } },
+			{ "recharge", { reload = 0.5 } },
+		}
+
+		it("l'arme ne traverse ni le torse, ni la tête, ni le bassin ; les mains la tiennent", function()
+			local cases = {}
+			for _, id in sortedKeys(Config.Weapons.ranged) do
+				local blueprint = ItemModels.blueprint(id)
+				for _, situation in situations do
+					table.insert(cases, {
+						label = id .. " / " .. situation[1],
+						check = function()
+							local pose = WeaponPose.compute(state(id, situation[2]))
+							local contact = Body.weaponPenetration(blueprint, pose.weapon, pose.waist, pose.neck)
+							local gap = handGap(RIGHT, pose.right, pose.rightPole)
+							if pose.left then
+								gap = math.max(gap, handGap(LEFT, pose.left, pose.leftPole))
+							end
+							return contact, gap
+						end,
+					})
 				end
 			end
-			for id in Poses.weapons do
-				check(id, "prise", state(id))
-				check(id, "sprint", state(id, { sprint = 1 }))
-				check(id, "visée haute", state(id, { pitch = math.rad(50) }))
-				if Config.Weapons.ranged[id] then
-					check(id, "recharge", state(id, { reload = 0.5 }))
-					check(id, "couché", state(id, { prone = true }))
-				else
-					check(id, "garde", state(id, { parry = 1 }))
-					for _, variant in { 1, 2 } do
-						for _, progress in { 0.25, 0.5 } do
-							check(id, "coup " .. variant, state(id, { swing = progress, variant = variant }))
-						end
-					end
+			expect(failures(cases)).toBe(0)
+		end)
+
+		it("visée extrême (±70°) : l'arme reste près du corps sans s'y enfoncer", function()
+			local cases = {}
+			for _, id in sortedKeys(Config.Weapons.ranged) do
+				for _, degrees in { -70, 70 } do
+					table.insert(cases, {
+						label = id .. string.format(" / %d°", degrees),
+						check = function()
+							local pose = WeaponPose.compute(state(id, { pitch = math.rad(degrees) }))
+							return Body.weaponPenetration(ItemModels.blueprint(id), pose.weapon, pose.waist, pose.neck),
+								0,
+								0.25
+						end,
+					})
 				end
 			end
-			if worst > 0.1 then
-				print("    prise la plus éloignée : " .. where .. string.format(" (%.2f studs)", worst))
-			end
-			expect(worst <= 0.1).toBe(true)
+			expect(failures(cases)).toBe(0)
 		end)
 	end)
 
-	describe("Posture", function()
+	describe("Armes à distance : posture", function()
 		-- Direction de l'arme dans le repère du personnage (taille penchée et tournée).
 		local function aimed(pose)
 			return (pose.waist * pose.weapon).LookVector
@@ -178,24 +216,19 @@ return function(T, H)
 			end
 		end)
 
-		it("le recul fait reculer l'arme et relève le canon", function()
+		it("l'arme est devant le torse, à hauteur de poitrine ou de joue (fusils)", function()
+			local pose = WeaponPose.compute(state("sentinel_rifle"))
+			local front = (pose.waist * pose.weapon).Position
+			expect(front.Z < -0.5).toBe(true)
+			expect(pose.weapon.Position.Y > 0.8).toBe(true)
+		end)
+
+		it("le recul relève le canon et recule à peine", function()
 			local still = WeaponPose.compute(state("hullbreaker"))
 			local kicked = WeaponPose.compute(state("hullbreaker", { kick = 1 }))
 			expect(aimed(kicked).Y > aimed(still).Y + 0.1).toBe(true)
-			local back = (kicked.weapon.Position - still.weapon.Position):Dot(still.weapon.LookVector)
-			expect(back < -0.1).toBe(true)
-		end)
-
-		it("coup de mêlée : part de la garde, y revient, deux gestes alternés", function()
-			local id = "laser_saber"
-			local ready = WeaponPose.compute(state(id)).weapon
-			local function at(progress, variant)
-				return WeaponPose.compute(state(id, { swing = progress, variant = variant })).weapon
-			end
-			expect((at(0, 1).Position - ready.Position).Magnitude < 1e-3).toBe(true)
-			expect((at(0.999, 1).Position - ready.Position).Magnitude < 0.01).toBe(true)
-			expect((at(0.5, 1).Position - ready.Position).Magnitude > 0.5).toBe(true)
-			expect((at(0.5, 1).Position - at(0.5, 2).Position).Magnitude > 0.5).toBe(true)
+			local back = (kicked.right - still.right):Dot(still.weapon.LookVector)
+			expect(back < 0 and back > -0.3).toBe(true)
 		end)
 
 		it("main gauche : sur l'arme, libre en buvant, va chercher une cellule en rechargeant", function()
@@ -204,7 +237,6 @@ return function(T, H)
 			local support = pose.weapon * Poses.weapons[id].support
 			expect((pose.left - support).Magnitude < 1e-3).toBe(true)
 			expect(WeaponPose.compute(state(id, { using = true })).left).toBe(nil)
-			expect(WeaponPose.compute(state("shock_crowbar")).left).toBe(nil)
 			local reloading = WeaponPose.compute(state(id, { reload = 0.5 }))
 			local held = reloading.weapon * Poses.weapons[id].support
 			expect((reloading.left - held).Magnitude > 0.4).toBe(true)
@@ -218,10 +250,91 @@ return function(T, H)
 
 		it("position de repos (serveur) = prise de base sans visée", function()
 			local rest = WeaponPose.rest("sentinel_rifle", 1)
-			local style = Poses.styles.rifle
 			local hand = rest * WeaponPose.handInWeapon("sentinel_rifle")
-			expect((hand - style.ready.hand).Magnitude < 1e-3).toBe(true)
+			expect((hand - Poses.styles.rifle.ready.hand).Magnitude < 1e-3).toBe(true)
 			expect(rest.LookVector.Z < -0.99).toBe(true)
+		end)
+	end)
+
+	describe("Mêlée", function()
+		local IDLE = CFrame.new() -- bras le long du corps (animation au repos)
+
+		-- Arme soudée à la main, d'après les Transform du bras droit.
+		local function weaponFrom(id, shoulder, elbow, wrist)
+			local _, _, hand = Body.forward(RIGHT, shoulder, elbow, wrist)
+			return hand * Config.Visuals.weapons[id].gripOffset, hand
+		end
+
+		it("hors des coups : l'arme est dans la main (aucune posture imposée)", function()
+			-- Bras au repos : l'arme pend à droite du corps, sans le traverser.
+			for id in Config.Weapons.melee do
+				local weapon = weaponFrom(id, IDLE, IDLE, IDLE)
+				expect(Body.weaponPenetration(ItemModels.blueprint(id), weapon) <= MAX_CONTACT).toBe(true)
+			end
+		end)
+
+		it("le geste part de l'animation, frappe, puis y revient", function()
+			for id in Config.Weapons.melee do
+				expect(WeaponPose.meleeSwing(id, 0, 1, 1).weight).toBe(0)
+				expect(WeaponPose.meleeSwing(id, Poses.swingTiming.windup, 1, 1).weight).toBe(1)
+				expect(WeaponPose.meleeSwing(id, 0.5, 1, 1).weight).toBe(1)
+				expect(WeaponPose.meleeSwing(id, 0.999, 1, 1).weight < 0.01).toBe(true)
+			end
+		end)
+
+		it("l'arme est armée en arrière ou sur le côté, et frappe devant", function()
+			local timing = Poses.swingTiming
+			for id in Config.Weapons.melee do
+				local length = Config.Visuals.weapons[id].size.Z
+				for variant = 1, 2 do
+					local windup = WeaponPose.meleeSwing(id, timing.windup, variant, 1)
+					local strike = WeaponPose.meleeSwing(id, timing.strike - 1e-3, variant, 1)
+					local tipBefore = windup.weapon * Vector3.new(0, 0, -length / 2)
+					local tipAfter = strike.weapon * Vector3.new(0, 0, -length / 2)
+					expect(tipAfter.Z < tipBefore.Z - 0.15).toBe(true)
+					expect(tipAfter.Z < -1).toBe(true)
+				end
+			end
+		end)
+
+		it("pendant le coup, l'arme ne traverse pas le corps et la main la tient", function()
+			local cases = {}
+			for _, id in sortedKeys(Config.Weapons.melee) do
+				local blueprint = ItemModels.blueprint(id)
+				for variant = 1, 2 do
+					for progress = 0.05, 0.95, 0.05 do
+						table.insert(cases, {
+							label = string.format("%s coup %d à %.2f", id, variant, progress),
+							check = function()
+								local pose = WeaponPose.meleeSwing(id, progress, variant, 1)
+								local a, b, c = WeaponPose.solveArm(RIGHT, Vector3.zero, pose.rightPole, pose.hand)
+								-- Mélange avec l'animation au repos, comme le contrôleur.
+								local w = pose.weight
+								local weapon, hand = weaponFrom(id, IDLE:Lerp(a, w), IDLE:Lerp(b, w), IDLE:Lerp(c, w))
+								local contact = Body.weaponPenetration(blueprint, weapon, pose.waist, nil)
+								local gap = 0
+								if w >= 1 then
+									-- Geste complet : la main est à sa place, la gauche aussi.
+									gap = (hand.Position - pose.hand.Position).Magnitude
+									if pose.left then
+										gap = math.max(gap, handGap(LEFT, pose.left, pose.leftPole))
+									end
+								end
+								return contact, gap, if w >= 1 then MAX_CONTACT else MAX_BLEND_CONTACT
+							end,
+						})
+					end
+				end
+			end
+			expect(failures(cases)).toBe(0)
+		end)
+
+		it("deux gestes alternés différents", function()
+			for id in Config.Weapons.melee do
+				local a = WeaponPose.meleeSwing(id, Poses.swingTiming.windup, 1, 1).weapon.Position
+				local b = WeaponPose.meleeSwing(id, Poses.swingTiming.windup, 2, 1).weapon.Position
+				expect((a - b).Magnitude > 0.3).toBe(true)
+			end
 		end)
 	end)
 end

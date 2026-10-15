@@ -93,10 +93,12 @@ end
 	Arme tenue (même modèle que les icônes : Shared/Visuals/ItemModels), mise à
 	jour quand l'arme active ou son skin change.
 
-	R15 : l'arme est montée devant le haut du torse par un joint « WeaponGrip »
-	(position de repos : Shared/Visuals/WeaponPose) ; chaque client l'anime et
-	y pose les deux mains. Elle ne suit donc plus le balancement des bras.
-	R6 (pas de bras articulés) : soudée à la main droite, comme avant.
+	Arme à distance sur un avatar R15 : montée devant le haut du torse par un
+	joint « WeaponGrip » (position de repos : Shared/Visuals/WeaponPose) ;
+	chaque client l'anime et y pose les deux mains. Elle ne suit donc plus le
+	balancement des bras.
+	Arme de mêlée (et avatar R6) : soudée à la main droite ; le client anime
+	le bras pendant un coup.
 ]]
 local function updateWeaponVisual(character: Model)
 	local weaponId = character:GetAttribute("WeaponId")
@@ -107,7 +109,9 @@ local function updateWeaponVisual(character: Model)
 		setVisual(character, "WeaponVisual", nil)
 		return
 	end
-	local mounted = torso ~= nil and character:FindFirstChild("RightUpperArm") ~= nil
+	local mounted = torso ~= nil
+		and character:FindFirstChild("RightUpperArm") ~= nil
+		and WeaponPose.isMounted(weaponId :: string)
 	setVisual(character, "WeaponVisual", function(model)
 		model:SetAttribute("ItemId", weaponId)
 		local skin = skinOf(character, "WeaponSkin")

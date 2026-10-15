@@ -161,43 +161,61 @@ commun < 500 ≤ rare < 1 000 ≤ épique < 2 000 ≤ légendaire < 2 800 ≤ my
 
 ## Retours de test : arme tenue, tirs et coups animés
 
-**Arme tenue comme dans la réalité.** Avatar R15 : le serveur ne soude plus l'arme à la main
-droite (elle suivait le balancement de la marche) mais la monte devant le haut du torse par un
-joint `WeaponGrip` (`CharacterService`). Chaque client (`WeaponPoseController`), après les
-animations et à chaque image, place l'arme puis pose les deux mains dessus : main droite sur la
-poignée, main gauche sur le garde-main (bras calculés, coude orienté, poignet dans l'axe de
-l'avant-bras : `Shared/Visuals/WeaponPose`, testé). Les jambes gardent leurs animations. Avatar
-R6 : ancien comportement (arme dans la main).
+**Armes à distance tenues à deux mains.** Avatar R15 : le serveur monte l'arme devant le haut
+du torse par un joint `WeaponGrip` (`CharacterService`) au lieu de la souder à la main droite
+(elle suivait le balancement de la marche). Chaque client (`WeaponPoseController`), après les
+animations et à chaque image, place l'arme puis pose les deux mains dessus (bras calculés, coude
+orienté : `Shared/Visuals/WeaponPose`). Les jambes gardent leurs animations.
 
-Prises (`Config/WeaponPoses`, positions commentées, à régler en jeu) : pistolets à deux mains bras
-tendus ; fusils, mitraillettes, fusil à pompe, Lance-clous, Aiguille, Court-Circuit épaulés, buste
-tourné de 35° (l'épaule gauche avance) ; armes lourdes à la hanche ; mêlée à une main levée
-devant soi ; Marteau à deux mains au-dessus de l'épaule ; Gantelet en garde de boxeur. En sprint :
-arme en travers de la poitrine (fusils), basse (pistolets, armes lourdes), le long du corps
-(mêlée). Garde (parade) : arme à l'horizontale devant soi. Couché : arme devant la tête.
+Prises (`Config/WeaponPoses`) :
+- pistolets : à deux mains, bras tendus à hauteur de poitrine ;
+- fusils, mitraillettes, fusil à pompe, Lance-clous, Aiguille, Court-Circuit : épaulés, buste de
+  trois quarts (45°), arme à hauteur de joue à droite de la tête, main gauche au niveau du
+  chargeur ;
+- armes lourdes : à la hanche, devant le flanc droit, buste tourné de 40° ;
+- sprint : arme en travers de la poitrine (fusils), basse (pistolets, armes lourdes) ;
+- recharge : canon baissé, la main gauche va chercher une cellule à la ceinture ;
+- couché : arme devant la tête.
 
-**Visée.** L'arme et la tête suivent la visée en haut / en bas (le buste en prend 35 %). Le joueur
-local envoie sa visée au serveur (`SetAim`, au plus ~7 fois par seconde et seulement si elle a
-changé de 3° ou plus), qui la publie dans l'attribut `AimPitch` : les autres la voient. Les
-mercenaires pointent leur arme vers leur cible.
+*Premier essai (corrigé)* : les prises n'avaient été réglées que pour la portée des bras ; sur un
+torse R15 (2 × 1,6 × 1 stud), la main droite des fusils était *dans* le torse et la crosse le
+traversait de 0,4 à 0,9 stud. Les prises sont maintenant vérifiées par le volume : un mannequin R15
+(`tests/lib/Body.luau`) et un test d'interpénétration de boîtes contrôlent chaque pièce de chaque
+arme contre le torse, la tête et le bassin, dans chaque situation (prise, visée ±45°, recul,
+sprint, recharge), ainsi que la place des deux mains. Seuils : contact ≤ 0,1 stud (la joue contre
+la crosse), main à ≤ 0,12 stud de sa place. Contraintes rencontrées : les bras R15 (~1,6 stud
+de l'épaule à la main) sont courts pour un torse de 2 studs de large, d'où le buste de trois
+quarts et la main gauche au chargeur plutôt qu'au bout du garde-main.
 
-**Tirs.** Chaque tir donne un recul : l'arme recule et le canon se relève, selon la famille
-d'arme (`Config.WeaponPoses.recoil` : fort au fusil à pompe et à l'Aiguille, faible à la
-mitraillette, tremblement à la Mitrailleuse). Vu par tous : le serveur diffuse déjà les tirs
-(`ShotFired`, qui transporte maintenant aussi le personnage d'un mercenaire).
+Outils (hors Studio) : `lune run tests/tools/weapon_pose_check.luau` affiche le contact et la place
+des mains pour chaque arme et chaque situation ; `lune run tests/tools/weapon_pose_tune.luau rifle
+ready` cherche les prises valides (grille de positions) et propose les plus naturelles.
 
-**Coups de mêlée.** L'arme décrit un vrai geste : armé, frappe accélérée, retour (`swingTiming`),
-en alternant deux gestes (coup en diagonale puis revers ; frappe par le haut puis balayage au
-Marteau ; direct puis crochet au Gantelet). Durée = 0,75 / coups par seconde, entre 0,3 et 0,65 s.
+**Visée.** Le buste prend 80 % de la visée en haut / en bas (l'arme reste calée contre l'épaule),
+l'arme le reste. Le joueur local envoie sa visée au serveur (`SetAim`, au plus ~7 fois par seconde
+et seulement si elle a changé de 3° ou plus), publiée dans l'attribut `AimPitch` : les autres la
+voient. Les mercenaires pointent leur arme vers leur cible.
 
-**Recharge.** L'arme bascule sur le côté et la main gauche va chercher une cellule à la ceinture
-puis revient. Vu par tous : attributs `ReloadUntil` (heure serveur) et `ReloadTime`.
+**Tirs.** Recul à chaque tir : le canon se relève autour de la crosse (pas de la poignée : la
+crosse ne plonge pas dans l'épaule) et l'arme recule à peine (`Config.WeaponPoses.recoil` : fort
+au fusil à pompe et à l'Aiguille, faible à la mitraillette, tremblement à la Mitrailleuse). Vu par
+tous (`ShotFired` transporte aussi le personnage d'un mercenaire).
 
-*Limites* : les mesures des prises sont faites pour un avatar R15 standard et mises à l'échelle
-de la hauteur du torse ; un avatar aux proportions très différentes (Rthro) peut avoir une main
-qui n'atteint pas tout à fait le garde-main. Au-delà de 250 studs, les personnages ne sont plus
-posés (bras animés par défaut). Le serveur, lui, ne voit pas ces postures (sans effet sur les
-touches : l'arme ne se touche pas, et les bras restent proches du corps).
+**Mêlée : prise d'origine, coup animé.** L'arme reste soudée à la main droite et suit les
+animations de marche, comme avant. Pendant un coup seulement, le bras quitte l'animation pendant
+l'armé, frappe, puis y revient (`swingTiming`) ; le poignet oriente l'arme, le buste tourne avec
+le geste. Deux gestes alternés : coup en diagonale puis revers (Barre à mine, Sabre, Lame
+vibrante) ; frappe par le haut puis balayage, à deux mains (Marteau) ; direct puis crochet,
+l'autre poing en garde (Gantelet). Chaque geste passe par une position intermédiaire (`through`)
+qui garde l'arme devant le personnage (sinon la lame tournait à travers la tête). Durée =
+0,75 / coups par seconde, entre 0,3 et 0,65 s. Mêmes vérifications de volume que les armes à
+distance, à chaque instant du geste (tolérance 0,2 stud pendant les transitions avec l'animation).
+
+*Limites* : les prises sont mesurées pour un avatar R15 « bloc » et mises à l'échelle de la hauteur
+du torse ; un avatar aux proportions très différentes (Rthro) peut toucher son arme ou avoir une
+main un peu à côté. Avatar R6 : arme dans la main, ancienne animation de coup. Au-delà de
+250 studs, les personnages ne sont plus posés. Le serveur ne voit pas ces postures (sans effet sur
+les touches).
 
 ## Questions ouvertes
 
