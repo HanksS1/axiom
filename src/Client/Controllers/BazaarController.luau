@@ -17,6 +17,7 @@
 	officielle de Roblox, ouverte seulement à la demande du joueur).
 ]]
 
+local GuiService = game:GetService("GuiService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -45,7 +46,7 @@ local t = ProfileController.t
 local M = Config.Monetization
 
 local screen: BazaarScreen.Screen
-local overlay: Frame
+local overlay: TextButton -- voile plein écran : capte tous les clics (rien ne passe au fond)
 local stage: Frame
 local flash: Frame
 local resultName: TextLabel
@@ -56,6 +57,9 @@ local equipButton: TextButton
 local closeButton: TextButton
 local scene: CrateScene.Scene? = nil
 local current: { [string]: any }? = nil -- résultat de la caisse affichée
+-- Demande d'ouverture envoyée, résultat pas encore reçu : pas de seconde demande.
+local requestedAt: number? = nil
+local REQUEST_TIMEOUT = 5 -- secondes (refus du serveur : le bouton redevient utilisable)
 local guide: Frame -- aide de la première caisse (ce qu'est un skin, où il va)
 
 local function clearScene()
@@ -124,11 +128,18 @@ local function buildOverlay(root: Instance)
 	closeButton.AnchorPoint = Vector2.new(0, 1)
 	closeButton.Position = UDim2.new(0.5, 8, 1, -16)
 	closeButton.ZIndex = 4
-	overlay = Create("Frame", {
+	-- Un bouton plein écran, et non un simple cadre : un cadre laisse passer les clics
+	-- vers les boutons du Holo-Bazar en dessous (ouvrir une autre caisse pendant
+	-- l'animation). Seuls ses propres boutons (Passer, Équiper, Confirmer) réagissent.
+	overlay = Create("TextButton", {
 		Name = "CrateOpening",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundColor3 = Color3.fromRGB(4, 5, 8),
 		BackgroundTransparency = 0.12,
+		AutoButtonColor = false,
+		Active = true,
+		Selectable = false,
+		Text = "",
 		Visible = false,
 		ZIndex = 60,
 		Parent = root,
@@ -267,6 +278,7 @@ end
 -- Ouverture : la caisse se construit, est scannée, s'ouvre ; l'objet en sort.
 local function play(result: { [string]: any })
 	clearScene()
+	requestedAt = nil
 	current = result
 	overlay.Visible = true
 	PanelState.set("crateOpening", true)
@@ -276,6 +288,9 @@ local function play(result: { [string]: any })
 	closeButton.Visible = false
 	skipButton.Text = t("shop.skip")
 	skipButton.Visible = true
+	if GuiService.SelectedObject ~= nil then
+		GuiService.SelectedObject = skipButton
+	end
 	flash.BackgroundTransparency = 1
 
 	local def = Config.Cosmetics.byId[result.cosmeticId]
@@ -309,6 +324,15 @@ function BazaarController.start()
 			ClientNet.fire("BazaarBuy", cosmeticId)
 		end,
 		openCrate = function(crateId)
+			-- Une seule ouverture à la fois : ni pendant l'animation, ni en attendant la réponse.
+			if overlay.Visible then
+				return
+			end
+			local pending = requestedAt
+			if pending and os.clock() - pending < REQUEST_TIMEOUT then
+				return
+			end
+			requestedAt = os.clock()
 			ClientNet.fire("CosmeticCrateOpen", crateId)
 		end,
 		equip = function(slot, cosmeticId)

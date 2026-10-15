@@ -8,7 +8,10 @@
 	- Jauge d'UP du sac et temps de Surcharge restant.
 ]]
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+
+local ItemRules = require(ReplicatedStorage:WaitForChild("Shared").Items.ItemRules)
 
 local Create = require(script.Parent.Parent.UI.Create)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -51,9 +54,13 @@ local function render()
 	local bagKey = if device == "keyboard" then InputController.hint("inventory") else nil
 	bagLabel.Text = t("hud.bagUp", { used = inventory.used, capacity = inventory.capacity })
 		.. (if bagKey then `  [{bagKey}]` else "")
-	bagLabel.TextColor3 = if inventory.capacity > 0 and inventory.used >= inventory.capacity
-		then Theme.orange
-		else Theme.textDim
+	local level = ItemRules.fillLevel(inventory.used, inventory.capacity)
+	if level == "full" then
+		bagLabel.Text ..= "  ·  " .. t("capacity.full")
+	elseif level == "high" then
+		bagLabel.Text ..= "  ·  " .. t("capacity.high")
+	end
+	bagLabel.TextColor3 = if level == "full" then Theme.red elseif level == "high" then Theme.orange else Theme.textDim
 
 	local snap = WeaponController.snapshot()
 	usingBar.Visible = snap.usingProgress ~= nil

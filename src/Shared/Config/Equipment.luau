@@ -226,6 +226,8 @@ return Freeze.deep({
 	misc = misc,
 	-- Sans sac, le joueur dispose de 4 UP de poches (section 8.3).
 	pocketsUp = 4,
+	-- Jauges du sac et du coffre : « Presque plein » (orange) à partir de cette part.
+	capacityWarning = 0.8,
 	-- Sans casque : multiplicateur de tête ×2,0 (section 6.3).
 	noHelmetHeadMultiplier = 2.0,
 })
