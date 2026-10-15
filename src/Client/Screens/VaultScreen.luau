@@ -20,6 +20,7 @@ local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local ConfirmDialog = require(script.Parent.Parent.UI.ConfirmDialog)
+local CapacityGauge = require(script.Parent.Parent.UI.CapacityGauge)
 local Create = require(script.Parent.Parent.UI.Create)
 local DragDrop = require(script.Parent.Parent.UI.DragDrop)
 local ItemCard = require(script.Parent.Parent.UI.ItemCard)
@@ -146,19 +147,15 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 		BackgroundTransparency = 1,
 		Parent = panel.body,
 	})
-	local vaultGauge = Panel.label("", 16, Theme.text)
-	vaultGauge.Size = UDim2.new(0.35, 0, 0, 24)
-	vaultGauge.Font = Theme.fontNumbers
-	vaultGauge.Parent = gauges
-	local vaultBar = Create("Frame", {
-		Position = UDim2.fromOffset(0, 28),
-		Size = UDim2.new(0.35, -10, 0, 8),
-		BackgroundColor3 = Theme.panel,
-		BorderSizePixel = 0,
+	local vaultGauge = CapacityGauge.create(t, "vault", true)
+	local vaultHolder = Create("Frame", {
+		Size = UDim2.new(0.35, -10, 1, 0),
+		BackgroundTransparency = 1,
 		Parent = gauges,
-	}, {
-		Fill = Create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = Theme.magenta, BorderSizePixel = 0 }),
 	})
+	vaultGauge.frame.AnchorPoint = Vector2.new(0, 1)
+	vaultGauge.frame.Position = UDim2.fromScale(0, 1)
+	vaultGauge.frame.Parent = vaultHolder
 	local scoreLabel = Panel.label("", 16, Theme.text)
 	scoreLabel.Position = UDim2.new(0.35, 0, 0, 0)
 	scoreLabel.Size = UDim2.new(0.25, 0, 0, 24)
@@ -245,7 +242,18 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 
 		local bagUsed = ItemRules.totalUp(view.bag)
 		local bagCapacity = ItemRules.bagCapacity(view.loadout.backpack)
+		local bagLevel = ItemRules.fillLevel(bagUsed, bagCapacity)
 		bagTitle.Text = t("vault.bag", { used = bagUsed, capacity = bagCapacity })
+			.. (
+				if bagLevel == "full"
+					then "  ·  " .. t("capacity.full")
+					elseif bagLevel == "high" then "  ·  " .. t("capacity.high")
+					else ""
+			)
+		bagTitle.TextColor3 = if bagLevel == "full"
+			then Theme.red
+			elseif bagLevel == "high" then Theme.orange
+			else Theme.cyan
 		for index, item in view.bag do
 			local card = ItemCard.create(item, t, {
 				{
@@ -313,11 +321,9 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 			Panel.label(t("inventory.empty"), 14, Theme.textDim).Parent = vaultList
 		end
 
-		-- Jauges : coffre, SE et modes accessibles.
+		-- Jauges : coffre (bien en vue, message quand il est plein), SE et modes accessibles.
 		local used = ItemRules.totalUp(view.vault)
-		vaultGauge.Text = t("vault.gauge", { used = used, capacity = view.vaultCapacity })
-		local fill = vaultBar:FindFirstChild("Fill") :: Frame
-		fill.Size = UDim2.fromScale(math.clamp(used / math.max(1, view.vaultCapacity), 0, 1), 1)
+		vaultGauge.set(used, view.vaultCapacity)
 		local score = ItemRules.equipmentScore(view.loadout, view.bag)
 		scoreLabel.Text = t("vault.score", { score = score })
 		for index, modeId in Config.Modes.list do

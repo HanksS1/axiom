@@ -17,6 +17,7 @@ local Pricing = require(Shared.Economy.Pricing)
 local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
+local CapacityGauge = require(script.Parent.Parent.UI.CapacityGauge)
 local ConfirmDialog = require(script.Parent.Parent.UI.ConfirmDialog)
 local ItemCard = require(script.Parent.Parent.UI.ItemCard)
 local Panel = require(script.Parent.Parent.UI.Panel)
@@ -40,10 +41,9 @@ function SortScreen.create(parent: Instance, t: Translate): Screen
 	list.Size = UDim2.new(1, 0, 1, -30)
 	list.Parent = panel.body
 
-	local vaultLabel = Panel.label("", 16, Theme.text)
-	vaultLabel.Size = UDim2.fromOffset(260, 44)
-	vaultLabel.Font = Theme.fontNumbers
-	vaultLabel.Parent = panel.footer
+	local vaultGauge = CapacityGauge.create(t, "vault", false)
+	vaultGauge.frame.Size = UDim2.fromOffset(300, 38)
+	vaultGauge.frame.Parent = panel.footer
 	local sellWrecked = Panel.button("", Theme.orange, 260)
 	sellWrecked.Parent = panel.footer
 
@@ -93,8 +93,14 @@ function SortScreen.create(parent: Instance, t: Translate): Screen
 		Panel.clear(list)
 		local vaultUsed = ItemRules.totalUp(view.vault)
 		local free = view.vaultCapacity - vaultUsed
-		vaultLabel.Text = t("vault.gauge", { used = vaultUsed, capacity = view.vaultCapacity })
-		info.Text = if #view.pendingLoot > 0 then t("sort.hint") else t("sort.done")
+		vaultGauge.set(vaultUsed, view.vaultCapacity)
+		-- Coffre plein : le dire en tête, avec ce qu'on peut faire.
+		local vaultFull = ItemRules.fillLevel(vaultUsed, view.vaultCapacity) == "full"
+		info.Text = if vaultFull and #view.pendingLoot > 0
+			then t("capacity.vaultFullHint")
+			elseif #view.pendingLoot > 0 then t("sort.hint")
+			else t("sort.done")
+		info.TextColor3 = if vaultFull and #view.pendingLoot > 0 then Theme.red else Theme.textDim
 		for index, item in view.pendingLoot do
 			local actions: { ItemCard.Action } = {}
 			if ItemRules.up(item) <= free then

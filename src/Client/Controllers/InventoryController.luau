@@ -19,6 +19,7 @@ local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
+local CapacityGauge = require(script.Parent.Parent.UI.CapacityGauge)
 local Create = require(script.Parent.Parent.UI.Create)
 local ItemCard = require(script.Parent.Parent.UI.ItemCard)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
@@ -47,7 +48,7 @@ local state: State = { equipped = {}, bag = {}, capacity = 0, used = 0, bonusUp 
 local panel: Frame
 local equippedList: ScrollingFrame
 local bagList: ScrollingFrame
-local upLabel: TextLabel
+local gauge: CapacityGauge.Gauge -- place du sac
 local selectedQuick = 1
 
 local SLOTS = { "ranged", "melee", "gadget1", "gadget2", "helmet", "vest", "backpack" }
@@ -103,7 +104,8 @@ local function render()
 	end
 	clear(equippedList)
 	clear(bagList)
-	upLabel.Text = t("hud.bagUp", { used = state.used, capacity = state.capacity })
+	-- Place du sac, bien en vue (et un message quand il est plein).
+	gauge.set(state.used, state.capacity)
 
 	for index, slot in SLOTS do
 		local item = state.equipped[slot]
@@ -224,10 +226,13 @@ end
 function InventoryController.init() end
 
 function InventoryController.start()
+	gauge = CapacityGauge.create(t, "bag", true)
+	gauge.frame.Position = UDim2.fromOffset(12, 42)
+	gauge.frame.Size = UDim2.new(1, -24, 0, 38)
 	local body = Create("Frame", {
 		Name = "Body",
-		Position = UDim2.fromOffset(12, 44),
-		Size = UDim2.new(1, -24, 1, -56),
+		Position = UDim2.fromOffset(12, 104),
+		Size = UDim2.new(1, -24, 1, -116),
 		BackgroundTransparency = 1,
 	}, {
 		Layout = Create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
@@ -242,18 +247,6 @@ function InventoryController.start()
 	bagHeader.Name = "BagHeader"
 	bagHeader.Parent = body
 	bagList.Parent = body
-
-	upLabel = Create("TextLabel", {
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -60, 0, 10),
-		Size = UDim2.fromOffset(160, 24),
-		BackgroundTransparency = 1,
-		Font = Theme.fontNumbers,
-		TextSize = 16,
-		TextColor3 = Theme.text,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Text = "",
-	})
 
 	panel = Create("Frame", {
 		Name = "InventoryPanel",
@@ -278,7 +271,7 @@ function InventoryController.start()
 			TextXAlignment = Enum.TextXAlignment.Left,
 			Text = t("inventory.title"),
 		}),
-		Up = upLabel,
+		Gauge = gauge.frame,
 		Close = Create("TextButton", {
 			AnchorPoint = Vector2.new(1, 0),
 			Position = UDim2.new(1, -8, 0, 6),

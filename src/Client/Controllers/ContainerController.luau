@@ -21,6 +21,7 @@ local ItemCatalog = require(Shared.Items.ItemCatalog)
 local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
+local CapacityGauge = require(script.Parent.Parent.UI.CapacityGauge)
 local Create = require(script.Parent.Parent.UI.Create)
 local ItemCard = require(script.Parent.Parent.UI.ItemCard)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
@@ -52,6 +53,7 @@ local hint: TextLabel
 local list: ScrollingFrame
 local footer: TextLabel
 local takeAllButton: TextButton
+local gauge: CapacityGauge.Gauge -- place du sac pendant la fouille
 -- Caisses déjà vues : leur contenu ne se « révèle » qu'à la première ouverture.
 local seen: { [string]: boolean } = {}
 local seenCount = 0
@@ -118,6 +120,8 @@ local function render()
 	clear()
 	refreshTakeAll()
 	local inventory = localInventory()
+	local bagState = InventoryController.state()
+	gauge.set(bagState.used, bagState.capacity)
 
 	if swapFor then
 		-- Choix de l'objet du sac à laisser dans le conteneur.
@@ -262,8 +266,11 @@ function ContainerController.start()
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Text = "",
 	})
+	gauge = CapacityGauge.create(t, "bag", false)
+	gauge.frame.Position = UDim2.fromOffset(12, 40)
+	gauge.frame.Size = UDim2.new(1, -24, 0, 38)
 	hint = Create("TextLabel", {
-		Position = UDim2.fromOffset(12, 38),
+		Position = UDim2.fromOffset(12, 82),
 		Size = UDim2.new(1, -24, 0, 18),
 		BackgroundTransparency = 1,
 		Font = Theme.fontText,
@@ -274,8 +281,8 @@ function ContainerController.start()
 		Text = "",
 	})
 	list = Create("ScrollingFrame", {
-		Position = UDim2.fromOffset(12, 60),
-		Size = UDim2.new(1, -24, 1, -94),
+		Position = UDim2.fromOffset(12, 104),
+		Size = UDim2.new(1, -24, 1, -138),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ScrollBarThickness = 6,
@@ -334,6 +341,7 @@ function ContainerController.start()
 		Stroke = Create("UIStroke", { Color = Theme.orange, Transparency = 0.4 }),
 		SizeLimit = Create("UISizeConstraint", { MinSize = Vector2.new(320, 220), MaxSize = Vector2.new(620, 800) }),
 		Title = title,
+		Gauge = gauge.frame,
 		Hint = hint,
 		List = list,
 		Footer = footer,

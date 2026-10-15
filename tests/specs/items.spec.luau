@@ -197,4 +197,18 @@ return function(T, H)
 			expect(InventoryLogic.used(inventory)).toBe(before)
 		end)
 	end)
+
+	describe("Remplissage du sac et du coffre", function()
+		local Config = H.require("ReplicatedStorage/Shared/Config")
+		it("normal, presque plein à partir du seuil, plein à la limite", function()
+			local warning = Config.Equipment.capacityWarning
+			expect(ItemRules.fillLevel(0, 10)).toBe("ok")
+			expect(ItemRules.fillLevel(math.ceil(10 * warning) - 1, 10)).toBe("ok")
+			expect(ItemRules.fillLevel(math.ceil(10 * warning), 10)).toBe("high")
+			expect(ItemRules.fillLevel(9, 10)).toBe("high")
+			expect(ItemRules.fillLevel(10, 10)).toBe("full")
+			expect(ItemRules.fillLevel(12, 10)).toBe("full")
+			expect(ItemRules.fillLevel(0, 0)).toBe("full")
+		end)
+	end)
 end

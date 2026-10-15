@@ -147,6 +147,19 @@ function ItemRules.weaponsUsing(cellId: string): { string }
 	return list
 end
 
+export type FillLevel = "ok" | "high" | "full"
+
+-- Remplissage d'un sac ou d'un coffre : normal, presque plein, plein (ou au-delà).
+function ItemRules.fillLevel(used: number, capacity: number): FillLevel
+	if capacity <= 0 or used >= capacity then
+		return "full"
+	end
+	if used / capacity >= Config.Equipment.capacityWarning then
+		return "high"
+	end
+	return "ok"
+end
+
 function ItemRules.totalUp(items: { ItemInstance }): number
 	local total = 0
 	for _, item in items do
