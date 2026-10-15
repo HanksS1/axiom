@@ -170,6 +170,29 @@ function EconomyRules.keepPending(profile: Profile, uid: string): (boolean, stri
 	return true, nil
 end
 
+-- Garder tout ce qui tient dans le coffre (le plus précieux d'abord). Retourne le nombre gardé.
+function EconomyRules.keepAllPending(profile: Profile): (boolean, string?, number)
+	local sorted = table.clone(profile.pendingLoot)
+	table.sort(sorted, function(a, b)
+		return ItemRules.value(a) > ItemRules.value(b)
+	end)
+	local kept = 0
+	for _, item in sorted do
+		if EconomyRules.vaultFree(profile) >= ItemRules.up(item) then
+			local index = indexOf(profile.pendingLoot, item.uid)
+			if index then
+				table.remove(profile.pendingLoot, index)
+				table.insert(profile.vault, item)
+				kept += 1
+			end
+		end
+	end
+	if kept == 0 then
+		return false, "vault_full", 0
+	end
+	return true, nil, kept
+end
+
 -- Marchand -------------------------------------------------------------------
 
 --[[

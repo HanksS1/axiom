@@ -273,7 +273,11 @@ function DeployController.init() end
 
 function DeployController.start()
 	local root = HUDController.root()
-	screen = DeployScreen.create(root, t)
+	screen = DeployScreen.create(root, t, {
+		openSort = function()
+			TerminusController.openSort()
+		end,
+	})
 	TerminusController.register("deploy", screen)
 	buildQueueBanner(root)
 	buildInviteToast(root)

@@ -218,4 +218,35 @@ return function(T, H)
 			expect(EconomyRules.ageTempItem(item)).toBeNil()
 		end)
 	end)
+
+	describe("Tri : tout garder", function()
+		it("garde ce qui tient dans le coffre, le plus précieux d'abord ; le reste attend", function()
+			local p = ProfileTemplate.new(1000)
+			local capacity = Config.Economy.vault.baseCapacity
+			-- Coffre presque plein : il reste 3 UP.
+			for _ = 1, capacity - 3 do
+				table.insert(p.vault, create("nanite_injector", { stack = 1 }))
+			end
+			local cheap = create("scrap_laser_pistol", { condition = 1 })
+			local rich = create("vigil_pistol", { condition = 4 })
+			local big = create("needle", { condition = 4 })
+			p.pendingLoot = { cheap, rich, big }
+			local ok, _, kept = EconomyRules.keepAllPending(p)
+			expect(ok).toBe(true)
+			expect(kept >= 1).toBe(true)
+			-- Le plus précieux qui tient est gardé en premier.
+			expect(table.find(p.vault, rich) ~= nil or table.find(p.vault, big) ~= nil).toBe(true)
+			expect(EconomyRules.vaultFree(p) >= 0).toBe(true)
+			expect(#p.pendingLoot + kept).toBe(3)
+			-- Coffre plein : rien de plus.
+			while EconomyRules.vaultFree(p) > 0 do
+				table.insert(p.vault, create("nanite_injector", { stack = 1 }))
+			end
+			if #p.pendingLoot > 0 then
+				local refused, reason = EconomyRules.keepAllPending(p)
+				expect(refused).toBe(false)
+				expect(reason).toBe("vault_full")
+			end
+		end)
+	end)
 end

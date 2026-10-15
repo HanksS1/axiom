@@ -92,7 +92,7 @@ function EconomyService.init()
 	ServerNet.onEvent(
 		"VaultAction",
 		Guard.tuple(
-			Guard.enum({ "equip", "unequip", "toBag", "fromBag", "discard", "keep" }),
+			Guard.enum({ "equip", "unequip", "toBag", "fromBag", "discard", "keep", "keepAll" }),
 			Guard.optional(Guard.uid()),
 			Guard.optional(Guard.enum(SLOTS))
 		),
@@ -111,6 +111,9 @@ function EconomyService.init()
 					return ok, reason, { uid = uid }
 				elseif action == "keep" and uid then
 					return EconomyRules.keepPending(profile, uid)
+				elseif action == "keepAll" then
+					local ok, reason, kept = EconomyRules.keepAllPending(profile)
+					return ok, reason, { kept = kept }
 				end
 				return false, "invalid"
 			end)
