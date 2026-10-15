@@ -35,6 +35,7 @@ local PanelState = require(script.Parent.Parent.UI.PanelState)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local BazaarScreen = require(script.Parent.Parent.Screens.BazaarScreen)
 local HUDController = require(script.Parent.HUDController)
+local MatchHUDController = require(script.Parent.MatchHUDController)
 local NotificationController = require(script.Parent.NotificationController)
 local ProfileController = require(script.Parent.ProfileController)
 local TerminusController = require(script.Parent.TerminusController)
@@ -357,6 +358,15 @@ function BazaarController.start()
 	})
 	TerminusController.register("bazaar", screen)
 	buildOverlay(root)
+
+	-- Départ en partie : la fenêtre d'ouverture se ferme (le skin est déjà acquis :
+	-- le serveur l'accorde avant l'animation).
+	MatchHUDController.StatusChanged:Connect(function(status)
+		if status == "alive" and overlay.Visible then
+			requestedAt = nil
+			close()
+		end
+	end)
 
 	ClientNet.on("CosmeticCrateResult", function(result: any)
 		if

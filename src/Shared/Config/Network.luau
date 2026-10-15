@@ -18,6 +18,7 @@ return Freeze.deep({
 		-- Profil / paramètres
 		RequestProfile = { rate = 0.5, burst = 3 },
 		UpdateSetting = { rate = 4, burst = 10 },
+		GuideSeen = { rate = 1, burst = 3 },
 		-- Outils de développement (Studio uniquement)
 		DevCommand = { rate = 2, burst = 5 },
 		-- Combat

@@ -40,8 +40,8 @@ local InventoryController = {}
 
 InventoryController.Changed = Signal.new() :: Signal.Signal<State>
 
--- Consommables rapides, dans l'ordre des touches 3 / 4 / 5.
-InventoryController.quickItems = table.freeze({ "nanite_injector", "shield_battery", "overdrive" })
+-- Consommables rapides, dans l'ordre des touches 3 / 4 / 5 / 6.
+InventoryController.quickItems = table.freeze({ "nanite_injector", "shield_battery", "overdrive", "exo_harness" })
 
 local t = ProfileController.t
 local state: State = { equipped = {}, bag = {}, capacity = 0, used = 0, bonusUp = 0 }
@@ -307,6 +307,8 @@ function InventoryController.start()
 			InventoryController.useQuick(2)
 		elseif action == "boost" then
 			InventoryController.useQuick(3)
+		elseif action == "exo" then
+			InventoryController.useQuick(4)
 		end
 	end)
 	-- Manette : appui court sur la croix bas = consommable suivant.

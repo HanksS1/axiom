@@ -201,9 +201,9 @@ function EconomyService.init()
 		local ok, reward = transact(player, "freecrate.open", function(profile)
 			return EconomyRules.openFreeCrate(profile, os.time(), random, ItemFactory.create)
 		end)
-		if ok and reward then
-			ServerNet.fire("FreeCrateResult", player, reward)
-		end
+		-- Refus (pas de caisse, file d'attente, partie) : réponse explicite, pour que
+		-- la fenêtre d'ouverture se referme (la notification donne la raison).
+		ServerNet.fire("FreeCrateResult", player, if ok and reward then reward else { kind = "refused" })
 	end)
 end
 

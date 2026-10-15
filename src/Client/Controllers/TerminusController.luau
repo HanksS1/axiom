@@ -19,6 +19,7 @@ local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local FreeCrateFlow = require(Shared.Economy.FreeCrateFlow)
 local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
 
@@ -31,6 +32,7 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local ArmorerScreen = require(script.Parent.Parent.Screens.ArmorerScreen)
 local InsurerScreen = require(script.Parent.Parent.Screens.InsurerScreen)
 local MerchantScreen = require(script.Parent.Parent.Screens.MerchantScreen)
+local ConfirmDialog = require(script.Parent.Parent.UI.ConfirmDialog)
 local ProfileScreen = require(script.Parent.Parent.Screens.ProfileScreen)
 local SortScreen = require(script.Parent.Parent.Screens.SortScreen)
 local VaultScreen = require(script.Parent.Parent.Screens.VaultScreen)
@@ -56,6 +58,8 @@ local sortButton: TextButton -- « Butin à trier (N) » : toujours un moyen de 
 local quickMenu: Panel.Panel
 local sortDismissed = false
 local profileScreen: ProfileScreen.Screen
+-- En file d'attente : l'économie est verrouillée côté serveur (QueueService.isLocked).
+local queued = false
 
 local function inMatch(): boolean
 	local status = MatchHUDController.status()
@@ -143,6 +147,10 @@ local function renderCrate()
 end
 
 -- Ouverture de la caisse gratuite (écran 9) : 2 s d'animation, puis le résultat.
+-- Déroulé (séances, annulation, délai de réponse) : Shared/Economy/FreeCrateFlow.
+local crateFlow = FreeCrateFlow.new()
+local crateShake: RBXScriptConnection? = nil
+local crateTween: Tween? = nil
 local crateOverlay: Frame
 local crateBox: Frame
 local crateFill: Frame
@@ -156,7 +164,38 @@ local function clearCratePrize()
 		cratePrize = nil
 	end
 end
-local crateOpening = false
+
+-- Arrête l'animation en cours (tremblement, remplissage) : aucune connexion ne survit.
+local function stopCrateAnimation()
+	if crateShake then
+		crateShake:Disconnect()
+		crateShake = nil
+	end
+	if crateTween then
+		crateTween:Cancel()
+		crateTween = nil
+	end
+	if crateBox then
+		crateBox.Rotation = 0
+	end
+end
+
+--[[
+	Ferme la fenêtre de la caisse et oublie l'ouverture en cours (fermeture,
+	refus du serveur, délai dépassé, départ en partie). Une ouverture annulée
+	avant la fin de l'animation n'a rien demandé au serveur : la caisse reste
+	disponible.
+]]
+local function closeCrate()
+	FreeCrateFlow.cancel(crateFlow)
+	stopCrateAnimation()
+	clearCratePrize()
+	if crateOverlay then
+		crateBox.Visible = true
+		crateOverlay.Visible = false
+	end
+	PanelState.set("freeCrate", false)
+end
 
 local function buildCrateOverlay(root: Instance)
 	crateText = Panel.label("", 22, Theme.text)
@@ -204,26 +243,28 @@ local function buildCrateOverlay(root: Instance)
 		Result = crateText,
 		Close = crateClose,
 	})
-	crateClose.Activated:Connect(function()
-		clearCratePrize()
-		crateBox.Visible = true
-		crateOverlay.Visible = false
-		PanelState.set("freeCrate", false)
-	end)
+	crateClose.Activated:Connect(closeCrate)
 end
 
 local function openCrate()
 	local view = ProfileController.get()
 	local available = if view then view.freeCrate.stored + ((view.crateTokens or {}).free or 0) else 0
-	if crateOpening or view == nil or available <= 0 then
-		ClientNet.fire("OpenFreeCrate") -- le serveur explique le refus
+	local decision = FreeCrateFlow.decide(
+		crateFlow,
+		available,
+		queued or inMatch(),
+		view ~= nil and view.settings.skipCrateAnimation == true
+	)
+	if decision == "busy" then
 		return
-	end
-	if view.settings.skipCrateAnimation == true then
+	elseif decision == "direct" then
+		-- Sans animation : le serveur ouvre, ou explique son refus (pas de caisse,
+		-- file d'attente, partie en cours).
 		ClientNet.fire("OpenFreeCrate")
 		return
 	end
-	crateOpening = true
+	local session = FreeCrateFlow.start(crateFlow)
+	stopCrateAnimation()
 	clearCratePrize()
 	crateBox.Visible = true
 	crateOverlay.Visible = true
@@ -233,26 +274,44 @@ local function openCrate()
 	crateClose.Visible = false
 	crateFill.Size = UDim2.fromScale(0, 1)
 	local duration = Config.Economy.freeCrate.openDuration
-	TweenService:Create(crateFill, TweenInfo.new(duration, Enum.EasingStyle.Linear), { Size = UDim2.fromScale(1, 1) })
-		:Play()
+	local tween = TweenService:Create(
+		crateFill,
+		TweenInfo.new(duration, Enum.EasingStyle.Linear),
+		{ Size = UDim2.fromScale(1, 1) }
+	)
+	crateTween = tween
+	tween:Play()
 	-- La caisse tremble de plus en plus.
 	local started = os.clock()
-	local shake: RBXScriptConnection
-	shake = RunService.RenderStepped:Connect(function()
+	crateShake = RunService.RenderStepped:Connect(function()
 		local progress = math.clamp((os.clock() - started) / duration, 0, 1)
 		crateBox.Rotation = math.sin(os.clock() * 40) * 6 * progress
 		if progress >= 1 then
-			shake:Disconnect()
-			crateBox.Rotation = 0
+			stopCrateAnimation()
 		end
 	end)
 	task.delay(duration, function()
-		crateOpening = false
+		-- Ouverture annulée entre-temps (départ en partie, fermeture) : rien à demander.
+		if not FreeCrateFlow.isCurrent(crateFlow, session) then
+			return
+		end
+		stopCrateAnimation()
+		FreeCrateFlow.sent(crateFlow, os.clock())
 		ClientNet.fire("OpenFreeCrate")
 	end)
 end
 
 local function showCrateResult(reward: { [string]: any })
+	if reward.kind == "refused" then
+		-- Le serveur a refusé (sa notification explique pourquoi) : on referme.
+		if crateFlow.phase ~= "shown" then
+			closeCrate()
+		end
+		return
+	end
+	if inMatch() then
+		return -- résultat arrivé après le départ en partie : déjà crédité, rien à afficher
+	end
 	local text: string
 	if reward.kind == "credits" then
 		text = t("freecrate.credits", { credits = reward.amount })
@@ -265,6 +324,7 @@ local function showCrateResult(reward: { [string]: any })
 	-- état), même quand l'animation d'ouverture est désactivée.
 	local item = if reward.kind == "item" then reward.item else nil
 	if not crateOverlay.Visible and item == nil then
+		FreeCrateFlow.cancel(crateFlow)
 		NotificationController.show(text, Theme.green)
 		return
 	end
@@ -284,6 +344,7 @@ local function showCrateResult(reward: { [string]: any })
 	crateText.TextColor3 = Theme.green
 	crateClose.Text = t("common.confirm")
 	crateClose.Visible = true
+	FreeCrateFlow.shown(crateFlow)
 	if not crateOverlay.Visible then
 		crateOverlay.Visible = true
 		PanelState.set("freeCrate", true)
@@ -465,19 +526,32 @@ function TerminusController.start()
 	MatchHUDController.StatusChanged:Connect(function(status)
 		topBar.Visible = not (status == "alive" or status == "orb")
 		if status == "alive" then
+			-- Départ en partie : aucune fenêtre du Terminus ne survit (écrans, menu
+			-- rapide, caisse gratuite en cours d'ouverture, confirmation).
 			for _, screen in screens do
 				screen.panel:close()
 			end
 			quickMenu:close()
+			closeCrate()
+			ConfirmDialog.dismiss()
 		end
 		sortDismissed = false
+	end)
+	ClientNet.on("QueueState", function(state: Types.QueueView?)
+		queued = state ~= nil and state.status ~= "idle"
 	end)
 
 	local view = ProfileController.get()
 	if view then
 		renderTopBar(view)
 	end
-	RunService.RenderStepped:Connect(renderCrate)
+	RunService.RenderStepped:Connect(function()
+		renderCrate()
+		-- Demande envoyée restée sans réponse : la fenêtre ne reste jamais bloquée.
+		if FreeCrateFlow.timedOut(crateFlow, os.clock(), Config.Economy.freeCrate.resultTimeout) then
+			closeCrate()
+		end
+	end)
 end
 
 -- Ajoute l'écran d'une station (Porte de déploiement en P6, Holo-Bazar en P9…).

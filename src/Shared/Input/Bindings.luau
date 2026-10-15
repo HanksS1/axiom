@@ -33,6 +33,7 @@ Bindings.actions = {
 	"heal",
 	"battery",
 	"boost",
+	"exo",
 	"quickCycle",
 	"ping",
 	"map",
@@ -55,6 +56,8 @@ Bindings.defaults = {
 	heal = { keyboard = "Three", gamepad = nil },
 	battery = { keyboard = "Four", gamepad = nil },
 	boost = { keyboard = "Five", gamepad = nil },
+	-- Exo-harnais (+ place dans le sac) ; manette : croix bas (consommable suivant).
+	exo = { keyboard = "Six", gamepad = nil },
 	quickCycle = { keyboard = nil, gamepad = "DPadDown" },
 	ping = { keyboard = "T", gamepad = "DPadUp" },
 	map = { keyboard = "M", gamepad = "ButtonL1" },

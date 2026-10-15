@@ -211,4 +211,74 @@ return function(T, H)
 			expect(ItemRules.fillLevel(0, 0)).toBe("full")
 		end)
 	end)
+
+	describe("Exo-harnais", function()
+		local Config = H.require("ReplicatedStorage/Shared/Config")
+		local InventoryLogic = H.require("ReplicatedStorage/Shared/Items/InventoryLogic")
+		local ConsumableRules = H.require("ReplicatedStorage/Shared/Items/ConsumableRules")
+		local exo = Config.Equipment.consumables.exo_harness
+		local bonus = exo.effect.bonusUp
+
+		local function fighter(overrides)
+			local view = { health = 100, maxHealth = 100, shield = 0, maxShield = 50, exoUsed = false }
+			for k, v in overrides or {} do
+				view[k] = v
+			end
+			return view
+		end
+
+		it("ajoute sa place à la capacité du sac (avec ou sans sac)", function()
+			local pockets = Config.Equipment.pocketsUp
+			expect(ItemRules.bagCapacity(nil, bonus)).toBe(pockets + bonus)
+			local backpack = item("backpack_small", 4)
+			expect(ItemRules.bagCapacity(backpack) > pockets).toBe(true)
+			expect(ItemRules.bagCapacity(backpack, bonus)).toBe(ItemRules.bagCapacity(backpack) + bonus)
+			local inventory = InventoryLogic.new({ backpack = backpack }, {})
+			local before = InventoryLogic.capacity(inventory)
+			inventory.bonusUp += bonus
+			expect(InventoryLogic.capacity(inventory)).toBe(before + bonus)
+			expect(InventoryLogic.free(inventory)).toBe(before + bonus)
+		end)
+
+		it("refusé une deuxième fois dans la même partie, avec une raison explicite", function()
+			expect(ConsumableRules.refusal(exo.effect, fighter())).toBe(nil)
+			expect(ConsumableRules.refusal(exo.effect, fighter({ exoUsed = true }))).toBe("exo_used")
+			-- Les autres consommables gardent leurs refus.
+			local heal = Config.Equipment.consumables.nanite_injector.effect
+			expect(ConsumableRules.refusal(heal, fighter())).toBe("useless")
+			expect(ConsumableRules.refusal(heal, fighter({ health = 40 }))).toBe(nil)
+		end)
+
+		it("surcapacité : le sac rempli grâce au bonus ne peut pas être retiré", function()
+			local backpack = item("backpack_small", 4)
+			local inventory = InventoryLogic.new({ backpack = backpack }, {})
+			inventory.bonusUp = bonus
+			-- Remplir au-delà des poches seules (bonus compris).
+			local index = 0
+			while InventoryLogic.free(inventory) > 0 do
+				index += 1
+				local ok =
+					InventoryLogic.store(inventory, { uid = "n" .. index, itemId = "nanite_injector", stack = 1 })
+				if not ok then
+					break
+				end
+			end
+			expect(InventoryLogic.used(inventory) > ItemRules.bagCapacity(nil, bonus)).toBe(true)
+			local taken, reason = InventoryLogic.take(inventory, backpack.uid)
+			expect(taken).toBe(nil)
+			expect(reason).toBe("too_small")
+		end)
+
+		it("une partie repart d'un sac sans bonus", function()
+			expect(InventoryLogic.new({}, {}).bonusUp).toBe(0)
+		end)
+
+		it("obtenable : butin et caisse gratuite", function()
+			local inPool = false
+			for _, id in Config.Economy.freeCrate.tempItemPool do
+				inPool = inPool or id == "exo_harness"
+			end
+			expect(inPool).toBe(true)
+		end)
+	end)
 end

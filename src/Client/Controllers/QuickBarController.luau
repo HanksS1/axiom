@@ -25,7 +25,7 @@ local QuickBarController = {}
 
 local t = ProfileController.t
 -- Actions des emplacements (icônes de touches selon le périphérique, 17.2).
-local SLOT_ACTIONS: { InputController.Action } = { "heal", "battery", "boost" }
+local SLOT_ACTIONS: { InputController.Action } = { "heal", "battery", "boost", "exo" }
 
 local slots: { { frame: Frame, name: TextLabel, count: TextLabel, key: TextLabel, stroke: UIStroke } } = {}
 local usingBar: Frame
@@ -53,6 +53,7 @@ local function render()
 	end
 	local bagKey = if device == "keyboard" then InputController.hint("inventory") else nil
 	bagLabel.Text = t("hud.bagUp", { used = inventory.used, capacity = inventory.capacity })
+		.. (if inventory.bonusUp > 0 then "  " .. t("hud.bagBonus", { up = inventory.bonusUp }) else "")
 		.. (if bagKey then `  [{bagKey}]` else "")
 	local level = ItemRules.fillLevel(inventory.used, inventory.capacity)
 	if level == "full" then

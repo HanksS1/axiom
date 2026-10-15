@@ -177,6 +177,10 @@ function ItemCard.create(item: Types.ItemInstance, t: Translate, actions: { Acti
 	if value > 0 then
 		table.insert(details, t("inventory.value", { value = value }))
 	end
+	-- Module de calibration : son usage (sinon le joueur ne sait pas quoi en faire).
+	if info and info.category == "calibration" then
+		table.insert(details, 1, t("inventory.calibrationUse"))
+	end
 	-- Munitions : la cellule d'une arme, ou les armes qui utilisent une cellule.
 	local ammo = ItemRules.ammoOf(item.itemId)
 	if ammo then

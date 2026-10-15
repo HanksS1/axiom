@@ -670,6 +670,37 @@ return function(T, H)
 			expect(table.find(WeaponStats.sheet("needle").traits, "scope") ~= nil).toBe(true)
 		end)
 
+		it("place dans le sac : la valeur de l'arme, sans barre, qualifiée dans sa catégorie", function()
+			local ItemRules = H.require("ReplicatedStorage/Shared/Items/ItemRules")
+			for _, id in all do
+				local sheet = WeaponStats.sheet(id, 4)
+				local space = nil
+				for _, line in sheet.lines do
+					if line.key == "space" then
+						space = line
+					end
+				end
+				expect(space ~= nil).toBe(true)
+				expect(space.value).toBe(ItemRules.up({ uid = "x", itemId = id, condition = 4 }))
+				-- Pas de barre : plus long voudrait dire « mieux », or moins de place vaut mieux.
+				expect(space.ratio).toBeNil()
+				for _, lang in { "fr", "en" } do
+					expect(Localization.has(lang, space.text)).toBe(true)
+				end
+			end
+			-- Pistolet (2 UP) léger, Mitrailleuse de Bastion (6 UP) encombrante.
+			local function tierOf(id)
+				for _, line in WeaponStats.sheet(id, 4).lines do
+					if line.key == "space" then
+						return line.text
+					end
+				end
+				return nil
+			end
+			expect(tierOf("vigil_pistol")).toBe("weapon.value.space.light")
+			expect(tierOf("bastion_minigun")).toBe("weapon.value.space.bulky")
+		end)
+
 		it("rareté croissante avec la valeur ; précision cohérente avec la dispersion", function()
 			local order = {}
 			for index, step in Config.Weapons.rarityByValue do

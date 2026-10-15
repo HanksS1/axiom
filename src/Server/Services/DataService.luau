@@ -308,6 +308,13 @@ function DataService.init()
 			end)
 		end
 	)
+
+	-- Aide de station lue : elle ne sera plus montrée d'office.
+	ServerNet.onEvent("GuideSeen", Guard.tuple(Guard.enum(Config.Hints.stationGuides)), function(player, key: string)
+		DataService.update(player, function(profile)
+			profile.guidesSeen[key] = true
+		end)
+	end)
 end
 
 function DataService.start()

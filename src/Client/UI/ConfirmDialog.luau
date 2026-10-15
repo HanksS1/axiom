@@ -12,6 +12,7 @@ local Theme = require(script.Parent.Theme)
 local ConfirmDialog = {}
 
 local dialog: Frame? = nil
+local closeCurrent: (() -> ())? = nil
 
 function ConfirmDialog.ask(
 	parent: Instance,
@@ -20,8 +21,8 @@ function ConfirmDialog.ask(
 	cancelText: string,
 	onConfirm: () -> ()
 )
-	if dialog then
-		dialog:Destroy()
+	if closeCurrent then
+		closeCurrent()
 	end
 	local confirm = Panel.button(confirmText, Theme.green, 160)
 	local cancel = Panel.button(cancelText, Theme.textDim, 160)
@@ -68,14 +69,23 @@ function ConfirmDialog.ask(
 		frame:Destroy()
 		if dialog == frame then
 			dialog = nil
+			closeCurrent = nil
 		end
 		PanelState.set("confirm", false)
 	end
+	closeCurrent = close
 	confirm.Activated:Connect(function()
 		close()
 		onConfirm()
 	end)
 	cancel.Activated:Connect(close)
+end
+
+-- Ferme la confirmation affichée, sans confirmer (départ en partie).
+function ConfirmDialog.dismiss()
+	if closeCurrent then
+		closeCurrent()
+	end
 end
 
 return ConfirmDialog

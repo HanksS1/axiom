@@ -24,6 +24,7 @@ local Config = require(ReplicatedStorage:WaitForChild("Shared").Config)
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local Create = require(script.Parent.Parent.UI.Create)
 local Panel = require(script.Parent.Parent.UI.Panel)
+local TextKeys = require(script.Parent.Parent.UI.TextKeys)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local CameraController = require(script.Parent.CameraController)
 local HUDController = require(script.Parent.HUDController)
@@ -102,19 +103,12 @@ local function renderGoal()
 	})
 end
 
--- Textes localisés du décor de la simulation.
+-- Textes localisés du décor de la simulation (TextKeys : y compris ce qui
+-- arrive après, re-traduits au changement de langue).
 local function localizeArea()
 	local area = Workspace:FindFirstChild(`Tutorial_{player.UserId}`)
-	if area == nil then
-		return
-	end
-	for _, descendant in area:GetDescendants() do
-		if descendant:IsA("TextLabel") then
-			local key = descendant:GetAttribute("TextKey")
-			if type(key) == "string" then
-				descendant.Text = t(key)
-			end
-		end
+	if area then
+		TextKeys.watch(area)
 	end
 end
 
@@ -250,6 +244,7 @@ end
 function TutorialController.init() end
 
 function TutorialController.start()
+	TextKeys.setTranslator(t)
 	local gui = HUDController.root()
 	root = Create("Frame", {
 		Name = "Tutorial",

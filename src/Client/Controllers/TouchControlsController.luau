@@ -67,7 +67,8 @@ local BUTTONS: { ButtonSpec } = {
 		position = UDim2.new(1, -330, 1, -110),
 		color = Theme.orange,
 	},
-	-- Rangée compacte : soins, batterie, Surcharge, sac.
+	-- Rangée compacte : exo-harnais, soins, batterie, Surcharge, sac.
+	{ action = "exo", label = "touch.exo", size = 48, position = UDim2.new(1, -310, 1, -380), color = Theme.magenta },
 	{ action = "heal", label = "touch.heal", size = 48, position = UDim2.new(1, -250, 1, -380), color = Theme.green },
 	{
 		action = "battery",

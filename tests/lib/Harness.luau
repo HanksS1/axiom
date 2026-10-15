@@ -261,6 +261,35 @@ end
 
 Harness.FakeRandom = FakeRandom
 
+--[[
+	Rend disponibles les vraies Instances de Lune (Part, SurfaceGui…) et leurs
+	types (NumberSequence, ColorSequence…) aux modules chargés ensuite : pour
+	construire un décor hors de Studio et l'inspecter (tests du Terminus).
+]]
+local instanceGlobals: { string } = {}
+function Harness.useInstances()
+	instanceGlobals = {
+		"Instance",
+		"NumberSequence",
+		"NumberSequenceKeypoint",
+		"ColorSequence",
+		"ColorSequenceKeypoint",
+		"NumberRange",
+		"BrickColor",
+		"Rect",
+		"Font",
+	}
+	baseEnvironment.Instance = roblox.Instance
+	baseEnvironment.NumberSequence = roblox.NumberSequence
+	baseEnvironment.NumberSequenceKeypoint = roblox.NumberSequenceKeypoint
+	baseEnvironment.ColorSequence = roblox.ColorSequence
+	baseEnvironment.ColorSequenceKeypoint = roblox.ColorSequenceKeypoint
+	baseEnvironment.NumberRange = roblox.NumberRange
+	baseEnvironment.BrickColor = roblox.BrickColor
+	baseEnvironment.Rect = roblox.Rect
+	baseEnvironment.Font = roblox.Font
+end
+
 -- Résout un chemin « Service/Enfant/… » et charge le module.
 function Harness.require(path: string)
 	local node
@@ -276,6 +305,11 @@ end
 
 -- Vide le cache (chaque fichier de test repart de modules neufs).
 function Harness.reset()
+	-- Instances réservées au fichier de test qui les a demandées.
+	for _, name in instanceGlobals do
+		baseEnvironment[name] = nil
+	end
+	instanceGlobals = {}
 	table.clear(moduleCache)
 	table.clear(services)
 	table.clear(Harness.warnings)

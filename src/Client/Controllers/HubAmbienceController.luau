@@ -18,6 +18,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
+local TextKeys = require(script.Parent.Parent.UI.TextKeys)
 local ProfileController = require(script.Parent.ProfileController)
 
 local HubAmbienceController = {}
@@ -90,19 +91,6 @@ local function track(tag: string, instance: Instance)
 		phase = random:NextNumber(0, math.pi * 2),
 		data = { nextAt = os.clock() + random:NextNumber(1, 8), untilAt = 0 },
 	}
-end
-
--- Textes localisés -------------------------------------------------------------
-
-local function localize(root: Instance)
-	for _, descendant in root:GetDescendants() do
-		if descendant:IsA("TextLabel") then
-			local key = descendant:GetAttribute("TextKey")
-			if type(key) == "string" then
-				descendant.Text = t(key)
-			end
-		end
-	end
 end
 
 -- PNJ ------------------------------------------------------------------------
@@ -434,22 +422,21 @@ function HubAmbienceController.start()
 		task.defer(addNpc, model)
 	end)
 
-	-- Textes localisés : à l'arrivée du Terminus et à chaque changement de langue.
-	local function refreshTexts()
-		local root = terminus()
-		if root then
-			localize(root)
-		end
+	-- Textes localisés (enseignes, fresques, affiches, plaques des PNJ, Mur des
+	-- Légendes) : remplis à l'arrivée de chaque texte, quel que soit l'ordre
+	-- d'arrivée (les PNJ et leurs plaques sont créés après le décor, parfois
+	-- plusieurs secondes après), et re-traduits au changement de langue.
+	TextKeys.setTranslator(t)
+	local existing = terminus()
+	if existing then
+		TextKeys.watch(existing)
 	end
 	Workspace.ChildAdded:Connect(function(child)
 		if child.Name == "Terminus" then
-			task.delay(1, refreshTexts)
+			TextKeys.watch(child)
 		end
 	end)
-	ProfileController.Changed:Connect(refreshTexts)
-	task.delay(2, refreshTexts)
-	-- Les PNJ (et leurs plaques) apparaissent un peu après le décor.
-	task.delay(6, refreshTexts)
+	ProfileController.Changed:Connect(TextKeys.refresh)
 
 	RunService.RenderStepped:Connect(step)
 end

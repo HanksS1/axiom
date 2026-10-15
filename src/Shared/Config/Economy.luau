@@ -22,6 +22,9 @@ return Freeze.deep({
 		sellsConditions = { 3, 4 },
 		equipmentPriceMultiplier = 2,
 		consumablePriceMultiplier = 1.5,
+		-- Achats de routine avant chaque partie : en tête de la liste d'achat, à
+		-- l'unité ou par pile.
+		survivalItems = { "nanite_injector", "shield_battery", "overdrive", "exo_harness" },
 		-- Revente : à la valeur de l'objet (valeur de base × multiplicateur d'état).
 		resaleMultiplier = 1,
 		confirmAbove = 1000,
@@ -52,6 +55,9 @@ return Freeze.deep({
 		maxStored = 2,
 		checkInterval = 30, -- secondes entre deux vérifications serveur de l'accumulation
 		openDuration = 2, -- ouverture animée côté client (désactivable dans les paramètres)
+		-- Sans réponse du serveur après l'animation (refus : file d'attente, partie),
+		-- la fenêtre se referme au bout de ce délai (secondes).
+		resultTimeout = 4,
 		creditsChance = 0.85,
 		credits = { min = 50, max = 300 },
 		-- 15 % : objet temporaire (consommable ou gadget, Bon état), 3 parties.

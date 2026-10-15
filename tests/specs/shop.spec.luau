@@ -279,4 +279,93 @@ return function(T, H)
 			end
 		end)
 	end)
+
+	describe("Classement des skins (Holo-Bazar)", function()
+		local SkinSort = H.require("ReplicatedStorage/Shared/Monetization/SkinSort")
+		local C = Config.Cosmetics
+		local rarities = Config.Monetization.rarities
+
+		local function rank(rarity)
+			return table.find(rarities, rarity)
+		end
+
+		it("par type d'objet, puis objet ciblé, puis rareté croissante", function()
+			local sorted = SkinSort.sort(C.list)
+			expect(#sorted).toBe(#C.list)
+			for index = 2, #sorted do
+				local a, b = C.byId[sorted[index - 1]], C.byId[sorted[index]]
+				local ca = table.find(SkinSort.CATEGORY_ORDER, a.category)
+				local cb = table.find(SkinSort.CATEGORY_ORDER, b.category)
+				expect(ca <= cb).toBe(true)
+				if a.category == b.category and a.target == b.target then
+					expect(rank(a.rarity) <= rank(b.rarity)).toBe(true)
+				end
+			end
+		end)
+
+		it("tous les skins d'un même objet sont regroupés", function()
+			local seen = {}
+			for _, group in SkinSort.groups(C.list) do
+				local key = group.category .. "/" .. group.target
+				expect(seen[key]).toBeNil() -- un seul groupe par objet ciblé
+				seen[key] = true
+				for _, id in group.ids do
+					expect(C.byId[id].target).toBe(group.target)
+				end
+			end
+		end)
+
+		it("armes à distance avant la mêlée, dans l'ordre de progression", function()
+			local order = {}
+			for _, group in SkinSort.groups(C.list) do
+				if group.category == "weapon" then
+					table.insert(order, group.target)
+				end
+			end
+			local lastMelee, firstMelee = 0, nil
+			for index, target in order do
+				if Config.Weapons.melee[target] then
+					firstMelee = firstMelee or index
+				else
+					lastMelee = index
+				end
+			end
+			expect(firstMelee == nil or lastMelee < firstMelee).toBe(true)
+			for index = 2, #order do
+				local a, b = Config.Weapons.ranged[order[index - 1]], Config.Weapons.ranged[order[index]]
+				if a and b then
+					expect(a.baseValue <= b.baseValue).toBe(true)
+				end
+			end
+		end)
+
+		it("mode rareté : un groupe par rareté, commune en tête", function()
+			local groups = SkinSort.groups(C.list, "rarity")
+			for index = 2, #groups do
+				expect(rank(groups[index - 1].rarity) < rank(groups[index].rarity)).toBe(true)
+			end
+			expect(groups[1].rarity).toBe(rarities[1])
+		end)
+
+		it("stable : un catalogue enrichi ne change pas l'ordre relatif des skins existants", function()
+			local subset = {}
+			for index, id in C.list do
+				if index % 3 == 0 then
+					table.insert(subset, id)
+				end
+			end
+			local full = SkinSort.sort(C.list)
+			local partial = SkinSort.sort(subset)
+			local position = {}
+			for index, id in full do
+				position[id] = index
+			end
+			for index = 2, #partial do
+				expect(position[partial[index - 1]] < position[partial[index]]).toBe(true)
+			end
+			-- Identifiant inconnu (skin retiré) : rangé à la fin, sans erreur.
+			local withUnknown = SkinSort.sort({ "ghost__nothing", subset[1] })
+			expect(withUnknown[2]).toBe("ghost__nothing")
+		end)
+	end)
 end

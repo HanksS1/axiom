@@ -41,6 +41,10 @@ local hints: { [string]: HintDef } = {
 return Freeze.deep({
 	hints = hints,
 
+	-- Aides de station montrées à la première visite, jusqu'à « Compris »
+	-- (mémorisées dans le profil : guidesSeen).
+	stationGuides = { "armorer" },
+
 	display = {
 		duration = 5, -- secondes à l'écran
 		fade = 0.25,
