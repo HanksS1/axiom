@@ -32,6 +32,8 @@ local order = {
 	"TutorialController",
 	"AudioController",
 	"HubAmbienceController",
+	"ArenaLightingController",
+	"ArenaHUDController",
 	"NameplateController",
 	"DeployController",
 	"MapEffectsController",

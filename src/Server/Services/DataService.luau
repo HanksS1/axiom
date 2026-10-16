@@ -10,6 +10,14 @@
 	  synchrones (aucune attente dans `fn`) pour rester atomiques.
 	- Après chaque modification, une vue publique du profil est envoyée au
 	  client (regroupée à la fin de la frame).
+	- Journal de persistance (diagnostic des retours en arrière) : chaque
+	  chargement, sauvegarde, échec et perte de verrou est écrit dans la sortie
+	  (`[Data] …`, avec joueur, serveur, heure, résultat et numéro d'écriture
+	  `seq`) ; les événements rares (chargement, libération, échec, verrou
+	  perdu ou repris) sont aussi conservés dans le journal des transactions
+	  (DataStore, une clé par joueur et par jour) pour une enquête après coup.
+	- À l'arrêt, le serveur attend aussi les écritures DÉJÀ lancées (départ du
+	  dernier joueur) avant de se fermer.
 ]]
 
 local DataStoreService = game:GetService("DataStoreService")
@@ -34,6 +42,7 @@ local MockDataStore = require(script.Parent.Parent.Data.MockDataStore)
 local ProfileTemplate = require(script.Parent.Parent.Data.ProfileTemplate)
 local ProfileView = require(script.Parent.Parent.Data.ProfileView)
 local SessionStore = require(script.Parent.Parent.Data.SessionStore)
+local TransactionLog = require(script.Parent.Parent.Economy.TransactionLog)
 
 type Profile = Types.Profile
 
@@ -92,6 +101,32 @@ local function selectDataStore(): SessionStore.DataStoreLike
 		end
 	end
 	return dataStore
+end
+
+-- Journal de persistance : une ligne par événement ; les événements rares sont
+-- aussi conservés (TransactionLog) pour retrouver un retour en arrière après coup.
+local function onStoreEvent(name: string, fields: { [string]: any })
+	local parts = {}
+	for key, value in fields do
+		if key ~= "userId" and key ~= "key" then
+			table.insert(parts, `{key}={value}`)
+		end
+	end
+	table.sort(parts)
+	local line = `[Data] {name} user={fields.userId} {table.concat(parts, " ")}`
+	local result = fields.result
+	local failed = result ~= "ok" and result ~= "acquired" and result ~= "new"
+	if failed then
+		warn(line)
+	else
+		print(line)
+	end
+	-- Autosave réussie : seulement dans la sortie (une écriture DataStore de plus
+	-- par joueur et par minute n'apporterait rien au diagnostic).
+	local routine = name == "save" and result == "ok" and not fields.release
+	if not routine and type(fields.userId) == "number" then
+		TransactionLog.recordUser(fields.userId, "data." .. name, fields)
+	end
 end
 
 -- Vue publique du profil envoyée au client (liste des champs : Data/ProfileView).
@@ -225,6 +260,14 @@ local function onClose()
 	while pending > 0 and os.clock() < deadline do
 		task.wait(0.1)
 	end
+	-- Écritures lancées AVANT l'arrêt (départ du dernier joueur : sa session a
+	-- déjà quitté `sessions`, mais sa libération est en cours) : sans cette
+	-- attente, le serveur se ferme pendant l'écriture et le joueur retrouve sa
+	-- sauvegarde précédente.
+	if not store:waitForSaves(math.max(0, deadline - os.clock())) then
+		warn("[Data] arrêt : sauvegardes encore en cours au bout du délai")
+	end
+	TransactionLog.flush()
 end
 
 -- API ----------------------------------------------------------------------
@@ -247,6 +290,7 @@ function DataService.init()
 		loadRetryDelay = Config.Data.loadRetryDelay,
 		saveAttempts = Config.Data.saveAttempts,
 		saveRetryDelay = Config.Data.saveRetryDelay,
+		event = onStoreEvent,
 	})
 
 	ServerNet.onRequest("RequestProfile", Guard.tuple(), function(player)

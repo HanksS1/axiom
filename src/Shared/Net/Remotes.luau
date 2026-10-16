@@ -116,6 +116,8 @@ local Remotes: { [string]: RemoteDef } = {
 	RangeAction = { kind = "event", toServer = true },
 	RangeState = { kind = "event", toServer = false },
 	RangeHit = { kind = "unreliable", toServer = false }, -- dégâts affichés sur une cible
+	-- Arène FFA : tableau des scores (éphémère), aux seuls joueurs de l'arène
+	FfaBoard = { kind = "event", toServer = false },
 	-- Tutoriel : refaire / quitter (rejeu uniquement), état des étapes
 	TutorialAction = { kind = "event", toServer = true },
 	TutorialState = { kind = "event", toServer = false },

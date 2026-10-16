@@ -17,6 +17,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local Zone = require(Shared.Match.Zone)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local Create = require(script.Parent.Parent.UI.Create)
@@ -109,6 +110,8 @@ end
 local function render()
 	local now = Workspace:GetServerTimeNow()
 	local equipped = InventoryController.state().equipped
+	-- Zone publiée par le serveur (qui refuse lui-même l'usage) : affichage seulement.
+	local allowed = Zone.allows(player:GetAttribute("Zone"), "gadgets")
 	for _, slot in { "gadget1", "gadget2" } do
 		local label = labels[slot]
 		local item = equipped[slot]
@@ -116,7 +119,9 @@ local function render()
 		if item then
 			local state = slotStates[slot]
 			local status = t("hud.gadgetReady")
-			if state and state.uid == item.uid then
+			if not allowed then
+				status = t("hud.gadgetDisabled")
+			elseif state and state.uid == item.uid then
 				if now < state.cooldownUntil then
 					status = string.format("%d s", math.ceil(state.cooldownUntil - now))
 				elseif state.usesLeft then
@@ -130,6 +135,7 @@ local function render()
 			end
 			local hint = InputController.hint(slot :: InputController.Action)
 			label.Text = (if hint then `[{hint}] ` else "") .. t("item." .. item.itemId) .. "\n" .. status
+			label.TextTransparency = if allowed then 0 else 0.45
 		end
 	end
 end

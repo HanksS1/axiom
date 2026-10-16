@@ -8,8 +8,10 @@ return function(T, H)
 
 	local clock = 1000
 	local counter = 0
+	-- Appelé à chaque attente d'un serveur simulé (pour reprendre une écriture suspendue).
+	local onWait = nil
 
-	local function makeServer(store, jobId)
+	local function makeServer(store, jobId, events)
 		return SessionStore.new({
 			store = store,
 			jobId = jobId,
@@ -19,6 +21,9 @@ return function(T, H)
 			end,
 			wait = function(seconds)
 				clock += seconds
+				if onWait then
+					onWait()
+				end
 			end,
 			generateId = function()
 				counter += 1
@@ -33,7 +38,21 @@ return function(T, H)
 			saveAttempts = 3,
 			saveRetryDelay = 1,
 			log = function() end,
+			event = if events
+				then function(name, fields)
+					table.insert(events, { name = name, fields = fields })
+				end
+				else nil,
 		})
+	end
+
+	local function find(events, name, result)
+		for _, e in events do
+			if e.name == name and (result == nil or e.fields.result == result) then
+				return e.fields
+			end
+		end
+		return nil
 	end
 
 	describe("SessionStore", function()
@@ -170,6 +189,165 @@ return function(T, H)
 			serverA:save(session, false)
 			session.data.credits = 20
 			expect(db:GetAsync("player_9").data.credits).toBe(10)
+		end)
+	end)
+
+	describe("SessionStore : journal et arrêt du serveur (retours en arrière)", function()
+		it("chaque écriture numérote l'enregistrement ; le numéro suit le profil d'un serveur à l'autre", function()
+			local db = MockDataStore.new()
+			local events = {}
+			local serverA = makeServer(db, "A", events)
+			local session = serverA:acquire("seq_1", 101)
+			expect(find(events, "load", "new").seq).toBe(0)
+			serverA:save(session, false)
+			serverA:save(session, false)
+			serverA:save(session, true)
+			local released = find(events, "save", "ok")
+			expect(released.jobId).toBe("A")
+			expect(db:GetAsync("seq_1").meta.seq).toBe(3)
+			expect(db:GetAsync("seq_1").meta.jobId).toBe("A")
+			local eventsB = {}
+			local serverB = makeServer(db, "B", eventsB)
+			serverB:acquire("seq_1", 101)
+			-- Un retour en arrière se lirait ici : seq chargé < seq de la dernière libération.
+			local load = find(eventsB, "load", "acquired")
+			expect(load.seq).toBe(3)
+			expect(load.jobId).toBe("B")
+			expect(load.userId).toBe(101)
+			expect(type(load.time)).toBe("number")
+		end)
+
+		it("verrou périmé repris : le chargement dit qui le détenait et depuis quand", function()
+			local db = MockDataStore.new()
+			local serverA = makeServer(db, "A")
+			local session = serverA:acquire("stale_1", 102)
+			session.data.credits = 7
+			serverA:save(session, false)
+			clock += 601
+			local events = {}
+			local serverB = makeServer(db, "B", events)
+			local taken = serverB:acquire("stale_1", 102)
+			expect(taken.data.credits).toBe(7)
+			local load = find(events, "load", "acquired")
+			expect(load.takeover).toBe("stale")
+			expect(load.previousHolder).toBe("A")
+			expect(load.lockAge >= 601).toBe(true)
+		end)
+
+		it("verrou volé par un autre serveur : perte journalisée, rien n'est écrit", function()
+			local db = MockDataStore.new()
+			local events = {}
+			local serverA = makeServer(db, "A", events)
+			local session = serverA:acquire("stolen_1", 103)
+			serverA:save(session, false)
+			clock += 601
+			makeServer(db, "B"):acquire("stolen_1", 103)
+			session.data.credits = 5000
+			local ok, err = serverA:save(session, false)
+			expect(ok).toBe(false)
+			expect(err).toBe("lost")
+			local lost = find(events, "lock.lost")
+			expect(lost.holder).toBe("B")
+			expect(lost.jobId).toBe("A")
+			expect(db:GetAsync("stolen_1").data.credits).toBe(0)
+		end)
+
+		it("échec de sauvegarde : chaque tentative et l'échec final sont journalisés, seq inchangé", function()
+			local db = MockDataStore.new()
+			local events = {}
+			local serverA = makeServer(db, "A", events)
+			local session = serverA:acquire("fail_1", 104)
+			serverA:save(session, false)
+			db.failNext = 3
+			local ok, err = serverA:save(session, false)
+			expect(ok).toBe(false)
+			expect(err).toBe("error")
+			local retries = 0
+			for _, e in events do
+				if e.name == "save" and e.fields.result == "retry" then
+					retries += 1
+					expect(string.find(e.fields.error, "panne simulée", 1, true) ~= nil).toBe(true)
+				end
+			end
+			expect(retries).toBe(3)
+			local final = find(events, "save", "error")
+			expect(final.attempts).toBe(3)
+			expect(final.seq).toBe(1)
+			expect(session.seq).toBe(1)
+		end)
+
+		it("tentatives de chargement épuisées : jamais de profil neuf, abandon journalisé", function()
+			local db = MockDataStore.new()
+			local serverA = makeServer(db, "A")
+			local held = serverA:acquire("busy_1", 105)
+			held.data.credits = 900
+			serverA:save(held, false)
+			local events = {}
+			local serverB = makeServer(db, "B", events)
+			local session, err = serverB:acquire("busy_1", 105)
+			expect(session).toBeNil()
+			expect(err).toBe("locked")
+			local gaveUp = find(events, "load.gaveup")
+			expect(gaveUp.result).toBe("locked")
+			expect(gaveUp.attempts).toBe(3)
+			expect(find(events, "load", "locked").holder).toBe("A")
+			-- L'enregistrement n'a pas été touché (ni écrasé par un profil vierge).
+			expect(db:GetAsync("busy_1").data.credits).toBe(900)
+			expect(db:GetAsync("busy_1").lock.jobId).toBe("A")
+		end)
+
+		it("arrêt du serveur : la libération lancée par le départ du dernier joueur est attendue", function()
+			local db = MockDataStore.new()
+			local serverA = makeServer(db, "A")
+			local session = serverA:acquire("close_1", 106)
+			session.data.credits = 321
+			-- L'écriture de libération est suspendue en plein UpdateAsync (requête réseau).
+			local original = db.UpdateAsync
+			local suspended = true
+			db.UpdateAsync = function(self, key, transform)
+				if suspended then
+					coroutine.yield()
+				end
+				return original(self, key, transform)
+			end
+			local leaving = coroutine.create(function()
+				serverA:save(session, true)
+			end)
+			coroutine.resume(leaving)
+			expect(coroutine.status(leaving)).toBe("suspended")
+			-- Fermeture : chaque attente laisse la requête se terminer.
+			onWait = function()
+				if coroutine.status(leaving) == "suspended" then
+					suspended = false
+					coroutine.resume(leaving)
+				end
+			end
+			expect(serverA:waitForSaves(5)).toBe(true)
+			onWait = nil
+			db.UpdateAsync = original
+			expect(coroutine.status(leaving)).toBe("dead")
+			expect(db:GetAsync("close_1").data.credits).toBe(321)
+			expect(db:GetAsync("close_1").lock).toBeNil()
+		end)
+
+		it("arrêt du serveur : délai dépassé signalé (false), aucune attente sans écriture en cours", function()
+			local db = MockDataStore.new()
+			local serverA = makeServer(db, "A")
+			expect(serverA:waitForSaves(5)).toBe(true)
+			local session = serverA:acquire("close_2", 107)
+			local original = db.UpdateAsync
+			db.UpdateAsync = function(self, key, transform)
+				coroutine.yield() -- requête qui ne revient jamais
+				return original(self, key, transform)
+			end
+			local leaving = coroutine.create(function()
+				serverA:save(session, true)
+			end)
+			coroutine.resume(leaving)
+			local before = clock
+			expect(serverA:waitForSaves(5)).toBe(false)
+			expect(clock - before >= 5).toBe(true)
+			db.UpdateAsync = original
 		end)
 	end)
 end

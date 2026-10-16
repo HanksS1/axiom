@@ -31,19 +31,25 @@ local function storeOrNil(): any
 	return if store then store else nil
 end
 
-function TransactionLog.record(player: Player, kind: string, detail: any?)
+-- Entrée pour un identifiant de joueur (le joueur peut déjà être parti : journal
+-- de persistance, écrit pendant la libération du profil).
+function TransactionLog.recordUser(userId: number, kind: string, detail: any?)
 	local day = os.date("!%Y%m%d") :: string
-	local key = `log_{player.UserId}_{day}`
+	local key = `log_{userId}_{day}`
 	local entry = {
 		t = os.time(),
 		k = kind,
 		d = detail,
 	}
+	pending[key] = pending[key] or {}
+	table.insert(pending[key], entry)
+end
+
+function TransactionLog.record(player: Player, kind: string, detail: any?)
 	if RunService:IsStudio() then
 		print(`[Transaction] {player.Name} {kind} {HttpService:JSONEncode(detail or {})}`)
 	end
-	pending[key] = pending[key] or {}
-	table.insert(pending[key], entry)
+	TransactionLog.recordUser(player.UserId, kind, detail)
 end
 
 function TransactionLog.flush()

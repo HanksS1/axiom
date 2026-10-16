@@ -198,6 +198,8 @@ local function buy(player: Player, cosmeticId: string)
 		return
 	end
 	TransactionLog.record(player, "bazaar.buy", { cosmeticId = cosmeticId, price = price })
+	-- Noyaux (achetés en Robux) dépensés : sauvegardé tout de suite.
+	task.spawn(DataService.saveNow, player)
 	ServerNet.notify(player, "shop.bought", { item = cosmeticId })
 end
 
@@ -263,6 +265,9 @@ local function openCrate(player: Player, crateId: string)
 		return
 	end
 	TransactionLog.record(player, "crate.open", result)
+	-- Tirage au sort (et compteur de garantie) : sauvegardé tout de suite, pour qu'un
+	-- plantage ne fasse ni perdre le cosmétique ni rejouer le tirage.
+	task.spawn(DataService.saveNow, player)
 	ServerNet.fire("CosmeticCrateResult", player, result)
 end
 

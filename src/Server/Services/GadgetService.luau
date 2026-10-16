@@ -15,6 +15,10 @@
 	Les déplacements (saut, grappin) sont appliqués par le client sur son
 	personnage, APRÈS validation serveur, qui accorde la tolérance de vitesse
 	correspondante au contrôle anti-triche.
+
+	Zones (Config.Zones) : aucun gadget au Terminus ni au tutoriel ; permis en
+	partie et dans l'Arène FFA. Refus expliqué (notification « gadget.notHere »).
+	Les gadgets posés disparaissent à `reset` (début et fin de partie).
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -29,6 +33,7 @@ local Guard = require(Shared.Util.Guard)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
 local ItemRules = require(Shared.Items.ItemRules)
 local Types = require(Shared.Types)
+local Zone = require(Shared.Match.Zone)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
@@ -296,6 +301,11 @@ local function onUseGadget(player: Player, slot: string, target: Vector3?)
 	if fighter == nil or bag == nil or not Fighter.isAlive(fighter) then
 		return
 	end
+	-- Zone décidée par le serveur (position et partie), jamais par le client.
+	if not Zone.allows(CombatService.zoneOf(fighter), "gadgets") then
+		ServerNet.notify(player, "gadget.notHere")
+		return
+	end
 	Fighter.refresh(fighter, now())
 	if fighter.move.stunned or fighter.usingItemId ~= nil then
 		return
@@ -354,6 +364,8 @@ local function onUseGadget(player: Player, slot: string, target: Vector3?)
 		return
 	end
 
+	-- Gadget utilisé : le bouclier de réapparition tombe (comme au premier tir).
+	CombatService.noteAction(fighter, "gadget")
 	if def.cooldown then
 		state.cooldownUntil = time + def.cooldown / efficiency
 	end

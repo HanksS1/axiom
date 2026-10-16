@@ -38,6 +38,7 @@ Bindings.actions = {
 	"ping",
 	"map",
 	"inventory",
+	"scoreboard",
 }
 
 -- Touches par défaut (section 5.3). E / Q = positions physiques (A en AZERTY).
@@ -65,6 +66,8 @@ Bindings.defaults = {
 	-- joueurs de Roblox) ni I / O (zoom de la caméra de Roblox) : Roblox intercepte
 	-- ces touches et l'appui n'atteint jamais le jeu.
 	inventory = { keyboard = "B", gamepad = "ButtonSelect" },
+	-- Tableau des scores de l'Arène FFA (afficher / masquer). L comme « leaderboard ».
+	scoreboard = { keyboard = "L", gamepad = "ButtonR3" },
 } :: { [string]: Binding }
 
 -- Touches supplémentaires fixes (non personnalisables).

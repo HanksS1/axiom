@@ -86,6 +86,9 @@ export type Fighter = {
 	exoUsed: boolean,
 
 	lastShotTime: number, -- horodatage du dernier tir accepté (anti-retour en arrière)
+	-- Bouclier de réapparition de l'Arène FFA (Shared/Combat/SpawnShield) : fin, ou nil.
+	-- Distinct du bouclier d'équipement (`shield`).
+	spawnShieldUntil: number?,
 	dead: boolean,
 	lastAttacker: Fighter?,
 }
@@ -222,6 +225,27 @@ function Fighter.refresh(fighter: Fighter, now: number)
 	else
 		fighter.move.usingConsumable = nil
 	end
+end
+
+--[[
+	Munitions prêtées (Terminus, stand de tir : `Config.Zones`). La réserve vaut
+	`Config.Zones.lentReserve` et RIEN n'est prélevé : ni dans le sac du
+	combattant, ni dans le profil (qui n'est jamais écrit par un tir). Le
+	chargeur, lui, se vide et se recharge normalement. Sans prêt : la vraie
+	réserve. `spendCells` retourne les cellules réellement retirées du sac.
+]]
+function Fighter.reserve(fighter: Fighter, cellId: string, lent: boolean): number
+	if lent then
+		return Config.Zones.lentReserve
+	end
+	return fighter.inventory:countCells(cellId)
+end
+
+function Fighter.spendCells(fighter: Fighter, cellId: string, amount: number, lent: boolean): number
+	if lent or amount <= 0 then
+		return 0
+	end
+	return fighter.inventory:takeCells(cellId, amount)
 end
 
 -- Inventaire « sac de partie » : cellules prélevées dans les vraies piles.

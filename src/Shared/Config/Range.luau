@@ -10,8 +10,6 @@ local Freeze = require(script.Parent.Parent.Util.Freeze)
 return Freeze.deep({
 	-- Distance maximale au comptoir pour rester au stand (studs).
 	maxDistance = 22,
-	-- Cellules prêtées pendant une séance (jamais conservées).
-	reserveCells = 600,
 	-- Cibles d'entraînement (partagées, dégâts affichés, jamais détruites).
 	practice = {
 		targets = 3,

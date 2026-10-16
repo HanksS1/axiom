@@ -518,12 +518,14 @@ local function render()
 		-- Type de munitions de l'arme (la réserve se compte dans ces cellules).
 		local ammo = ItemRules.ammoOf(snap.rangedId)
 		local cell = if ammo then `<font size="13" color="#969EAA">  {t("item." .. ammo)}</font>` else ""
+		-- Munitions prêtées (Terminus) : réserve illimitée, rien n'est consommé.
+		local reserveText = if snap.reserveLent then t("hud.reserveLent") else tostring(snap.reserve)
 		if snap.capacity then
 			local ammoColor = if snap.ammo == 0 then "#FF3B3B" else "#EBF0F5"
 			ammoLabel.Text =
-				`<font color="{ammoColor}">{snap.ammo}</font><font size="18" color="#969EAA"> / {snap.reserve}</font>{cell}`
+				`<font color="{ammoColor}">{snap.ammo}</font><font size="18" color="#969EAA"> / {reserveText}</font>{cell}`
 		else
-			ammoLabel.Text = `<font size="18" color="#969EAA">{snap.reserve}</font>{cell}`
+			ammoLabel.Text = `<font size="18" color="#969EAA">{reserveText}</font>{cell}`
 		end
 		reloadBar.Visible = snap.reloadProgress ~= nil
 		if snap.reloadProgress then

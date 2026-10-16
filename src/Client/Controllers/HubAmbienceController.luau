@@ -19,7 +19,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-local Config = require(ReplicatedStorage:WaitForChild("Shared").Config)
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
+local Zone = require(Shared.Match.Zone)
 local TextKeys = require(script.Parent.Parent.UI.TextKeys)
 local ProfileController = require(script.Parent.ProfileController)
 
@@ -273,8 +275,14 @@ local function nearTerminus(): boolean
 	return (camera.CFrame.Position - platform.Position).Magnitude <= ACTIVE_DISTANCE
 end
 
+-- La caméra est-elle dans l'Arène FFA ? (même décor animé : néons, hologramme…)
+local function inArena(): boolean
+	local camera = Workspace.CurrentCamera
+	return camera ~= nil and Workspace:FindFirstChild("Arena") ~= nil and Zone.inArena(camera.CFrame.Position)
+end
+
 local function step(dt: number)
-	if not nearTerminus() then
+	if not nearTerminus() and not inArena() then
 		-- Carte de partie : néons défaillants et étincelles seulement.
 		if Workspace:FindFirstChild("Map") then
 			flickerStep(os.clock())

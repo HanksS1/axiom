@@ -802,7 +802,7 @@ function TerminusBuilder.build(origin: Vector3): Built
 		npc = CFrame.lookAt(at(gx - 7, 0, -16), at(gx - 20, 0, -16)),
 	})
 
-	-- Stand de tir (ouest) et pavé de l'arène d'entraînement.
+	-- Stand de tir (ouest) et pavé de l'Arène FFA.
 	local range = Instance.new("Model")
 	range.Name = "Range"
 	local rangeCounter = Kit.part(

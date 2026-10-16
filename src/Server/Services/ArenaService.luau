@@ -1,11 +1,14 @@
 --!strict
 --[[
-	ArenaService : arène d'entraînement greybox.
+	ArenaService : l'Arène FFA (ancienne arène d'entraînement), voisine du
+	Terminus.
 
 	Construite si la place ne contient pas déjà de carte (dossier « Map »
-	ou « Arena » dans Workspace). Contient des couverts pleins, des couverts
-	légers (tag « LightCover ») et des mannequins d'entraînement équipés de
-	gilets / casques de différents états pour tester bouclier et tirs à la tête.
+	ou « Arena » dans Workspace), d'après le plan pur Server/Maps/ArenaLayout
+	(enceinte fermée, bastions, passerelle, couverts, décor industriel ; testé).
+	Mannequins d'entraînement équipés de gilets / casques de différents états.
+	L'éclairage est posé par le client du joueur qui s'y trouve
+	(ArenaLightingController) : le Terminus voisin garde le sien.
 
 	Bac à sable (hors partie) : aucun risque, aucun gain.
 	- Aucune caisse, aucun butin : rien ne peut en être retiré (LootService
@@ -16,7 +19,6 @@
 	  installe le sien pendant une partie et gère lui-même les apparitions.
 ]]
 
-local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -24,9 +26,14 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local Zone = require(Shared.Match.Zone)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
+local Kit = require(script.Parent.Parent.Hub.Kit)
 local ItemFactory = require(script.Parent.Parent.Inventory.ItemFactory)
+local ArenaLayout = require(script.Parent.Parent.Maps.ArenaLayout)
+local LayoutBuilder = require(script.Parent.Parent.Maps.LayoutBuilder)
+local MapRenderer = require(script.Parent.Parent.Maps.MapRenderer)
 local PlaceRole = require(script.Parent.Parent.Matchmaking.PlaceRole)
 local CombatService = require(script.Parent.CombatService)
 local LootService = require(script.Parent.LootService)
@@ -37,110 +44,36 @@ local Dev = Config.Dev
 
 local ArenaService = {}
 
-local CONCRETE = Color3.fromRGB(70, 74, 82)
-local RUST = Color3.fromRGB(120, 72, 46)
 local NEON_CYAN = Color3.fromRGB(0, 229, 255)
-
-local function part(
-	parent: Instance,
-	name: string,
-	size: Vector3,
-	cframe: CFrame,
-	color: Color3,
-	material: EnumItem
-): Part
-	local p = Instance.new("Part")
-	p.Name = name
-	p.Anchored = true
-	p.Size = size
-	p.CFrame = cframe
-	p.Color = color
-	p.Material = material
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
-	p.Parent = parent
-	return p
-end
+local DARK = Color3.fromRGB(28, 30, 36)
 
 local function buildArena(): Folder
 	local arena = Instance.new("Folder")
 	arena.Name = "Arena"
-	local size = Dev.arenaSize
-	local half = size / 2
-
-	part(arena, "Floor", Vector3.new(size, 2, size), CFrame.new(0, -1, 0), CONCRETE, Enum.Material.Concrete)
-	for index, offset in
-		{ Vector3.new(half, 0, 0), Vector3.new(-half, 0, 0), Vector3.new(0, 0, half), Vector3.new(0, 0, -half) }
-	do
-		local alongX = offset.X == 0
-		local wall = part(
-			arena,
-			"Wall" .. index,
-			if alongX then Vector3.new(size, 16, 2) else Vector3.new(2, 16, size),
-			CFrame.new(offset + Vector3.new(0, 8, 0)),
-			CONCRETE,
-			Enum.Material.Concrete
-		)
-		local strip = part(
-			arena,
-			"Neon" .. index,
-			if alongX then Vector3.new(size, 0.4, 0.2) else Vector3.new(0.2, 0.4, size),
-			wall.CFrame * CFrame.new(0, 6, 0) * CFrame.new(-offset.Unit * 1.1),
-			NEON_CYAN,
-			Enum.Material.Neon
-		)
-		strip.CanCollide = false
+	local layout = ArenaLayout.build(LayoutBuilder.random(Config.Arena.seed))
+	-- Pièces créées d'un coup (quelques centaines) : pas d'étalement sur plusieurs
+	-- images, pour que l'arène soit complète avant la suite du démarrage.
+	for _, spec in layout.parts do
+		MapRenderer.createPart(spec, Vector3.zero).Parent = arena
 	end
-
-	-- Couverts pleins (béton) répartis dans l'arène.
-	local random = Random.new(7)
-	for index = 1, 18 do
-		local x = random:NextInteger(-half + 12, half - 12)
-		local z = random:NextInteger(-half + 12, half - 12)
-		if math.abs(x) < 20 and math.abs(z) < 40 then
-			continue -- zone des mannequins dégagée
-		end
-		local height = random:NextInteger(3, 8)
-		part(
-			arena,
-			"Cover" .. index,
-			Vector3.new(random:NextInteger(4, 10), height, random:NextInteger(2, 6)),
-			CFrame.new(x, height / 2, z) * CFrame.Angles(0, math.rad(random:NextInteger(0, 90)), 0),
-			CONCRETE,
-			Enum.Material.Concrete
-		)
+	local markers = Instance.new("Folder")
+	markers.Name = "Markers"
+	markers.Parent = arena
+	for _, marker in layout.markers do
+		MapService.placeMarker(markers, marker.tag, marker.cframe, marker.attributes)
 	end
-
-	-- Couverts légers (tôle, planches) : traversés par le Canon à rayons X.
-	for index = 1, 6 do
-		local angle = index / 6 * math.pi * 2
-		local plank = part(
-			arena,
-			"LightCover" .. index,
-			Vector3.new(8, 6, 0.4),
-			CFrame.new(math.cos(angle) * 45, 3, math.sin(angle) * 45) * CFrame.Angles(0, -angle, 0),
-			RUST,
-			Enum.Material.CorrodedMetal
-		)
-		CollectionService:AddTag(plank, "LightCover")
-	end
-
-	-- Plateforme surélevée (test de hauteur, de chute et de saut).
-	part(arena, "Platform", Vector3.new(20, 1, 20), CFrame.new(50, 8, 50), CONCRETE, Enum.Material.DiamondPlate)
-	local ramp = part(
-		arena,
-		"Ramp",
-		Vector3.new(6, 1, 24),
-		CFrame.new(50, 4, 28) * CFrame.Angles(math.rad(19), 0, 0),
-		CONCRETE,
-		Enum.Material.DiamondPlate
-	)
-	ramp.Name = "Ramp"
 
 	-- Retour au Terminus (les joueurs apparaissent au Terminus hors partie).
-	local pad =
-		part(arena, "HubPad", Vector3.new(6, 1, 6), CFrame.new(0, 0.5, -half + 8), NEON_CYAN, Enum.Material.Neon)
-	pad.Transparency = 0.4
+	local half = Dev.arenaSize / 2
+	local pad = Kit.part(
+		arena,
+		"HubPad",
+		Vector3.new(6, 1, 6),
+		CFrame.new(0, 0.5, -half + 8),
+		NEON_CYAN,
+		Enum.Material.Neon,
+		{ transparency = 0.4 }
+	)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt:SetAttribute("ActionKey", "station.open")
 	prompt:SetAttribute("ObjectKey", "station.hub")
@@ -150,6 +83,17 @@ local function buildArena(): Folder
 	prompt.HoldDuration = 0.3
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = pad
+	-- Enseigne « Arène FFA » au-dessus du pavé (texte localisé côté client).
+	local sign = Kit.decor(
+		arena,
+		"ArenaSign",
+		Vector3.new(14, 2.4, 0.4),
+		CFrame.new(0, 13, -half + 1.4),
+		DARK,
+		Enum.Material.Metal
+	)
+	Kit.text(sign, Enum.NormalId.Back, "station.training", NEON_CYAN, Enum.Font.GothamBlack)
+	Kit.light(sign, NEON_CYAN, 18, 1.2, true)
 
 	arena.Parent = Workspace
 	return arena
@@ -195,6 +139,33 @@ end
 local sandbox = true
 local built = false
 
+-- Délai maximal d'attente du combattant d'un personnage qui vient d'apparaître (s).
+local FIGHTER_WAIT = 3
+
+--[[
+	Bouclier de réapparition (Config.Arena.spawnShield) pour un joueur qui
+	apparaît dans l'arène. Le combattant est créé un peu après le personnage
+	(CharacterService) : on l'attend, sans quoi personne ne peut de toute façon
+	le toucher. N'agit que dans l'arène (CombatService.grantSpawnShield).
+]]
+function ArenaService.protect(player: Player)
+	local character = player.Character
+	task.spawn(function()
+		local deadline = os.clock() + FIGHTER_WAIT
+		while os.clock() < deadline do
+			local fighter = CombatService.getFighter(player)
+			if player.Character ~= character or player.Parent ~= Players then
+				return
+			end
+			if fighter and fighter.character == character then
+				CombatService.grantSpawnShield(fighter)
+				return
+			end
+			task.wait()
+		end
+	end)
+end
+
 -- Mort hors partie. Dans l'arène : désintégration, puis réapparition sur place
 -- après `Dev.arenaRespawnDelay`. Ailleurs : comportement par défaut (le personnage
 -- meurt après la désintégration, Roblox le fait réapparaître au Terminus).
@@ -220,6 +191,7 @@ local function sandboxDeath(fighter: Fighter.Fighter, _killer: Fighter.Fighter?)
 		if character and #spawns > 0 and sandbox then
 			character:PivotTo(spawns[math.random(1, #spawns)].cframe + Vector3.new(0, 3, 0))
 			MovementGuardService.reset(player)
+			ArenaService.protect(player)
 		end
 	end)
 end
@@ -234,60 +206,21 @@ function ArenaService.setSandbox(enabled: boolean)
 	end
 end
 
--- Repères de partie : points de départ, extractions, accélérateurs (aucune caisse).
-local function placeMarkers(arena: Instance)
-	local half = Dev.arenaSize / 2
-	for index = 1, 8 do
-		local angle = index / 8 * math.pi * 2 + math.pi / 8
-		MapService.placeMarker(
-			arena,
-			"DeploySpawn",
-			CFrame.new(math.cos(angle) * (half - 10), 3, math.sin(angle) * (half - 10))
-		)
-	end
-	local extractions = {
-		{ position = Vector3.new(0, 0.2, -70), name = "extraction.arena.north" },
-		{ position = Vector3.new(65, 0.2, 35), name = "extraction.arena.east" },
-		{ position = Vector3.new(-65, 0.2, 35), name = "extraction.arena.west" },
-	}
-	for _, spec in extractions do
-		MapService.placeMarker(arena, "ExtractionPoint", CFrame.new(spec.position), { NameKey = spec.name })
-	end
-	for index = 1, 6 do
-		local angle = index / 6 * math.pi * 2
-		MapService.placeMarker(arena, "AcceleratorSpot", CFrame.new(math.cos(angle) * 60, 0.2, math.sin(angle) * 60))
-	end
-	-- Zones à risque (garnisons, Gardien) et points de patrouille des robots.
-	MapService.placeMarker(arena, "RiskZone", CFrame.new(0, 1, 62), { Main = true, Radius = 14 })
-	MapService.placeMarker(arena, "RiskZone", CFrame.new(50, 9, 50), { Main = false, Radius = 8 })
-	for index = 1, 4 do
-		local angle = index / 4 * math.pi * 2 + math.pi / 4
-		MapService.placeMarker(arena, "RobotSpawn", CFrame.new(math.cos(angle) * 55, 1, math.sin(angle) * 55), {
-			Garrison = false,
-		})
-	end
-end
-
--- L'arène de test est-elle la carte courante ?
--- La carte active est-elle l'arène de test (et non une vraie carte) ?
+-- La carte active est-elle l'Arène FFA (petite carte de partie en Studio) ?
 function ArenaService.isArena(): boolean
 	local root = MapService.root()
 	return root ~= nil and root.Name == "Arena"
 end
 
--- Position dans l'arène greybox (zone de combat hors partie : entraînement).
+-- Position dans l'Arène FFA (zone de combat hors partie). Bornes : Shared/Match/Zone.
 function ArenaService.contains(position: Vector3): boolean
-	local half = Dev.arenaSize / 2
-	return Workspace:FindFirstChild("Arena") ~= nil
-		and math.abs(position.X) <= half
-		and math.abs(position.Z) <= half
-		and position.Y < 80
+	return Workspace:FindFirstChild("Arena") ~= nil and Zone.inArena(position)
 end
 
 function ArenaService.init() end
 
 function ArenaService.start()
-	-- Arène d'entraînement greybox : en Studio, et sur le hub en ligne tant que le vrai
+	-- Arène FFA (greybox) : en Studio, et sur le hub en ligne tant que le vrai
 	-- Terminus n'est pas modélisé. Jamais sur un serveur de partie (les cartes suffisent).
 	if PlaceRole.isMatchServer() then
 		return
@@ -303,7 +236,6 @@ function ArenaService.start()
 		baseplate:Destroy()
 	end
 	local arena = buildArena()
-	placeMarkers(arena)
 	MapService.setRoot(arena)
 	for _, spec in Dev.dummies do
 		task.spawn(spawnDummy, arena, spec)

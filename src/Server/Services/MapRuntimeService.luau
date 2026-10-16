@@ -24,6 +24,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local MapPlan = require(Shared.Match.MapPlan)
+local LightingOverlay = require(Shared.Visuals.LightingOverlay)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local HazardRules = require(script.Parent.Parent.Maps.HazardRules)
@@ -103,14 +104,11 @@ function MapRuntimeService.guardian(): any?
 	return if id then (Maps.byId :: any)[id].guardian else nil
 end
 
+-- Mêmes propriétés que l'éclairage local de l'Arène FFA (Shared/Visuals/LightingOverlay).
 local function applyLighting(settings: any)
-	Lighting.Ambient = settings.ambient
-	Lighting.OutdoorAmbient = settings.outdoorAmbient
-	Lighting.Brightness = settings.brightness
-	Lighting.ClockTime = settings.clockTime
-	Lighting.FogColor = settings.fogColor
-	Lighting.FogEnd = settings.fogEnd
-	Lighting.ExposureCompensation = settings.exposure or 0
+	for property, value in LightingOverlay.properties(settings) do
+		(Lighting :: any)[property] = value
+	end
 end
 
 -- Ambiance de la carte : brume atmosphérique, halo des néons, étalonnage des couleurs.

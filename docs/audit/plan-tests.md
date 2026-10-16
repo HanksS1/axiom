@@ -282,3 +282,43 @@ Pour plusieurs joueurs : Test → Clients et serveurs (2 joueurs).
 
 ### M-17. Audio (quand les identifiants seront renseignés — OPT-09)
 - Musique par couches, voix d'AXIOM, marqueur de touche, tête, dégâts reçus, alarme.
+
+### M-18. Arène FFA : décor et luminosité (jugement visuel)
+1. Studio, Test : depuis le Terminus, prendre le pavé « Arène FFA ».
+2. Faire le tour : bastions (rampes), plateforme nord-est, passerelle (dessus et dessous),
+   conteneurs et sacs de sable, néons qui grésillent, hologramme qui tourne, étincelles.
+3. Tirer à travers une tôle rouillée avec le Canon à rayons X.
+4. Bottes de saut depuis le haut d'un bastion, grappin vers un mur : impossible de sortir.
+5. Revenir au Terminus par le pavé : l'éclairage du Terminus est intact.
+6. Deux clients : l'un au Terminus, l'autre dans l'arène ; vérifier que seul le second voit
+   l'éclairage de l'arène.
+7. Lancer une partie pendant qu'un joueur est dans l'arène : l'arène reste lumineuse pour
+   lui ; en sortant, il retrouve l'éclairage du moment.
+- **Attendu** : adversaires lisibles partout (ombres débouchées, pas de brouillard), rien
+  d'éblouissant ; aucun décor ne bloque un passage ou un tir de façon inattendue.
+
+### M-19. Tableau des scores FFA (plusieurs joueurs)
+1. Test → Clients et serveurs, 3 joueurs dans l'arène.
+2. Éliminations croisées ; touche L (manette R3, tactile : toucher l'en-tête) pour masquer
+   et réafficher.
+3. Un joueur sort par le pavé puis revient ; un joueur quitte le test.
+- **Attendu** : vos éliminations et le top 5 à jour en ≤ 1 s ; le joueur revenu repart de
+  0 ; un joueur seul se voit avec 0 ; profil : statistiques (onglet Profil) inchangées.
+
+### M-20. Terminus : gadgets refusés, munitions prêtées, bouclier de réapparition
+1. Au Terminus avec un gadget équipé : appui sur E → notification « Gadgets désactivés au
+   Terminus », emplacement « INDISPONIBLE ICI ».
+2. Tirer et recharger au Terminus : chargeur qui se vide et se recharge, réserve « ∞ »,
+   rien de consommé (inventaire inchangé). Idem avec une arme à énergie (surchauffe).
+3. Entrer dans l'arène : la vraie réserve réapparaît ; gadgets disponibles.
+4. Mourir dans l'arène : à la réapparition, aura de protection et « PROTÉGÉ 1,5 s » ;
+   un adversaire ne peut pas blesser ; tirer fait tomber la protection aussitôt.
+5. Partir en partie juste après avoir tiré au Terminus : le sac emporté contient les
+   cellules du profil, pas la réserve prêtée.
+
+### M-21. Persistance : journal et sortie du dernier joueur
+1. Studio avec « Enable Studio Access to API Services » : gagner des crédits (marchand),
+   attendre moins de 60 s, arrêter le test.
+2. Relancer : les crédits sont là. Sortie : `[Data] save … release=true result=ok seq=N`
+   à l'arrêt, puis `[Data] load … seq=N` au chargement suivant.
+- **Attendu** : jamais de `seq` chargé inférieur au `seq` de la dernière libération.
