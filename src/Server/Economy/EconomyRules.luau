@@ -66,6 +66,20 @@ end
 -- Équipement : coffre ↔ emplacements ↔ sac préparé -------------------------
 
 -- Équipe un objet du coffre ; l'objet remplacé retourne au coffre.
+--[[
+	Actions du Terminus verrouillées ? Raison (texte economy.failure.<raison>) ou nil :
+	- "in_match" : partie en cours (le joueur doit être au Terminus) ;
+	- "queued"   : en file d'attente, SE et équipement verrouillés (16.3).
+]]
+function EconomyRules.lockReason(inMatch: boolean, queued: boolean): string?
+	if inMatch then
+		return "in_match"
+	elseif queued then
+		return "queued"
+	end
+	return nil
+end
+
 function EconomyRules.equipFromVault(profile: Profile, uid: string, slot: Types.SlotName): (boolean, string?)
 	local index = indexOf(profile.vault, uid)
 	if index == nil then
@@ -354,29 +368,6 @@ end
 
 -- Assurance -----------------------------------------------------------------
 
--- Objets couverts par l'assurance : équipement porté (hors consommables, cellules, kit, temporaires).
-function EconomyRules.insurable(item: ItemInstance): boolean
-	local info = ItemCatalog.get(item.itemId)
-	return info ~= nil and info.hasCondition and not item.isKit and item.tempGamesLeft == nil
-end
-
--- Valeur assurée d'un équipement de départ (base du prix de l'assurance).
-function EconomyRules.insuredValue(loadout: Types.Loadout, bag: { ItemInstance }): number
-	local total = 0
-	for _, slot in ItemCatalog.slotNames do
-		local item = (loadout :: any)[slot] :: ItemInstance?
-		if item and EconomyRules.insurable(item) then
-			total += ItemRules.value(item)
-		end
-	end
-	for _, item in bag do
-		if EconomyRules.insurable(item) then
-			total += ItemRules.value(item)
-		end
-	end
-	return total
-end
-
 --[[
 	Indemnisation après une mort : copies des objets assurés (NOUVEAUX uid :
 	les originaux sont dans le sac de dépouille), dégradées selon le niveau.
@@ -388,7 +379,7 @@ function EconomyRules.insuranceClaim(tier: string, items: { ItemInstance }, crea
 	end
 	local returned = {}
 	for _, item in items do
-		if EconomyRules.insurable(item) then
+		if Pricing.insurable(item) then
 			local condition = math.max(Config.Conditions.MIN, (item.condition :: number) - def.conditionLoss)
 			table.insert(returned, create(item.itemId, { condition = condition }))
 		end

@@ -158,9 +158,6 @@ local function createTarget(owner: Player?): Target
 	core.CanQuery = false
 	model.PrimaryPart = plate
 	model:SetAttribute("RangeTarget", true)
-	if owner then
-		model:SetAttribute("OwnerId", owner.UserId)
-	end
 	local home = l.Position + HIDDEN_OFFSET
 	plate.CFrame = CFrame.new(home)
 	head.CFrame = CFrame.new(home + Vector3.new(0, 2.1, 0))

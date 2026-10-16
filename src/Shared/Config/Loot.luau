@@ -169,7 +169,6 @@ local pools: { [string]: { [string]: number } } = {
 return Freeze.deep({
 	crates = crates,
 	pools = pools,
-	cratesPerMap = 60,
 	-- Cellules par pile trouvée (une pile pleine = 30).
 	cellQuantity = { min = 10, max = 30 },
 	-- Le remplissage s'arrête quand le budget restant passe sous ce seuil (crédits).

@@ -26,6 +26,7 @@ local Config = require(Shared.Config)
 local MapPlan = require(Shared.Match.MapPlan)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
+local HazardRules = require(script.Parent.Parent.Maps.HazardRules)
 local LayoutBuilder = require(script.Parent.Parent.Maps.LayoutBuilder)
 local MapRenderer = require(script.Parent.Parent.Maps.MapRenderer)
 local Registry = require(script.Parent.Parent.Maps.Registry)
@@ -85,10 +86,6 @@ end
 
 local function between(range: { min: number, max: number }): number
 	return random:NextNumber(range.min, range.max)
-end
-
-function MapRuntimeService.current(): string?
-	return currentId
 end
 
 -- Carte d'une nouvelle partie : choix du panneau DEV en Studio, sinon au hasard.
@@ -206,19 +203,6 @@ end
 
 -- Zones dangereuses -------------------------------------------------------------
 
-local function insideHazard(hazard: LayoutBuilder.Hazard, position: Vector3): boolean
-	local p = position - Maps.origin
-	if p.Y < hazard.center.Y - 1 or p.Y > hazard.center.Y + hazard.height then
-		return false
-	end
-	if hazard.radius then
-		local dx, dz = p.X - hazard.center.X, p.Z - hazard.center.Z
-		return dx * dx + dz * dz <= hazard.radius * hazard.radius
-	end
-	local size = hazard.size :: Vector3
-	return math.abs(p.X - hazard.center.X) <= size.X / 2 and math.abs(p.Z - hazard.center.Z) <= size.Z / 2
-end
-
 local function hazardStep(dt: number)
 	local current = layout
 	if current == nil or #current.hazards == 0 then
@@ -229,20 +213,13 @@ local function hazardStep(dt: number)
 		if fighter.kind == "object" or not Fighter.isAlive(fighter) then
 			continue
 		end
-		local irradiated = false
-		for _, hazard in current.hazards do
-			if insideHazard(hazard, fighter.root.Position) then
-				if hazard.kind == "molten" then
-					CombatService.kill(fighter)
-					break
-				elseif hazard.kind == "radiation" and fighter.kind ~= "robot" and radiation then
-					irradiated = true
-				end
-			end
-		end
-		if irradiated and Fighter.isAlive(fighter) then
-			local amount = if fighter.shield > 0 then radiation.shieldPerSecond * dt else radiation.healthPerSecond * dt
-			CombatService.applyDamage(fighter, amount, nil)
+		local effect =
+			HazardRules.effect(current.hazards, fighter.root.Position - Maps.origin, fighter.kind == "robot", radiation)
+		local irradiated = effect == "radiation"
+		if effect == "molten" then
+			CombatService.kill(fighter)
+		elseif irradiated then
+			CombatService.applyDamage(fighter, HazardRules.radiationDamage(radiation, fighter.shield, dt), nil)
 		end
 		if fighter.character:GetAttribute("Irradiated") ~= irradiated then
 			fighter.character:SetAttribute("Irradiated", irradiated)

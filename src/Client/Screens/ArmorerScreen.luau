@@ -193,6 +193,7 @@ function ArmorerScreen.create(parent: Instance, t: Translate): Screen
 					then t("armorer.moduleWhere", {
 						mode = t("mode.hard"),
 						robot = t("robot.warden"),
+						executor = t("robot.executor"),
 						locker = t("crate.axiom_locker"),
 						bin = t("crate.parts_bin"),
 					})

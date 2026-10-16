@@ -13,11 +13,9 @@ local Freeze = require(script.Parent.Parent.Util.Freeze)
 return Freeze.deep({
 	places = {
 		hub = 0,
-		tutorial = 0,
 		match = 0,
 	},
 
-	hubMaxPlayers = 20,
 	matchSize = 16, -- 16 solos ou 8 duos
 
 	queue = {
@@ -56,6 +54,5 @@ return Freeze.deep({
 	-- Le niveau minimum (2) est atteint par le tutoriel obligatoire (P10).
 	levelGateEnabled = true,
 
-	platformGroups = { "crossplay", "touch", "keyboard", "gamepad" },
 	platforms = { "touch", "keyboard", "gamepad" },
 })

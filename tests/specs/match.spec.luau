@@ -132,4 +132,60 @@ return function(T, H)
 			expect(typical >= 150 and typical <= 600).toBe(true)
 		end)
 	end)
+
+	describe("Réanimation en duo (ReviveRules)", function()
+		local roblox = require("@lune/roblox")
+		local Vector3, CFrame = roblox.Vector3, roblox.CFrame
+		local ReviveRules = H.require("ReplicatedStorage/Shared/Match/ReviveRules")
+		local Config = H.require("ReplicatedStorage/Shared/Config")
+		local R = Config.Combat.revive
+
+		local function spot(x)
+			local position = Vector3.new(x, 0, 0)
+			return { position = position, cframe = CFrame.new(position) }
+		end
+
+		it("réglages de la spécification : orbe 1:30 et 100 PV, dépôt 5 s, réanimé à 50 PV", function()
+			expect(R.orbLifetime).toBe(90)
+			expect(R.orbHealth).toBe(100)
+			expect(R.channelTime).toBe(5)
+			expect(R.reviveHealth).toBe(50)
+			expect(R.acceleratorMinDistance).toBe(80)
+			expect(R.acceleratorMaxDistance).toBe(200)
+		end)
+
+		it("Accélérateur : tiré parmi les emplacements à 80–200 studs, jamais hors plage s'il y en a", function()
+			local spots = { spot(30), spot(79), spot(80), spot(150), spot(200), spot(201), spot(260) }
+			local random = H.FakeRandom.new(7)
+			local seen = {}
+			for _ = 1, 200 do
+				local x = ReviveRules.chooseSpot(spots, Vector3.new(0, 0, 0), random).Position.X
+				expect(x >= 80 and x <= 200).toBe(true)
+				seen[x] = true
+			end
+			-- Le tirage couvre toute la plage (pas toujours le même emplacement).
+			expect(seen[80] and seen[150] and seen[200]).toBe(true)
+		end)
+
+		it(
+			"aucun emplacement dans la plage : le plus proche de la plage ; carte sans emplacement : 80 studs",
+			function()
+				local death = Vector3.new(0, 0, 0)
+				expect(ReviveRules.chooseSpot({ spot(20), spot(60) }, death, H.FakeRandom.new(1)).Position.X).toBe(60)
+				expect(ReviveRules.chooseSpot({ spot(20), spot(230) }, death, H.FakeRandom.new(1)).Position.X).toBe(230)
+				expect(ReviveRules.chooseSpot({}, death, H.FakeRandom.new(1)).Position.X).toBe(R.acceleratorMinDistance)
+			end
+		)
+
+		it("dépôt : maintien d'environ 5 s exigé (marge de latence), à portée de la base", function()
+			expect(ReviveRules.channelComplete(R.channelTime)).toBe(true)
+			expect(ReviveRules.channelComplete(R.channelTime * 0.85)).toBe(true)
+			expect(ReviveRules.channelComplete(R.channelTime * 0.5)).toBe(false)
+			expect(ReviveRules.channelComplete(0)).toBe(false)
+			local reach = Config.Match.revive.acceleratorDistance
+			expect(ReviveRules.inReach(reach)).toBe(true)
+			expect(ReviveRules.inReach(reach + 4)).toBe(true)
+			expect(ReviveRules.inReach(reach + 10)).toBe(false)
+		end)
+	end)
 end

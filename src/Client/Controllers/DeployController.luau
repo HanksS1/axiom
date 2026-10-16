@@ -48,10 +48,8 @@ local queue: Types.QueueView = { status = "idle" }
 local invitePrompts: { [Player]: ProximityPrompt } = {}
 local pendingInvite: { userId: number, expires: number }? = nil
 
-local function inMatch(): boolean
-	local status = MatchHUDController.status()
-	return status ~= "none"
-end
+-- Partie encore en cours pour le joueur (même mort ou extrait) : pas de nouvelle file.
+local inMatch = MatchHUDController.inMatchSession
 
 -- Bandeau de file d'attente ---------------------------------------------------
 

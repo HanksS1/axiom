@@ -19,6 +19,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Bindings = require(Shared.Input.Bindings)
+local Config = require(Shared.Config)
 local Signal = require(Shared.Util.Signal)
 
 local ProfileController = require(script.Parent.ProfileController)
@@ -57,7 +58,7 @@ InputController.HeldLong = Signal.new() :: Signal.Signal<Action>
 -- Les touches ont changé (icônes de touches à rafraîchir).
 InputController.BindingsChanged = Signal.new() :: Signal.Signal<>
 
-local LONG_PRESS = 0.35
+local LONG_PRESS = Config.Combat.input.longPress
 local pressedAt: { [Action]: number } = {}
 
 local held: { [Action]: boolean } = {}

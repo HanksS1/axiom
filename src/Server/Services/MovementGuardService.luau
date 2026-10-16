@@ -22,6 +22,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Movement = require(Shared.Combat.Movement)
 
+local MovementCheck = require(script.Parent.Parent.Combat.MovementCheck)
 local CombatService = require(script.Parent.CombatService)
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
 
@@ -29,51 +30,7 @@ local G = Config.Combat.movementGuard
 
 local MovementGuardService = {}
 
-type Track = {
-	lastValid: CFrame,
-	lastPosition: Vector3,
-	strikes: number,
-	currentSpeed: number, -- vitesse autorisée actuelle (dernier changement connu)
-	-- Vitesse autorisée la plus élevée récente (tolérance de latence).
-	recentMaxSpeed: number,
-	recentMaxUntil: number,
-	allowanceSpeed: number,
-	allowanceUntil: number,
-	allowanceRise: number, -- montée verticale tolérée par contrôle pendant l'allocation
-	resetUntil: number, -- après un recalage ou une téléportation serveur
-}
-
-local tracks: { [Player]: Track } = {}
-
-local function newTrack(position: CFrame): Track
-	return {
-		lastValid = position,
-		lastPosition = position.Position,
-		strikes = 0,
-		currentSpeed = Config.Combat.movement.walkSpeed,
-		recentMaxSpeed = Config.Combat.movement.sprintSpeed,
-		recentMaxUntil = os.clock() + G.speedGraceTime,
-		allowanceSpeed = 0,
-		allowanceUntil = 0,
-		allowanceRise = 0,
-		resetUntil = os.clock() + 1,
-	}
-end
-
-local function allowedSpeed(player: Player, track: Track, clock: number): number
-	local fighter = CombatService.getFighter(player)
-	local speed = Config.Combat.movement.sprintSpeed
-	if fighter then
-		speed = Movement.walkSpeed(fighter.move)
-	end
-	if clock < track.recentMaxUntil then
-		speed = math.max(speed, track.recentMaxSpeed)
-	end
-	if clock < track.allowanceUntil then
-		speed = math.max(speed, track.allowanceSpeed)
-	end
-	return speed
-end
+local tracks: { [Player]: MovementCheck.Track } = {}
 
 local function check(player: Player, clock: number, dt: number)
 	local character = player.Character
@@ -84,44 +41,17 @@ local function check(player: Player, clock: number, dt: number)
 	end
 	local track = tracks[player]
 	if track == nil then
-		tracks[player] = newTrack(root.CFrame)
+		tracks[player] = MovementCheck.newTrack(root.CFrame, clock)
 		return
 	end
-	local position = root.Position
-	if clock < track.resetUntil or root.Anchored then
-		track.lastValid = root.CFrame
-		track.lastPosition = position
-		track.strikes = 0
-		return
-	end
-
-	local delta = position - track.lastPosition
-	local horizontal = Vector3.new(delta.X, 0, delta.Z).Magnitude
-	local maxHorizontal = allowedSpeed(player, track, clock) * dt * G.speedTolerance + G.flatTolerance
-	local tooFast = horizontal > maxHorizontal
-	local maxRise = if clock < track.allowanceUntil
-		then math.max(G.maxVerticalRise, track.allowanceRise)
-		else G.maxVerticalRise
-	local tooHigh = delta.Y > maxRise
-	track.lastPosition = position
-
-	if tooFast or tooHigh then
-		track.strikes += 1
-		if track.strikes >= G.strikesBeforeCorrection then
-			-- Recalage : retour à la dernière position valide.
-			root.AssemblyLinearVelocity = Vector3.zero
-			root.CFrame = track.lastValid
-			track.lastPosition = track.lastValid.Position
-			track.strikes = 0
-			ServerNet.flag(
-				player,
-				"Movement",
-				if tooHigh then "montée anormale" else `vitesse anormale ({math.floor(horizontal / dt)} studs/s)`
-			)
-		end
-	else
-		track.strikes = 0
-		track.lastValid = root.CFrame
+	local fighter = CombatService.getFighter(player)
+	local baseSpeed = if fighter then Movement.walkSpeed(fighter.move) else Config.Combat.movement.sprintSpeed
+	local verdict, reason = MovementCheck.step(track, root.CFrame, clock, dt, baseSpeed, root.Anchored)
+	if verdict == "correct" then
+		-- Recalage : retour à la dernière position valide.
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.CFrame = track.lastValid
+		ServerNet.flag(player, "Movement", reason or "")
 	end
 end
 
@@ -129,14 +59,7 @@ end
 function MovementGuardService.grantAllowance(player: Player, speed: number, duration: number, rise: number?)
 	local track = tracks[player]
 	if track then
-		local clock = os.clock()
-		if clock >= track.allowanceUntil then
-			track.allowanceSpeed = 0
-			track.allowanceRise = 0
-		end
-		track.allowanceSpeed = math.max(track.allowanceSpeed, speed)
-		track.allowanceRise = math.max(track.allowanceRise, rise or 0)
-		track.allowanceUntil = math.max(track.allowanceUntil, clock + duration)
+		MovementCheck.grant(track, speed, duration, rise, os.clock())
 	end
 end
 
@@ -145,7 +68,7 @@ function MovementGuardService.reset(player: Player)
 	local character = player.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
 	if root and root:IsA("BasePart") then
-		tracks[player] = newTrack(root.CFrame)
+		tracks[player] = MovementCheck.newTrack(root.CFrame, os.clock())
 	else
 		tracks[player] = nil
 	end
@@ -158,12 +81,7 @@ function MovementGuardService.init()
 		local player = fighter.player
 		local track = if player then tracks[player] else nil
 		if track then
-			local clock = os.clock()
-			local newSpeed = Movement.walkSpeed(fighter.move)
-			local stillTolerated = if clock < track.recentMaxUntil then track.recentMaxSpeed else 0
-			track.recentMaxSpeed = math.max(stillTolerated, track.currentSpeed, newSpeed)
-			track.recentMaxUntil = clock + G.speedGraceTime
-			track.currentSpeed = newSpeed
+			MovementCheck.speedChanged(track, Movement.walkSpeed(fighter.move), os.clock())
 		end
 	end)
 end
@@ -176,9 +94,8 @@ function MovementGuardService.start()
 	CombatService.Knockback:Connect(function(fighter, velocity, duration)
 		local player = fighter.player
 		if player then
-			local horizontal = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
-			local rise = velocity.Y * velocity.Y / (2 * Workspace.Gravity) + 3
-			MovementGuardService.grantAllowance(player, horizontal * 1.2, duration + 0.6, rise)
+			local speed, allowed, rise = MovementCheck.knockbackAllowance(velocity, duration, Workspace.Gravity)
+			MovementGuardService.grantAllowance(player, speed, allowed, rise)
 		end
 	end)
 	for _, player in Players:GetPlayers() do

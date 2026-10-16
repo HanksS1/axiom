@@ -26,12 +26,12 @@ return function(T, H)
 			expect(TutorialRules.complete(fresh)).toBe(true)
 			expect(fresh.level).toBe(Config.Progression.tutorial.rewardLevel)
 			expect(fresh.xp).toBe(0)
-			expect(TutorialRules.canPlay(fresh.level)).toBe(true)
+			expect(fresh.level >= Config.Progression.minLevelToPlay).toBe(true) -- peut partir
 			local veteran = { level = 14, xp = 900, tutorialDone = true }
 			expect(TutorialRules.complete(veteran)).toBe(false)
 			expect(veteran.level).toBe(14)
 			expect(veteran.xp).toBe(900)
-			expect(TutorialRules.canPlay(1)).toBe(false)
+			expect(1 < Config.Progression.minLevelToPlay).toBe(true) -- un nouveau joueur ne peut pas
 		end)
 
 		it("5 minutes au maximum", function()

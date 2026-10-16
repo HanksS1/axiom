@@ -480,7 +480,6 @@ local function placeHologram(wall: BasePart, index: number, userId: number, scor
 		label.Parent = plate
 		plate.Parent = head
 	end
-	model:SetAttribute("UserId", userId)
 	model:AddTag("Hologram")
 	model.Parent = wall.Parent
 	wallHolograms[index] = { userId = userId, model = model }

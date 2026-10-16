@@ -37,6 +37,7 @@ type ContainerView = {
 	id: string,
 	kind: string,
 	crateType: string?,
+	ownerName: string?, -- sac de dépouille
 	items: { Types.ItemInstance },
 	closed: boolean?,
 }
@@ -199,7 +200,8 @@ local function titleFor(view: ContainerView): string
 	if view.kind == "crate" and view.crateType then
 		return t("crate." .. view.crateType)
 	elseif view.kind == "deathbag" then
-		return t("loot.deathbag")
+		local owner = view.ownerName
+		return if owner then t("loot.deathbagOf", { name = owner }) else t("loot.deathbag")
 	end
 	return t("loot.ground")
 end

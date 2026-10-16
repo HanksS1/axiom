@@ -43,13 +43,10 @@ end
 -- Le joueur est-il disponible pour une action de Terminus (pas en partie) ?
 local function available(player: Player): boolean
 	local participant = MatchService.participant(player)
-	if participant and not participant.finished then
-		ServerNet.notify(player, "economy.failure.in_match")
-		return false
-	end
-	-- En file d'attente : SE et équipement verrouillés (16.3).
-	if QueueService.isLocked(player) then
-		ServerNet.notify(player, "economy.failure.queued")
+	local reason =
+		EconomyRules.lockReason(participant ~= nil and not participant.finished, QueueService.isLocked(player))
+	if reason then
+		ServerNet.notify(player, "economy.failure." .. reason)
 		return false
 	end
 	return true

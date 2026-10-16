@@ -14,6 +14,11 @@ return Freeze.deep({
 	-- expulsé (comportement de client modifié).
 	kickAfterRejectionsPerMinute = 120,
 
+	-- Tirs et coups (tracés, sons, gestes) : envoyés seulement aux joueurs dont le
+	-- personnage est à moins de ce rayon (studs). Couvre l'audition des tirs les
+	-- plus bruyants et le tracé de l'Aiguille, visible de loin.
+	visualRelevanceRadius = 450,
+
 	limits = {
 		-- Profil / paramètres
 		RequestProfile = { rate = 0.5, burst = 3 },

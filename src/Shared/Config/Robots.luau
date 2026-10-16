@@ -166,6 +166,9 @@ local robots: { [string]: RobotDef } = {
 		size = Vector3.new(2.4, 6, 1.4),
 		loot = {
 			{ itemId = "vibro_blade", chance = 0.10 },
+			-- Spécification 7.3 : le Module de calibration se trouve aussi sur les Exécuteurs
+			-- (Difficile). Moins souvent que sur un Gardien (40 %), l'Exécuteur étant plus fréquent.
+			{ itemId = "calibration_module", chance = 0.15, hardModeOnly = true },
 		},
 	},
 	-- Tourelle d'AXIOM (Terres Brûlées, base Kestrel) : fixe, destructible.
@@ -237,7 +240,6 @@ return Freeze.deep({
 
 	ai = {
 		visionAngle = 90,
-		gunshotHearingRadius = 60, -- surchargé par l'arme (noiseRadius)
 		-- Décisions de l'IA par seconde (entre 5 et 10). Le MOUVEMENT, lui, est continu :
 		-- déplacement (Humanoid:MoveTo, AlignPosition) et orientation (AlignOrientation)
 		-- sont des contraintes physiques résolues à chaque image et interpolées par
@@ -249,6 +251,10 @@ return Freeze.deep({
 		-- réactivité, appliquée par la boucle du serveur.
 		turnRate = 7,
 		turnResponsiveness = 14,
+		-- Robots ancrés (tourelles) : le serveur tourne leur cap logique à chaque image,
+		-- mais ne réplique la pièce qu'à cet intervalle (secondes) ; les clients animent
+		-- la rotation eux-mêmes (cap visé : attribut TurnYaw), sans saccade.
+		turretReplicateInterval = 0.25,
 		sleepDistance = 150, -- logique lourde désactivée sans joueur à moins de 150 studs
 		suspicionTime = 1.0,
 		searchTime = 8,

@@ -23,13 +23,14 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local AimAssist = require(Shared.Combat.AimAssist)
 
 local InputController = require(script.Parent.InputController)
 local ProfileController = require(script.Parent.ProfileController)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
 
 local CameraConfig = Config.Combat.camera
-local AimAssist = Config.Combat.aimAssist
+local AssistConfig = Config.Combat.aimAssist
 
 local CameraController = {}
 
@@ -101,14 +102,9 @@ end
 
 -- Visée assistée active (manette / mobile, paramètre activé ; jamais à la souris).
 local function assistStrength(): number
-	if InputController.device() == "keyboard" then
-		return 0
-	end
 	local view = ProfileController.get()
-	if view == nil or view.settings.aimAssist == false then
-		return 0
-	end
-	return setting("aimAssistStrength", 0.5)
+	local assistOn = view ~= nil and view.settings.aimAssist ~= false
+	return AimAssist.strength(InputController.device(), assistOn, setting("aimAssistStrength", 0.5))
 end
 
 -- Ralentissement de la rotation quand une cible est sous le réticule.
@@ -116,7 +112,7 @@ local function assistSlowdown(): number
 	if assistPoint == nil then
 		return 1
 	end
-	return 1 - AimAssist.slowdown * assistStrength()
+	return AimAssist.slowdown(assistStrength(), true)
 end
 
 function CameraController.addTouchDelta(delta: Vector2)
@@ -178,17 +174,12 @@ function CameraController.centerRay(): Ray
 	return camera:ViewportPointToRay(viewport.X / 2, viewport.Y / 2)
 end
 
-function CameraController.lookVector(): Vector3
-	return camera.CFrame.LookVector
-end
-
 -- Cible la plus proche du centre de l'écran (cône étroit, ligne de vue dégagée).
 findAssistTarget = function(character: Model): Vector3?
 	local origin = camera.CFrame.Position
 	local look = camera.CFrame.LookVector
 	local myTeam = player:GetAttribute("TeamId")
-	local cosCone = math.cos(math.rad(AimAssist.cone))
-	local best: Vector3?, bestDot, bestModel = nil, cosCone, nil :: Model?
+	local candidates: { AimAssist.Candidate } = {}
 	for _, model in CollectionService:GetTagged("Fighter") do
 		if model == character or not model:IsA("Model") then
 			continue
@@ -207,24 +198,18 @@ findAssistTarget = function(character: Model): Vector3?
 		if root == nil or not root:IsA("BasePart") then
 			continue
 		end
-		local point = root.Position + Vector3.new(0, 0.8, 0)
-		local offset = point - origin
-		local distance = offset.Magnitude
-		if distance > AimAssist.range or distance < 1 then
-			continue
-		end
-		local dot = look:Dot(offset / distance)
-		if dot > bestDot then
-			best, bestDot, bestModel = point, dot, model
-		end
+		table.insert(candidates, { point = root.Position + Vector3.new(0, 0.8, 0), model = model })
 	end
-	if best and bestModel then
-		assistParams.FilterDescendantsInstances = { character, bestModel }
-		if Workspace:Raycast(origin, best - origin, assistParams) then
-			return nil
-		end
+	local best = AimAssist.pick(origin, look, candidates)
+	if best == nil then
+		return nil
 	end
-	return best
+	-- Ligne de vue dégagée (sinon pas d'aide : on ne colle pas à travers un mur).
+	assistParams.FilterDescendantsInstances = { character, best.model }
+	if Workspace:Raycast(origin, best.point - origin, assistParams) then
+		return nil
+	end
+	return best.point
 end
 
 local function lerp(a: number, b: number, alpha: number): number
@@ -310,18 +295,13 @@ local function update(dt: number)
 	if strength > 0 then
 		local clock2 = os.clock()
 		if clock2 >= assistRefreshAt then
-			assistRefreshAt = clock2 + AimAssist.refresh
+			assistRefreshAt = clock2 + AssistConfig.refresh
 			assistPoint = findAssistTarget(character :: Model)
 		end
 		local point = assistPoint
 		if point and clock2 - lastLookInputAt < 0.3 then
 			local direction = (point - camera.CFrame.Position).Unit
-			local targetYaw = math.atan2(-direction.X, -direction.Z)
-			local targetPitch = math.asin(math.clamp(direction.Y, -1, 1))
-			local maxStep = math.rad(AimAssist.pull) * strength * dt
-			local yawDiff = (targetYaw - yaw + math.pi) % (2 * math.pi) - math.pi
-			yaw += math.clamp(yawDiff, -maxStep, maxStep)
-			pitch = math.clamp(pitch + math.clamp(targetPitch - pitch, -maxStep, maxStep), -MAX_PITCH, MAX_PITCH)
+			yaw, pitch = AimAssist.pull(yaw, pitch, direction, strength, dt, MAX_PITCH)
 		end
 	else
 		assistPoint = nil

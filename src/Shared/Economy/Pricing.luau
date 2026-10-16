@@ -92,13 +92,45 @@ function Pricing.repairCost(item: Types.ItemInstance): (number?, boolean)
 	return round(repair.costMultiplier * delta), condition + 1 >= repair.calibrationRequiredForCondition
 end
 
--- Coût de l'assurance pour un SE donné (section 14.3) : part du SE, jamais sous le plancher.
-function Pricing.insuranceCost(tier: string, equipmentScore: number): number?
+-- Objet couvert par l'assurance : équipement à état, ni kit, ni objet temporaire
+-- (les consommables et cellules ne sont jamais rendus).
+function Pricing.insurable(item: Types.ItemInstance): boolean
+	local info = ItemCatalog.get(item.itemId)
+	return info ~= nil and info.hasCondition and not item.isKit and item.tempGamesLeft == nil
+end
+
+-- Valeur assurée d'un équipement de départ (base du prix de l'assurance).
+function Pricing.insuredValue(loadout: Types.Loadout, bag: { Types.ItemInstance }): number
+	local total = 0
+	for _, slot in ItemCatalog.slotNames do
+		local item = (loadout :: any)[slot] :: Types.ItemInstance?
+		if item and Pricing.insurable(item) then
+			total += ItemRules.value(item)
+		end
+	end
+	for _, item in bag do
+		if Pricing.insurable(item) then
+			total += ItemRules.value(item)
+		end
+	end
+	return total
+end
+
+--[[
+	Coût de l'assurance (section 14.3) pour une valeur ASSURÉE donnée (voir
+	`insuredValue`) : part de cette valeur, jamais sous le plancher de la
+	formule. Rien d'assurable (kit de base seul, consommables) : 0, l'assurance
+	ne peut pas être souscrite (on ne paie pas pour rien). nil : formule inconnue.
+]]
+function Pricing.insuranceCost(tier: string, insuredValue: number): number?
 	local def = Config.Economy.insurance.tiers[tier]
 	if def == nil then
 		return nil
 	end
-	return math.max(def.minCost or 0, round(math.max(0, equipmentScore) * def.costShare))
+	if insuredValue <= 0 then
+		return 0
+	end
+	return math.max(def.minCost or 0, round(insuredValue * def.costShare))
 end
 
 return Pricing

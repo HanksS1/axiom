@@ -477,9 +477,4 @@ function CrateScene.play(
 	return scene
 end
 
--- Durée totale de l'animation (secondes).
-function CrateScene.duration(): number
-	return TIMELINE.total
-end
-
 return CrateScene

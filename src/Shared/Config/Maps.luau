@@ -315,6 +315,9 @@ return Freeze.deep({
 	-- par rapport aux réglages par défaut de Roblox, surtout dans les ombres
 	-- (ambient) ; le soleil bas de fin d'après-midi passe par la voûte percée.
 	hub = {
+		-- Distance (studs) au quai central en deçà de laquelle on est « au Terminus » :
+		-- plaques de pseudo, ambiance (PNJ, néons), détection d'arrivée du tutoriel.
+		radius = 260,
 		lighting = {
 			ambient = Color3.fromRGB(92, 88, 96), -- plancher du noir sous la voûte
 			outdoorAmbient = Color3.fromRGB(118, 112, 122),

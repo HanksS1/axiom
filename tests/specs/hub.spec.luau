@@ -91,6 +91,36 @@ return function(T, H)
 			end
 		end)
 
+		it("chaque station a son invite (attribut Station, textes traduits) ; quai central présent", function()
+			local found = {}
+			for _, descendant in built.folder:GetDescendants() do
+				if descendant:IsA("ProximityPrompt") then
+					local key = descendant:GetAttribute("Station")
+					expect(key ~= nil).toBe(true)
+					expect(found[key]).toBeNil() -- une seule invite par station
+					found[key] = true
+					local objectKey = descendant:GetAttribute("ObjectKey")
+					expect(Localization.has("fr", objectKey) and Localization.has("en", objectKey)).toBe(true)
+					-- L'invite est portée par une pièce interrogeable par le moteur.
+					expect(descendant.Parent:IsA("BasePart")).toBe(true)
+				end
+			end
+			-- Liste de HubService (les écrans clients s'y branchent par ce nom).
+			for _, key in
+				{ "merchant", "armorer", "insurer", "vault", "bazaar", "deploy", "range", "legends", "training" }
+			do
+				expect(found[key]).toBe(true)
+			end
+			-- Comptoirs renvoyés au serveur (PNJ) : chacun a son invite.
+			for _, spot in built.stations do
+				expect(found[spot.key]).toBe(true)
+			end
+			-- Repère lu par le client (ambiance, plaques, tutoriel : Config.Maps.hub.radius).
+			local structure = built.folder:FindFirstChild("Structure") -- enfant direct, comme le lit le client
+			expect(structure ~= nil and structure:FindFirstChild("Platform") ~= nil).toBe(true)
+			expect(#built.spawns > 0).toBe(true)
+		end)
+
 		it("rien ne masque un texte (aucune pièce collée devant)", function()
 			local parts = {}
 			for _, descendant in built.folder:GetDescendants() do

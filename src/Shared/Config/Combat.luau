@@ -52,6 +52,12 @@ return Freeze.deep({
 		refresh = 0.05, -- secondes entre deux recherches de cible
 	},
 
+	-- Entrées : un appui tenu au-delà de ce délai (secondes) est un « appui long »
+	-- (couché, ping « Danger », consommable à la manette…).
+	input = {
+		longPress = 0.35,
+	},
+
 	camera = {
 		fieldOfView = 70,
 		aimFieldOfView = 55,
@@ -136,6 +142,9 @@ return Freeze.deep({
 		maxVerticalRise = 12, -- studs de montée par contrôle (saut, escaliers)
 		strikesBeforeCorrection = 2, -- infractions consécutives avant recalage
 		speedGraceTime = 0.6, -- délai pendant lequel l'ancienne vitesse reste tolérée
+		-- Pic de latence : un joueur immobile vu du serveur peut ensuite rattraper
+		-- jusqu'à ce temps de déplacement d'un coup (secondes) sans être recalé.
+		catchUpWindow = 1.0,
 	},
 
 	-- Validation serveur des tirs (section 6.11).
@@ -152,5 +161,14 @@ return Freeze.deep({
 		maxShotAge = 1.0,
 		-- Tolérance sur le délai sprint → tir (latence).
 		sprintToFireTolerance = 0.05,
+		-- Direction des impacts : chacun doit rester dans le cône de dispersion
+		-- maximal de l'arme (debout, en mouvement, en l'air) autour de la direction
+		-- déclarée, plus cette marge (degrés : arrondis, visée assistée).
+		directionTolerance = 3,
+		-- En deçà (studs), l'angle n'a plus de sens (cible au contact) : pas de contrôle.
+		directionMinDistance = 2,
+		-- Couverts légers traversés au plus par un tir perçant (Canon à rayons X).
+		-- Lu par le client (rayon affiché) ET le serveur (contrôle) : doit être égal.
+		maxCoversCrossed = 4,
 	},
 })

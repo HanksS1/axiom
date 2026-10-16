@@ -22,13 +22,9 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
-local Freeze = require(Shared.Util.Freeze)
 local InventoryLogic = require(Shared.Items.InventoryLogic)
-local ItemCatalog = require(Shared.Items.ItemCatalog)
-local ItemRules = require(Shared.Items.ItemRules)
 local Leveling = require(Shared.Progression.Leveling)
 local MatchRules = require(Shared.Match.MatchRules)
-local Pricing = require(Shared.Economy.Pricing)
 local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
 
@@ -41,7 +37,7 @@ local ArenaService = require(script.Parent.ArenaService)
 local CharacterService = require(script.Parent.CharacterService)
 local CombatService = require(script.Parent.CombatService)
 local DataService = require(script.Parent.DataService)
-local EconomyRules = require(script.Parent.Parent.Economy.EconomyRules)
+local MatchLoadout = require(script.Parent.Parent.Economy.MatchLoadout)
 local GadgetService = require(script.Parent.GadgetService)
 local ExtractionService = require(script.Parent.ExtractionService)
 local LootService = require(script.Parent.LootService)
@@ -183,61 +179,9 @@ local function applyOutcome(
 	carried: InventoryLogic.Inventory?
 ): { [string]: any }
 	local extracted = outcome == "extracted"
-	local active = profile.activeMatch
-	-- Les objets assurés perdus lors d'une partie PRÉCÉDENTE sont rendus maintenant.
-	EconomyRules.deliverInsurance(profile)
-
-	local lootValue = 0
-	local function bringBack(item: ItemInstance, slot: string?)
-		if item.isKit then
-			return -- le kit reste gratuit et illimité : rien à conserver
-		end
-		if item.tempGamesLeft ~= nil then
-			-- Objet temporaire : il perd une partie et retourne dans son emplacement spécial.
-			local aged = EconomyRules.ageTempItem(item)
-			if aged and profile.tempItem == nil then
-				profile.tempItem = aged
-			end
-			return
-		end
-		lootValue += ItemRules.value(item)
-		if slot and (profile.loadout :: any)[slot] == nil then
-			(profile.loadout :: any)[slot] = item
-		else
-			table.insert(profile.pendingLoot, item)
-		end
-	end
-	if extracted and carried then
-		-- Équipement porté : retour dans les emplacements libres, le reste à trier.
-		for _, slot in ItemCatalog.slotNames do
-			local item = (carried.equipped :: any)[slot] :: ItemInstance?
-			if item then
-				bringBack(item, slot)
-			end
-		end
-		for _, item in carried.bag do
-			bringBack(item, nil)
-		end
-	elseif active and active.insurance then
-		-- Mort : l'assurance rendra l'équipement de départ (dégradé selon le niveau)
-		-- après la PROCHAINE partie, avec de nouveaux uid.
-		local insured: { ItemInstance } = {}
-		for _, slot in ItemCatalog.slotNames do
-			local item = (active.snapshot.loadout :: any)[slot] :: ItemInstance?
-			if item then
-				table.insert(insured, item)
-			end
-		end
-		for _, item in active.snapshot.bag do
-			table.insert(insured, item)
-		end
-		local returned = EconomyRules.insuranceClaim(active.insurance, insured, ItemFactory.create)
-		if #returned > 0 then
-			profile.pendingInsurance = returned
-		end
-	end
-	participant.stats.lootValue = lootValue
-	profile.activeMatch = nil
+	-- Retour de l'équipement (extraction) ou restitution par l'assurance (mort) :
+	-- Server/Economy/MatchLoadout (testé).
+	participant.stats.lootValue = MatchLoadout.settle(profile, carried, extracted, ItemFactory.create)
 
 	local breakdown = MatchRules.score(participant.stats, modeId, extracted)
 	local xpGained = Leveling.matchXp(breakdown.total)
@@ -288,7 +232,7 @@ local function applyOutcome(
 			bots = participant.stats.botKills,
 			robotPoints = participant.stats.robotPoints,
 		},
-		lootValue = lootValue,
+		lootValue = participant.stats.lootValue,
 		score = breakdown,
 		topPosition = position,
 		xpGained = xpGained,
@@ -572,6 +516,7 @@ function MatchService.begin(config: StartConfig): boolean
 	for player, participant in participants do
 		local matchBag: InventoryLogic.Inventory? = nil
 		local insuranceRefused = false
+		local insuranceUseless = false
 		-- Loot de la partie précédente non trié : il faut d'abord passer par l'écran de tri.
 		local current = DataService.getProfile(player)
 		if current and #current.pendingLoot > 0 then
@@ -581,47 +526,17 @@ function MatchService.begin(config: StartConfig): boolean
 			continue
 		end
 		local ok = DataService.update(player, function(profile)
-			local loadout = profile.loadout
-			local bag = profile.bag
-			-- L'objet temporaire part avec le joueur (gadget : emplacement libre, sinon sac).
-			local temp = profile.tempItem
-			profile.tempItem = nil
-			if temp then
-				local info = ItemCatalog.get(temp.itemId)
-				if info and info.category == "gadget" and loadout.gadget1 == nil then
-					loadout.gadget1 = temp
-				elseif info and info.category == "gadget" and loadout.gadget2 == nil then
-					loadout.gadget2 = temp
-				else
-					table.insert(bag, temp)
-				end
-			end
-			-- Assurance choisie : payée maintenant, selon le SE de départ.
-			local insurance: string? = nil
-			local tier = profile.insuranceTier
-			profile.insuranceTier = nil
-			if tier then
-				local cost = Pricing.insuranceCost(tier, ItemRules.equipmentScore(loadout, bag))
-				if cost and cost > 0 and profile.credits >= cost then
-					profile.credits -= cost
-					insurance = tier
-				else
-					insuranceRefused = true
-				end
-			end
-			profile.activeMatch = {
-				id = matchId,
-				startedAt = os.time(),
-				mode = modeId,
-				insurance = insurance,
-				snapshot = { loadout = Freeze.copy(loadout), bag = Freeze.copy(bag) },
-			}
-			matchBag = InventoryLogic.new(Freeze.copy(loadout), Freeze.copy(bag))
-			profile.loadout = {}
-			profile.bag = {}
+			-- Objet temporaire, assurance payée, instantané de secours, profil vidé :
+			-- Server/Economy/MatchLoadout (testé).
+			local departure = MatchLoadout.takeForMatch(profile, matchId, modeId, os.time())
+			matchBag = departure.bag
+			insuranceRefused = departure.insuranceRefused
+			insuranceUseless = departure.insuranceUseless
 		end)
 		if insuranceRefused then
 			ServerNet.notify(player, "insurance.refused")
+		elseif insuranceUseless then
+			ServerNet.notify(player, "insurance.nothing")
 		end
 		if not ok or matchBag == nil then
 			-- Profil indisponible : le joueur ne participe pas.
@@ -726,7 +641,6 @@ function MatchService.begin(config: StartConfig): boolean
 	end
 	state:SetAttribute("Running", true)
 	state:SetAttribute("StartTime", startTime)
-	state:SetAttribute("Mode", modeId)
 	state:SetAttribute("Format", format)
 	announce("axiom.start")
 	MatchService.Started:Fire(matchId)
@@ -840,24 +754,7 @@ function MatchService.init()
 			return
 		end
 		DataService.update(player, function(current)
-			local match = current.activeMatch
-			if match == nil then
-				return
-			end
-			for _, slot in ItemCatalog.slotNames do
-				local item = (match.snapshot.loadout :: any)[slot] :: ItemInstance?
-				if item then
-					if (current.loadout :: any)[slot] == nil then
-						(current.loadout :: any)[slot] = item
-					else
-						table.insert(current.pendingLoot, item)
-					end
-				end
-			end
-			for _, item in match.snapshot.bag do
-				table.insert(current.bag, item)
-			end
-			current.activeMatch = nil
+			MatchLoadout.restoreAbandoned(current)
 		end)
 	end)
 

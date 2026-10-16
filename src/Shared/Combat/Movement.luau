@@ -25,10 +25,6 @@ local Movement = {}
 
 Movement.stances = table.freeze({ "stand", "crouch", "prone" } :: { Stance })
 
-function Movement.isStance(value: any): boolean
-	return value == "stand" or value == "crouch" or value == "prone"
-end
-
 -- Le sprint n'est possible que debout, sans garde ni étourdissement.
 function Movement.canSprint(state: MoveState): boolean
 	return state.stance == "stand" and not state.parrying and not state.stunned

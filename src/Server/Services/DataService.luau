@@ -26,15 +26,13 @@ local Localization = require(Shared.Localization)
 local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
 local try = require(Shared.Util.Try)
-local ItemRules = require(Shared.Items.ItemRules)
-local Leveling = require(Shared.Progression.Leveling)
-local MatchRules = require(Shared.Match.MatchRules)
 
 local ServerNet = require(script.Parent.Parent.Net.ServerNet)
 local Uid = require(script.Parent.Parent.Util.Uid)
 local Migrations = require(script.Parent.Parent.Data.Migrations)
 local MockDataStore = require(script.Parent.Parent.Data.MockDataStore)
 local ProfileTemplate = require(script.Parent.Parent.Data.ProfileTemplate)
+local ProfileView = require(script.Parent.Parent.Data.ProfileView)
 local SessionStore = require(script.Parent.Parent.Data.SessionStore)
 
 type Profile = Types.Profile
@@ -96,48 +94,8 @@ local function selectDataStore(): SessionStore.DataStoreLike
 	return dataStore
 end
 
---[[
-	Vue publique du profil envoyée au client. Ne contient que ce dont
-	l'interface a besoin (pas de reçus, pas de compteurs internes).
-]]
-function DataService.buildView(profile: Profile): Types.ProfileView
-	local freeCrate = Config.Economy.freeCrate
-	local nextGrant: number? = nil
-	if profile.freeCrate.stored < freeCrate.maxStored then
-		nextGrant = profile.freeCrate.lastGrantUnix + freeCrate.interval
-	end
-	return {
-		level = profile.level,
-		xp = profile.xp,
-		xpToNext = Leveling.xpToNext(profile.level),
-		credits = profile.credits,
-		noyaux = profile.noyaux,
-		vault = profile.vault,
-		vaultCapacity = ItemRules.vaultCapacity(profile.hasVaultExtension),
-		loadout = profile.loadout,
-		bag = profile.bag,
-		tempItem = profile.tempItem,
-		hasVaultExtension = profile.hasVaultExtension,
-		freeCrate = { stored = profile.freeCrate.stored, nextGrantUnix = nextGrant },
-		pendingLoot = profile.pendingLoot,
-		pendingInsuranceCount = if profile.pendingInsurance then #profile.pendingInsurance else 0,
-		insuranceTier = profile.insuranceTier,
-		rank = MatchRules.seasonRank(profile.season),
-		rankingScore = MatchRules.rankingScore(profile.season.top10),
-		seasonId = profile.season.id,
-		top10 = profile.season.top10,
-		seasonHistory = profile.seasonHistory,
-		bestScoreByMode = profile.bestScoreByMode,
-		tutorialDone = profile.tutorialDone,
-		guidesSeen = profile.guidesSeen,
-		crateTokens = profile.crateTokens,
-		settings = profile.settings,
-		pity = profile.pity,
-		cosmeticsOwned = profile.cosmeticsOwned,
-		cosmeticsEquipped = profile.cosmeticsEquipped,
-		stats = profile.stats :: any,
-	}
-end
+-- Vue publique du profil envoyée au client (liste des champs : Data/ProfileView).
+DataService.buildView = ProfileView.build
 
 local function queueSync(player: Player)
 	if syncQueued[player] then

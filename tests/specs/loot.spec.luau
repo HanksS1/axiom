@@ -65,16 +65,20 @@ return function(T, H)
 			end
 		end)
 
-		it("assurance : % du SE", function()
+		it("assurance : % de la valeur assurée, plancher si quelque chose est assuré", function()
 			expect(Pricing.insuranceCost("basic", 1000)).toBe(100)
 			expect(Pricing.insuranceCost("standard", 1000)).toBe(180)
 			expect(Pricing.insuranceCost("premium", 1000)).toBe(300)
 			expect(Pricing.insuranceCost("gold", 1000)).toBeNil()
-			-- SE nul (kit de base) : prix plancher, jamais 0, hiérarchie des formules conservée.
+			-- Petite valeur assurée : prix plancher (jamais une assurance gratuite),
+			-- hiérarchie des formules conservée.
 			local tiers = H.require("ReplicatedStorage/Shared/Config").Economy.insurance.tiers
-			expect(Pricing.insuranceCost("basic", 0)).toBe(tiers.basic.minCost)
-			expect(Pricing.insuranceCost("standard", 0)).toBe(tiers.standard.minCost)
-			expect(Pricing.insuranceCost("premium", 0)).toBe(tiers.premium.minCost)
+			expect(Pricing.insuranceCost("basic", 10)).toBe(tiers.basic.minCost)
+			expect(Pricing.insuranceCost("standard", 10)).toBe(tiers.standard.minCost)
+			expect(Pricing.insuranceCost("premium", 10)).toBe(tiers.premium.minCost)
+			-- Rien d'assurable (kit de base seul) : 0, l'assurance n'est pas souscrite.
+			expect(Pricing.insuranceCost("basic", 0)).toBe(0)
+			expect(Pricing.insuranceCost("premium", 0)).toBe(0)
 			expect(tiers.basic.minCost > 0).toBe(true)
 			expect(tiers.basic.minCost < tiers.standard.minCost).toBe(true)
 			expect(tiers.standard.minCost < tiers.premium.minCost).toBe(true)
@@ -290,6 +294,24 @@ return function(T, H)
 					expect(#LootGenerator.crate(crateId, "hard", rng, create) <= 6).toBe(true)
 				end
 			end
+		end)
+
+		it("Module de calibration sur les Exécuteurs : seulement en Difficile (spécification 7.3)", function()
+			local rng = Random.new(5)
+			local function modules(modeId)
+				local count = 0
+				for _ = 1, 400 do
+					for _, item in LootGenerator.robot("executor", modeId, rng, create) do
+						if item.itemId == "calibration_module" then
+							count += 1
+						end
+					end
+				end
+				return count
+			end
+			expect(modules("hard") > 0).toBe(true)
+			expect(modules("easy")).toBe(0)
+			expect(modules("medium")).toBe(0)
 		end)
 
 		it("loot des robots : Exécuteur avec objet garanti, Gardien 2 ou 3", function()

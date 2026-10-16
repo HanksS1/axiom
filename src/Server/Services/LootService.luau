@@ -46,6 +46,7 @@ export type Container = {
 	id: string,
 	kind: ContainerKind,
 	crateType: string?,
+	ownerName: string?, -- sac de dépouille : nom affiché (« Sac de X »)
 	opened: boolean,
 	items: { ItemInstance },
 	model: Model,
@@ -163,6 +164,7 @@ local function view(container: Container): { [string]: any }
 		id = container.id,
 		kind = container.kind,
 		crateType = container.crateType,
+		ownerName = container.ownerName,
 		items = items,
 	}
 end
@@ -450,7 +452,6 @@ end
 local function register(container: Container)
 	containers[container.id] = container
 	container.model:SetAttribute("ContainerId", container.id)
-	container.model:SetAttribute("ContainerKind", container.kind)
 	container.model.Parent = folder
 
 	container.prompt.PromptButtonHoldBegan:Connect(function(player)
@@ -485,6 +486,7 @@ local function newContainer(
 		id = "c" .. nextId,
 		kind = kind,
 		crateType = nil,
+		ownerName = nil,
 		opened = kind ~= "crate",
 		items = items,
 		model = model,
@@ -503,7 +505,6 @@ local function openCrate(container: Container)
 	container.prompt.HoldDuration = Pickup.holdTime
 	container.prompt:SetAttribute("ActionKey", "prompt.search")
 	container.prompt.ActionText = "prompt.search"
-	container.model:SetAttribute("Opened", true)
 	local light = container.model:FindFirstChild("Accent")
 	if light and light:IsA("BasePart") then
 		light.Transparency = 0.7
@@ -676,10 +677,6 @@ function LootService.setSandbox(enabled: boolean)
 	sandbox = enabled
 end
 
-function LootService.isSandbox(): boolean
-	return sandbox
-end
-
 -- Pose des objets au sol, devant le joueur (objet jeté, remplacé…). Rien en bac à sable.
 function LootService.dropToGround(position: Vector3, items: { ItemInstance }): Container?
 	if #items == 0 or sandbox then
@@ -773,10 +770,8 @@ function LootService.spawnDeathBag(position: Vector3, items: { ItemInstance }, o
 	glow.Parent = model
 	model.PrimaryPart = body
 	local prompt = makePrompt(body, "prompt.search", "loot.deathbag", Pickup.holdTime)
-	if ownerName then
-		model:SetAttribute("OwnerName", ownerName)
-	end
 	local container = newContainer("deathbag", model, prompt, items)
+	container.ownerName = ownerName
 	register(container)
 	return container
 end
@@ -810,7 +805,6 @@ function LootService.spawnCrate(cframe: CFrame, crateType: string): Container
 	local prompt = makePrompt(body, "prompt.openCrate", "crate." .. crateType, def.openTime)
 	local container = newContainer("crate", model, prompt, {})
 	container.crateType = crateType
-	model:SetAttribute("CrateType", crateType)
 	register(container)
 	return container
 end

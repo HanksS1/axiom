@@ -9,8 +9,10 @@
 ]]
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
+local Config = require(ReplicatedStorage:WaitForChild("Shared").Config)
 local ProfileController = require(script.Parent.ProfileController)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -19,7 +21,7 @@ local NameplateController = {}
 local t = ProfileController.t
 local player = Players.LocalPlayer
 
-local HUB_RADIUS = 260
+local HUB_RADIUS = Config.Maps.hub.radius
 local REFRESH = 0.5
 local LEGEND_COLOR = Color3.fromRGB(255, 196, 64)
 

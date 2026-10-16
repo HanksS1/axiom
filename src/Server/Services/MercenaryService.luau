@@ -318,7 +318,7 @@ local function shoot(merc: Mercenary, target: Fighter, distance: number, time: n
 	while #endpoints > 4 do
 		table.remove(endpoints)
 	end
-	ServerNet.fireAll("ShotFired", nil, ranged.item.itemId, origin, endpoints, fighter.character)
+	ServerNet.fireNear("ShotFired", origin, nil, nil, nil, ranged.item.itemId, origin, endpoints, fighter.character)
 	if state.ammo <= 0 and def.capacity then
 		local remaining = fighter.inventory:countCells(def.cell)
 		if WeaponLogic.canReload(def, state, remaining) then
@@ -335,7 +335,7 @@ local function melee(merc: Mercenary, target: Fighter, time: number)
 		return
 	end
 	weapon.lastAttackAt = time
-	ServerNet.fireAll("MeleeSwing", nil, weapon.item.itemId, fighter.character)
+	ServerNet.fireNear("MeleeSwing", fighter.root.Position, nil, nil, nil, weapon.item.itemId, fighter.character)
 	CombatService.meleeHit(fighter, target, Damage.melee(weapon.def, weapon.item.condition :: number), {
 		breaksParry = weapon.def.breaksParry,
 		parryBreakStun = weapon.def.parryBreakStun,
@@ -766,22 +766,8 @@ function MercenaryService.clear()
 	alerted = false
 end
 
-function MercenaryService.count(): number
-	local count = 0
-	for fighter in mercs do
-		if Fighter.isAlive(fighter) then
-			count += 1
-		end
-	end
-	return count
-end
-
 function MercenaryService.setVisionMultiplier(multiplier: number)
 	visionMultiplier = math.clamp(multiplier, 0.1, 1)
-end
-
-function MercenaryService.isMercenary(fighter: Fighter): boolean
-	return mercs[fighter] ~= nil
 end
 
 function MercenaryService.init()

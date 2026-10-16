@@ -281,4 +281,64 @@ return function(T, H)
 			expect(inPool).toBe(true)
 		end)
 	end)
+
+	describe("ItemFactory", function()
+		local generated = 0
+		H.setService("HttpService", {
+			GenerateGUID = function()
+				generated += 1
+				return string.format("guid-%04d", generated)
+			end,
+		})
+		local ItemFactory = H.require("ServerScriptService/Server/Inventory/ItemFactory")
+		local Config = H.require("ReplicatedStorage/Shared/Config")
+
+		it("uid uniques sur 1 000 créations (générés par le serveur)", function()
+			local seen = {}
+			for _ = 1, 1000 do
+				local created = ItemFactory.create("cell_light")
+				expect(seen[created.uid]).toBeNil()
+				seen[created.uid] = true
+			end
+		end)
+
+		it("pile bornée par stackSize ; pile pleine par défaut ; état par défaut", function()
+			expect(ItemFactory.create("nanite_injector", { stack = 99 }).stack).toBe(3)
+			expect(ItemFactory.create("nanite_injector", { stack = 0 }).stack).toBe(1)
+			expect(ItemFactory.create("nanite_injector").stack).toBe(3)
+			local rifle = ItemFactory.create("sentinel_rifle")
+			expect(rifle.condition).toBe(Config.Conditions.GOOD)
+			expect(rifle.stack).toBeNil()
+			expect(rifle.isKit).toBeNil()
+			expect(ItemFactory.create("sentinel_rifle", { condition = 5 }).condition).toBe(5)
+			-- Sans état (munitions) : jamais de champ `condition`.
+			expect(ItemFactory.create("cell_light").condition).toBeNil()
+		end)
+
+		it("objet inconnu ou invalide : erreur claire, rien n'est créé", function()
+			local ok, message = pcall(ItemFactory.create, "plasma_banana")
+			expect(ok).toBe(false)
+			expect(string.find(message, "itemId inconnu", 1, true) ~= nil).toBe(true)
+			ok, message = pcall(ItemFactory.create, "sentinel_rifle", { condition = 9 })
+			expect(ok).toBe(false)
+			expect(string.find(message, "objet créé invalide", 1, true) ~= nil).toBe(true)
+		end)
+
+		it("kit de base : contenu de Config.Economy.baseKit, tout marqué isKit", function()
+			local kit = Config.Economy.baseKit
+			local loadout, bag = ItemFactory.createBaseKit()
+			expect(loadout.ranged.itemId).toBe(kit.ranged.itemId)
+			expect(loadout.ranged.condition).toBe(kit.ranged.condition)
+			expect(loadout.melee.itemId).toBe(kit.melee.itemId)
+			expect(loadout.backpack.itemId).toBe(kit.backpack.itemId)
+			expect(#bag).toBe(#kit.bag)
+			for index, entry in kit.bag do
+				expect(bag[index].itemId).toBe(entry.itemId)
+				expect(bag[index].stack).toBe(entry.stack)
+			end
+			for _, created in { loadout.ranged, loadout.melee, loadout.backpack, table.unpack(bag) } do
+				expect(created.isKit).toBe(true)
+			end
+		end)
+	end)
 end
