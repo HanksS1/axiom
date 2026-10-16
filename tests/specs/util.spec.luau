@@ -80,6 +80,36 @@ return function(T, H)
 		end)
 	end)
 
+	describe("Relevance (tirs et coups envoyés aux joueurs proches)", function()
+		local Relevance = H.require("ServerScriptService/Server/Net/Relevance")
+		local roblox = require("@lune/roblox")
+		local V3 = roblox.Vector3
+		local positions = {
+			near = V3.new(10, 0, 0),
+			far = V3.new(1000, 0, 0),
+			shooter = V3.new(0, 0, 0),
+		}
+		local players = { "near", "far", "shooter", "loading" }
+		local function positionOf(name)
+			return positions[name] -- « loading » : pas encore de personnage
+		end
+
+		it("seuls les joueurs proches (et ceux sans personnage) reçoivent, jamais le tireur", function()
+			local got = Relevance.recipients(players, positionOf, V3.new(0, 0, 0), 450, "shooter")
+			table.sort(got)
+			expect(#got).toBe(2)
+			expect(got[1]).toBe("loading")
+			expect(got[2]).toBe("near")
+		end)
+
+		it("au bord exact du rayon : reçu ; sans exception : le tireur reçoit aussi", function()
+			local got = Relevance.recipients({ "near" }, positionOf, V3.new(0, 0, 0), 10)
+			expect(#got).toBe(1)
+			got = Relevance.recipients(players, positionOf, V3.new(0, 0, 0), 450)
+			expect(#got).toBe(3)
+		end)
+	end)
+
 	describe("RateLimiter", function()
 		it("seau à jetons avec horloge simulée", function()
 			local now = 0

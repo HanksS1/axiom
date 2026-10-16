@@ -18,6 +18,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local ReviveRules = require(Shared.Match.ReviveRules)
 local Signal = require(Shared.Util.Signal)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
@@ -86,30 +87,6 @@ local function rootOf(player: Player): BasePart?
 	local character = player.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
 	return if root and root:IsA("BasePart") then root else nil
-end
-
--- Emplacement d'Accélérateur entre 80 et 200 studs (sinon le plus proche de cette plage).
-local function chooseSpot(deathPosition: Vector3, random: Random): CFrame
-	local inRange: { CFrame } = {}
-	local best: CFrame? = nil
-	local bestGap = math.huge
-	for _, marker in MapService.acceleratorSpots() do
-		local distance = (marker.position - deathPosition).Magnitude
-		if distance >= R.acceleratorMinDistance and distance <= R.acceleratorMaxDistance then
-			table.insert(inRange, marker.cframe)
-		end
-		local gap = if distance < R.acceleratorMinDistance
-			then R.acceleratorMinDistance - distance
-			else math.max(0, distance - R.acceleratorMaxDistance)
-		if gap < bestGap then
-			bestGap = gap
-			best = marker.cframe
-		end
-	end
-	if #inRange > 0 then
-		return inRange[random:NextInteger(1, #inRange)]
-	end
-	return best or CFrame.new(deathPosition + Vector3.new(R.acceleratorMinDistance, 0, 0))
 end
 
 local function sendState(revive: Revive)
@@ -190,7 +167,6 @@ local function buildOrb(revive: Revive, position: Vector3, color: Color3)
 	light.Brightness = 2
 	light.Parent = core
 	model.PrimaryPart = core
-	model:SetAttribute("OrbOf", revive.dead.UserId)
 	model.Parent = container()
 	revive.orb = model
 
@@ -300,12 +276,12 @@ local function buildAccelerator(revive: Revive, cframe: CFrame, color: Color3)
 		end
 		local started = revive.holdStartedAt
 		revive.holdStartedAt = nil
-		if started == nil or os.clock() - started < R.channelTime * 0.85 - 0.05 then
+		if started == nil or not ReviveRules.channelComplete(os.clock() - started) then
 			ServerNet.flag(player, "Revive", "maintien trop court")
 			return
 		end
 		local root = rootOf(player)
-		if root == nil or (root.Position - base.Position).Magnitude > Config.Match.revive.acceleratorDistance + 4 then
+		if root == nil or not ReviveRules.inReach((root.Position - base.Position).Magnitude) then
 			return
 		end
 		local spawnAt = cframe * CFrame.new(0, 3, -5)
@@ -338,7 +314,7 @@ function ReviveService.begin(dead: Player, teammate: Player, teamId: string, dea
 	}
 	revives[dead] = revive
 	buildOrb(revive, deathPosition, color)
-	buildAccelerator(revive, chooseSpot(deathPosition, random), color)
+	buildAccelerator(revive, ReviveRules.chooseSpot(MapService.acceleratorSpots(), deathPosition, random), color)
 	sendState(revive)
 end
 
@@ -349,10 +325,6 @@ function ReviveService.abandonFor(teammate: Player)
 			lose(revive, "abandoned")
 		end
 	end
-end
-
-function ReviveService.isPending(dead: Player): boolean
-	return revives[dead] ~= nil
 end
 
 function ReviveService.clearAll()

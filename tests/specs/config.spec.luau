@@ -142,4 +142,62 @@ return function(T, H)
 			expect(modes.easy.minScore).toBe(0)
 		end)
 	end)
+
+	describe("Configuration orpheline", function()
+		local fs = require("@lune/fs")
+
+		local function readAll(dir, into)
+			for _, entry in fs.readDir(dir) do
+				local full = dir .. "/" .. entry
+				if fs.isDir(full) then
+					readAll(full, into)
+				elseif string.sub(entry, -5) == ".luau" then
+					into[full] = fs.readFile(full)
+				end
+			end
+			return into
+		end
+
+		-- Clés lues seulement par un nom construit à l'exécution, ou réservées
+		-- (identifiants audio à renseigner, cf. audit OPT-09).
+		local DYNAMIC = {
+			["Audio.luau"] = { combat = true, exploration = true },
+			["Cosmetics.luau"] = { patterns = true },
+			["Loot.luau"] = { budget = true, consumable = true },
+			["Maps.luau"] = { burrow = true },
+			["Monetization.luau"] = { large = true, small = true },
+		}
+
+		it("chaque clé de config est lue ailleurs (sinon : liste blanche justifiée)", function()
+			local sources = readAll("src", {})
+			local orphans = {}
+			for path, text in sources do
+				local file = string.match(path, "^src/Shared/Config/([%w]+%.luau)$")
+				if file then
+					local others = {}
+					for otherPath, otherText in sources do
+						if otherPath ~= path then
+							table.insert(others, otherText)
+						end
+					end
+					local haystack = table.concat(others, "\n")
+					local seen = {}
+					for key in string.gmatch("\n" .. text, "\n\t+([a-z][%w_]*) = ") do
+						if not seen[key] and not (DYNAMIC[file] and DYNAMIC[file][key]) then
+							seen[key] = true
+							local used = string.find(haystack, "%." .. key .. "%f[^%w_]")
+								or string.find(haystack, '"' .. key .. '"', 1, true)
+								-- Clé nommée par une autre valeur du même fichier (`swing = "slash"`).
+								or string.find(text, '"' .. key .. '"', 1, true)
+							if not used then
+								table.insert(orphans, file .. ":" .. key)
+							end
+						end
+					end
+				end
+			end
+			table.sort(orphans)
+			expect(table.concat(orphans, ", ")).toBe("")
+		end)
+	end)
 end

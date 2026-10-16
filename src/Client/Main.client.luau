@@ -22,6 +22,7 @@ local order = {
 	"SpectateController",
 	"PingController",
 	"ThreatController",
+	"RobotTurnController",
 	"MapController",
 	"GadgetController",
 	"TerminusController",

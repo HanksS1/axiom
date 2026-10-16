@@ -61,10 +61,8 @@ local profileScreen: ProfileScreen.Screen
 -- En file d'attente : l'économie est verrouillée côté serveur (QueueService.isLocked).
 local queued = false
 
-local function inMatch(): boolean
-	local status = MatchHUDController.status()
-	return status == "alive" or status == "orb"
-end
+-- Sur le terrain (vivant ou en orbe) : les stations du Terminus sont fermées.
+local inMatch = MatchHUDController.isPlaying
 
 function TerminusController.open(station: string)
 	if inMatch() then

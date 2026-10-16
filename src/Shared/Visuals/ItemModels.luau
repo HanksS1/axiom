@@ -548,12 +548,6 @@ function ItemModels.has(itemId: string): boolean
 	return blueprints[itemId] ~= nil
 end
 
--- Couleur d'accent d'un objet (tracés des tirs, lueur des icônes).
-function ItemModels.accent(itemId: string): Color3?
-	local blueprint = ItemModels.blueprint(itemId)
-	return if blueprint then blueprint.accent else nil
-end
-
 -- Couleur et matière d'une pièce selon son rôle, le thème de l'objet et le skin éventuel.
 function ItemModels.appearance(blueprint: Blueprint, part: PartSpec, skin: Skin?): (Color3, string)
 	local role = part.role

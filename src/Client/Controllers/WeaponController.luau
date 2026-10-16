@@ -200,7 +200,7 @@ local function characterOf(part: Instance): Model?
 end
 
 -- Rayon d'un tir. `passCover` : traverse les couverts légers (Canon à rayons X).
-local MAX_COVERS = 4
+local MAX_COVERS = Config.Combat.validation.maxCoversCrossed
 local function castShot(origin: Vector3, direction: Vector3, range: number, passCover: boolean): RaycastResult?
 	local from, remaining = origin, range
 	for _ = 1, MAX_COVERS + 1 do
@@ -281,8 +281,10 @@ local function fireRanged()
 
 	local passCover = def.lightCoverDamageMultiplier ~= nil
 	local hits = {}
-	local endpoints = {}
-	for _ = 1, bullets do
+	local itemId = rangedId :: string
+	-- Un projectile de la rafale (ou le tir unique) : rayons (plombs), tracés, recul.
+	local function shoot()
+		local endpoints = {}
 		for _ = 1, def.pellets do
 			local direction = spreadDirection(baseDirection, spread)
 			local result = castShot(origin, direction, range, passCover)
@@ -295,17 +297,41 @@ local function fireRanged()
 				end
 			end
 		end
+		WeaponPoseController.kick(character)
+		EffectsController.playShot(itemId, muzzlePosition(character, origin), endpoints, true)
+		WeaponController.Fired:Fire()
+	end
+	local function send()
+		ClientNet.fire("FireWeapon", {
+			t = now,
+			origin = origin,
+			direction = baseDirection,
+			hits = hits,
+		})
 	end
 
-	WeaponPoseController.kick(character)
-	EffectsController.playShot(rangedId :: string, muzzlePosition(character, origin), endpoints, true)
-	ClientNet.fire("FireWeapon", {
-		t = now,
-		origin = origin,
-		direction = baseDirection,
-		hits = hits,
-	})
-	WeaponController.Fired:Fire()
+	-- Rafale : projectiles espacés de `burstInterval` (même visée), un seul message au
+	-- serveur une fois la rafale finie (horodaté à l'appui : le serveur la valide d'un bloc).
+	local schedule = WeaponLogic.burstSchedule(def, bullets)
+	if #schedule <= 1 or schedule[#schedule] <= 0 then
+		for _ = 1, #schedule do
+			shoot()
+		end
+		send()
+		return
+	end
+	shoot()
+	for index = 2, #schedule do
+		task.delay(schedule[index], function()
+			-- Arme changée ou joueur mort en pleine rafale : la suite n'est pas tirée.
+			if rangedId == itemId and alive() then
+				shoot()
+			end
+			if index == #schedule then
+				send()
+			end
+		end)
+	end
 end
 
 local function attackMelee()

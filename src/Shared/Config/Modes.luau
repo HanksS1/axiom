@@ -72,5 +72,4 @@ local modes: { [string]: ModeDef } = {
 return Freeze.deep({
 	list = { "easy", "medium", "hard" },
 	byId = modes,
-	formats = { "solo", "duo" },
 })

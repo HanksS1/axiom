@@ -47,10 +47,6 @@ local function check(player: Player)
 	player:SetAttribute("IsAdmin", isAdmin)
 end
 
-function AdminService.isAdmin(player: Player): boolean
-	return admins[player] == true
-end
-
 local function gift(admin: Player, targetUserId: number, kind: string, amount: number)
 	if not admins[admin] then
 		ServerNet.flag(admin, "AdminGiftCrates", "demande d'un non-administrateur")

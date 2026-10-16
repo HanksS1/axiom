@@ -6,9 +6,6 @@
 local Freeze = require(script.Parent.Parent.Util.Freeze)
 
 return Freeze.deep({
-	playersPerMatch = 16,
-	duosPerMatch = 8,
-
 	duration = 15 * 60, -- Protocole de Purge
 	alertAt = 12 * 60, -- alerte d'AXIOM, ouverture du 3e point d'extraction
 	finalCountdownAt = 14 * 60, -- le chrono clignote en rouge
@@ -59,7 +56,6 @@ return Freeze.deep({
 		-- et retiré quand on l'atteint. Un seul par joueur.
 		waypointLifetime = 180,
 		waypointReach = 10,
-		longPressThreshold = 0.35,
 		lowHealthForHealPing = 35,
 	},
 

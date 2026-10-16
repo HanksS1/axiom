@@ -95,13 +95,27 @@ function EffectsController.playShot(itemId: string, muzzle: Vector3, endpoints: 
 		width = Visuals.tracer.beamWidth
 	end
 	local maxTracers = if isMobile then 3 else 8
+	-- Tir d'un autre combattant en rafale (un seul message) : tracés étalés comme les tirs.
+	local perBullet = if def and def.pellets then def.pellets else 1
+	local interval = if not isLocal and def and def.burstCount > 1 then def.burstInterval or 0 else 0
 	for index, endpoint in endpoints do
 		if index > maxTracers then
 			break
 		end
-		tracer(muzzle, endpoint, color, width, lifetime)
-		if isLocal or index <= 2 then
-			impact(endpoint, color)
+		local delay = math.floor((index - 1) / perBullet) * interval
+		local showImpact = isLocal or index <= 2
+		if delay > 0 then
+			task.delay(delay, function()
+				tracer(muzzle, endpoint, color, width, lifetime)
+				if showImpact then
+					impact(endpoint, color)
+				end
+			end)
+		else
+			tracer(muzzle, endpoint, color, width, lifetime)
+			if showImpact then
+				impact(endpoint, color)
+			end
 		end
 	end
 end

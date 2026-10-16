@@ -234,10 +234,6 @@ function ArenaService.setSandbox(enabled: boolean)
 	end
 end
 
-function ArenaService.isSandbox(): boolean
-	return sandbox
-end
-
 -- Repères de partie : points de départ, extractions, accélérateurs (aucune caisse).
 local function placeMarkers(arena: Instance)
 	local half = Dev.arenaSize / 2

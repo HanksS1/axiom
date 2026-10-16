@@ -52,6 +52,21 @@ function WeaponLogic.fireInterval(def: any): number
 	return 1 / def.fireRate
 end
 
+--[[
+	Instants (secondes après l'appui) des projectiles d'une rafale : 0, puis
+	`burstInterval` entre deux projectiles. `bullets` : projectiles réellement
+	tirés (le chargeur peut tronquer la rafale). Une arme sans rafale : { 0 }.
+]]
+function WeaponLogic.burstSchedule(def: any, bullets: number?): { number }
+	local count = math.max(1, math.min(def.burstCount or 1, bullets or def.burstCount or 1))
+	local interval = math.max(0, def.burstInterval or 0)
+	local schedule = {}
+	for index = 1, count do
+		table.insert(schedule, (index - 1) * interval)
+	end
+	return schedule
+end
+
 -- Chaleur ajoutée par activation (un tir, ou un tic de rayon).
 function WeaponLogic.heatPerShot(def: any): number
 	local heat = def.heat

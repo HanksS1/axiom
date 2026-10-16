@@ -18,6 +18,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Localization = require(Shared.Localization)
 local RateLimiter = require(Shared.Util.RateLimiter)
+local Relevance = require(script.Parent.Relevance)
 local Remotes = require(Shared.Net.Remotes)
 local try = require(Shared.Util.Try)
 
@@ -183,6 +184,20 @@ function ServerNet.fireAllExcept(name: string, except: Player?, ...: any)
 		if player ~= except then
 			remote:FireClient(player, ...)
 		end
+	end
+end
+
+-- Envoie aux joueurs proches de `origin` (tirs, coups : Config.Network.visualRelevanceRadius
+-- par défaut), sauf `except`. Voir Server/Net/Relevance.
+function ServerNet.fireNear(name: string, origin: Vector3, radius: number?, except: Player?, ...: any)
+	local remote = getInstance(name) :: RemoteEvent
+	local recipients = Relevance.recipients(Players:GetPlayers(), function(player: Player): Vector3?
+		local character = player.Character
+		local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+		return if root and root:IsA("BasePart") then root.Position else nil
+	end, origin, radius or Config.Network.visualRelevanceRadius, except)
+	for _, player in recipients do
+		remote:FireClient(player, ...)
 	end
 end
 

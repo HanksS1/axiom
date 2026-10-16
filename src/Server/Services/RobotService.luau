@@ -31,6 +31,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Engagement = require(Shared.Robots.Engagement)
 local RobotBrain = require(Shared.Robots.RobotBrain)
+local Turning = require(Shared.Robots.Turning)
 local try = require(Shared.Util.Try)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
@@ -75,7 +76,9 @@ type Robot = {
 	surfaceAt: Vector3?, -- Gardien enfoui : point d'émergence annoncé
 	partState: { [BasePart]: { transparency: number, query: boolean } }?,
 	windupUntil: number, -- annonce d'attaque en cours (0 = aucune)
-	faceTarget: CFrame?, -- tourelle ancrée : orientation visée (tournée en continu par la boucle)
+	faceTarget: number?, -- tourelle ancrée : cap visé (radians), tourné en continu par la boucle
+	yaw: number, -- tourelle ancrée : cap logique actuel (vision, tir)
+	turnReplicateAt: number, -- tourelle ancrée : prochaine écriture de la pièce (réplication)
 	awake: boolean, -- un joueur est assez proche pour que le robot agisse
 	shownAlert: string?, -- dernières valeurs publiées (attributs du modèle)
 	shownAggro: number?,
@@ -117,13 +120,17 @@ local function mode(): any
 	return Config.Modes.byId[modeId]
 end
 
--- Point au sol sous une position (les robots apparaissent posés).
+-- Point au sol sous une position (les robots apparaissent posés). Paramètres réutilisés :
+-- l'IA appelle souvent cette fonction (consignes de vol des Mouches, Gardiens).
+local groundParams = RaycastParams.new()
+groundParams.FilterType = Enum.RaycastFilterType.Exclude
 local function groundAt(position: Vector3): Vector3
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { robotFolder() }
+	local excluded = robotFolder()
+	if groundParams.FilterDescendantsInstances[1] ~= excluded then
+		groundParams.FilterDescendantsInstances = { excluded }
+	end
 	-- Depuis juste au-dessus du point : un étage supérieur ne doit pas être pris pour le sol.
-	local hit = Workspace:Raycast(position + Vector3.new(0, 4, 0), Vector3.new(0, -80, 0), params)
+	local hit = Workspace:Raycast(position + Vector3.new(0, 4, 0), Vector3.new(0, -80, 0), groundParams)
 	return if hit then hit.Position else position
 end
 
@@ -171,7 +178,10 @@ end
 local function perceive(robot: Robot): { RobotBrain.VisibleTarget }
 	local fighter = robot.fighter
 	local eyePosition = robot.eye.Position
-	local forward = fighter.root.CFrame.LookVector
+	-- Tourelle : cap logique (la pièce n'est répliquée qu'à basse fréquence).
+	local forward = if robot.stationary
+		then CFrame.Angles(0, robot.yaw, 0).LookVector
+		else fighter.root.CFrame.LookVector
 	local visible = {}
 	for _, other in CombatService.allFighters() do
 		if (other.kind == "player" or other.kind == "bot") and Fighter.isAlive(other) then
@@ -224,7 +234,13 @@ local function face(robot: Robot, point: Vector3)
 	end
 	local rotation = CFrame.lookAt(root.Position, flat).Rotation
 	if robot.stationary then
-		robot.faceTarget = rotation
+		local target = Turning.yawOf(rotation)
+		-- Cap visé publié aux clients (ils animent la rotation) : seulement s'il change.
+		local previous = robot.faceTarget
+		if previous == nil or math.abs(Turning.delta(previous, target)) > math.rad(1) then
+			root:SetAttribute("TurnYaw", target)
+		end
+		robot.faceTarget = target
 		return
 	end
 	local orient = facing(robot)
@@ -421,7 +437,7 @@ local function shoot(robot: Robot, target: Fighter, announced: boolean)
 			random:NextNumber(-1, 1) * AI.missSpread
 		)
 	end
-	ServerNet.fireAll("ShotFired", nil, "robot_" .. def.id, origin, { endpoint })
+	ServerNet.fireNear("ShotFired", origin, nil, nil, nil, "robot_" .. def.id, origin, { endpoint })
 end
 
 local function attack(robot: Robot, target: Fighter, distance: number, time: number)
@@ -448,7 +464,8 @@ local function attack(robot: Robot, target: Fighter, distance: number, time: num
 	if inMelee then
 		local windup: number = def.meleeWindup or 0
 		robot.nextAttackAt = time + windup + (def.meleeInterval :: number)
-		ServerNet.fireAll("MeleeSwing", nil, "robot_" .. def.id)
+		-- (Pas de MeleeSwing : sans modèle de personnage, aucun client ne pouvait s'en servir ;
+		-- le coup lourd est annoncé par les attributs WindupUntil / WindupKind.)
 		local reach = (meleeRange :: number) + 2.5
 		local function strike()
 			-- Coup esquivé : la cible est sortie de portée pendant l'annonce.
@@ -739,6 +756,9 @@ function RobotService.spawn(robotId: string, position: Vector3, garrison: boolea
 	local stationary = def.stationary == true or opts.behavior == "anchored"
 	if stationary then
 		built.root.Anchored = true
+		-- Rotation animée par les clients (RobotTurnController).
+		built.root:SetAttribute("TurnYaw", Turning.yawOf(built.root.CFrame.Rotation))
+		CollectionService:AddTag(built.root, "TurretRoot")
 	end
 	built.model.Parent = robotFolder()
 	pcall(function()
@@ -751,7 +771,6 @@ function RobotService.spawn(robotId: string, position: Vector3, garrison: boolea
 	fighter.health = health
 	fighter.teamId = "axiom"
 	fighter.robotId = robotId
-	built.model:SetAttribute("RobotId", robotId)
 	if def.guardian then
 		built.model:SetAttribute("Guardian", true)
 	end
@@ -785,6 +804,8 @@ function RobotService.spawn(robotId: string, position: Vector3, garrison: boolea
 		partState = nil,
 		windupUntil = 0,
 		faceTarget = nil,
+		yaw = Turning.yawOf(built.root.CFrame.Rotation),
+		turnReplicateAt = 0,
 		awake = false,
 		shownAlert = nil,
 		shownAggro = nil,
@@ -1065,22 +1086,27 @@ function RobotService.init()
 	end)
 end
 
--- Tourelle ancrée : rotation progressive vers son cap (à chaque image, seulement éveillée).
-local function turnStationary(robot: Robot, dt: number)
+--[[
+	Tourelle ancrée : rotation progressive vers son cap (à chaque image, seulement
+	éveillée). Le cap LOGIQUE avance à chaque image (vision, tir) ; la pièce n'est
+	écrite (donc répliquée) qu'à `turretReplicateInterval`, et à l'arrivée : les
+	clients animent la rotation (RobotTurnController, même calcul : Turning).
+]]
+local function turnStationary(robot: Robot, dt: number, time: number)
 	local target = robot.faceTarget
 	if target == nil or not robot.awake or not Fighter.isAlive(robot.fighter) then
 		return
 	end
-	local root = robot.fighter.root
-	local current = root.CFrame.Rotation
-	local _, angle = (current:Inverse() * target):ToAxisAngle()
-	if math.abs(angle) < math.rad(0.5) then
+	local reached
+	robot.yaw, reached = Turning.step(robot.yaw, target, dt)
+	if reached then
 		robot.faceTarget = nil
-		root.CFrame = CFrame.new(root.Position) * target
-		return
 	end
-	local alpha = math.min(1, dt * AI.turnResponsiveness, AI.turnRate * dt / math.abs(angle))
-	root.CFrame = CFrame.new(root.Position) * current:Lerp(target, alpha)
+	if reached or time >= robot.turnReplicateAt then
+		robot.turnReplicateAt = time + AI.turretReplicateInterval
+		local root = robot.fighter.root
+		root.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, robot.yaw, 0)
+	end
 end
 
 function RobotService.start()
@@ -1089,7 +1115,7 @@ function RobotService.start()
 		local time = now()
 		for _, robot in robots do
 			if robot.stationary and robot.faceTarget then
-				turnStationary(robot, dt)
+				turnStationary(robot, dt, time)
 			end
 			if time >= robot.nextUpdate then
 				robot.nextUpdate = time + interval

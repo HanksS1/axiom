@@ -15,9 +15,11 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
+local Config = require(ReplicatedStorage:WaitForChild("Shared").Config)
 local TextKeys = require(script.Parent.Parent.UI.TextKeys)
 local ProfileController = require(script.Parent.ProfileController)
 
@@ -27,7 +29,7 @@ local player = Players.LocalPlayer
 local t = ProfileController.t
 local random = Random.new()
 
-local ACTIVE_DISTANCE = 260
+local ACTIVE_DISTANCE = Config.Maps.hub.radius
 local GREET_DISTANCE = 12
 local LOOK_DISTANCE = 16
 local GREET_COOLDOWN = 25

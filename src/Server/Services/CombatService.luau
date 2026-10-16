@@ -79,7 +79,7 @@ local coverRayParams = RaycastParams.new()
 coverRayParams.FilterType = Enum.RaycastFilterType.Exclude
 coverRayParams.IgnoreWater = true
 local excludedCharacters: { Instance } = {}
-local MAX_COVERS = 4
+local MAX_COVERS = Config.Combat.validation.maxCoversCrossed
 
 -- Projectiles lents en vol.
 type Flight = {
@@ -162,7 +162,6 @@ local function publishPublic(fighter: Fighter)
 	character:SetAttribute("Using", fighter.usingItemId ~= nil)
 	local weapon = if fighter.activeSlot == "ranged" then fighter.ranged else fighter.melee
 	character:SetAttribute("WeaponId", if weapon then weapon.item.itemId else nil)
-	character:SetAttribute("WeaponCondition", if weapon then weapon.item.condition else nil)
 	-- Recharge en cours (heure serveur de fin et durée) : animation vue par tous.
 	local ranged = fighter.ranged
 	local reloadEndsAt = if ranged and fighter.activeSlot == "ranged" then ranged.state.reloadEndsAt else nil
@@ -606,10 +605,6 @@ function CombatService.kill(fighter: Fighter)
 	end
 end
 
-function CombatService.getFighterByCharacter(character: Model): Fighter?
-	return fighters[character]
-end
-
 -- Combattant vivant auquel appartient une pièce (nil sinon).
 function CombatService.findFighterByPart(part: Instance): Fighter?
 	local current: Instance? = part
@@ -658,6 +653,8 @@ local function finishReloadIfDue(fighter: Fighter, time: number)
 		local used = WeaponLogic.finishReload(def, ranged.state, time, fighter.inventory:countCells(def.cell))
 		fighter.inventory:takeCells(def.cell, used)
 		queueOwnerState(fighter)
+		-- Fin de recharge : l'attribut public ReloadUntil est effacé.
+		publishPublic(fighter)
 	end
 end
 
@@ -743,7 +740,16 @@ function CombatService.rangedHit(
 			ServerNet.fire("ParryResult", attacker.player, "parried")
 		end
 		local from = headPosition(target)
-		ServerNet.fireAll("ShotFired", nil, opts.itemId or "robot_reflect", from, { attacker.root.Position })
+		ServerNet.fireNear(
+			"ShotFired",
+			from,
+			nil,
+			nil,
+			nil,
+			opts.itemId or "robot_reflect",
+			from,
+			{ attacker.root.Position }
+		)
 		CombatService.applyDamage(attacker, amount, target, { sourcePosition = from })
 		return 0, false, true
 	end
@@ -902,7 +908,16 @@ local function launchProjectile(
 			flight
 		)
 	)
-	ServerNet.fireAllExcept("ProjectileFired", fighter.player, fighter.player, ranged.item.itemId, origin, velocity)
+	ServerNet.fireNear(
+		"ProjectileFired",
+		origin,
+		nil,
+		fighter.player,
+		fighter.player,
+		ranged.item.itemId,
+		origin,
+		velocity
+	)
 end
 
 local shotValidator = Guard.tuple(Guard.struct({
@@ -979,6 +994,8 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 		shooter = fighter,
 		castRay = castWorldRay,
 		castThrough = if def.lightCoverDamageMultiplier then castThroughLightCover else nil,
+		-- Pire cas de la dispersion côté client (debout, en mouvement, en l'air).
+		maxSpread = Movement.spread(def.spread, "stand", false, true, true),
 	})
 	if not verdict.ok then
 		ServerNet.flag(player, "FireWeapon", verdict.reason or "tir invalide")
@@ -1040,7 +1057,7 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 	if #endpoints == 0 then
 		table.insert(endpoints, shot.origin + shot.direction * Damage.maxRange(def.effectiveRange))
 	end
-	ServerNet.fireAllExcept("ShotFired", player, player, ranged.item.itemId, shot.origin, endpoints)
+	ServerNet.fireNear("ShotFired", shot.origin, nil, player, player, ranged.item.itemId, shot.origin, endpoints)
 	queueOwnerState(fighter)
 end
 
@@ -1113,7 +1130,7 @@ local function onMeleeAttack(player: Player, targetPart: BasePart?)
 		return
 	end
 	melee.lastAttackAt = time
-	ServerNet.fireAllExcept("MeleeSwing", player, player, melee.item.itemId)
+	ServerNet.fireNear("MeleeSwing", fighter.root.Position, nil, player, player, melee.item.itemId)
 
 	if targetPart == nil then
 		return -- coup dans le vide

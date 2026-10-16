@@ -97,4 +97,36 @@ return function(T, H)
 			end
 		end)
 	end)
+
+	describe("Rotation des robots ancrés (Turning)", function()
+		local Turning = H.require("ReplicatedStorage/Shared/Robots/Turning")
+		local CFrame = require("@lune/roblox").CFrame
+		local AI = H.require("ReplicatedStorage/Shared/Config").Robots.ai
+
+		it("cap d'une orientation : aller-retour exact", function()
+			for _, yaw in { 0, 1, -2, 3 } do
+				expect(Turning.yawOf(CFrame.Angles(0, yaw, 0))).toBeNear(yaw)
+			end
+		end)
+
+		it("jamais plus vite que turnRate, et atteint la cible", function()
+			local yaw, reached = 0, false
+			local dt = 1 / 60
+			local steps = 0
+			while not reached and steps < 1000 do
+				local before = yaw
+				yaw, reached = Turning.step(yaw, 2, dt)
+				expect(math.abs(yaw - before) <= AI.turnRate * dt + 1e-9).toBe(true)
+				steps += 1
+			end
+			expect(reached).toBe(true)
+			expect(yaw).toBe(2)
+		end)
+
+		it("par le plus court chemin (de part et d'autre de ±π)", function()
+			local yaw = Turning.step(3, -3, 1 / 60)
+			expect(yaw > 3).toBe(true) -- 3 → -3 passe par π, pas par 0
+			expect(Turning.delta(3, -3)).toBeNear(2 * math.pi - 6)
+		end)
+	end)
 end

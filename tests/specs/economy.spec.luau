@@ -86,6 +86,16 @@ return function(T, H)
 		end)
 	end)
 
+	describe("Verrou de l'économie", function()
+		it("en partie ou en file : actions refusées, avec la raison", function()
+			expect(EconomyRules.lockReason(true, false)).toBe("in_match")
+			expect(EconomyRules.lockReason(false, true)).toBe("queued")
+			-- La partie prime sur la file (le joueur doit d'abord la finir).
+			expect(EconomyRules.lockReason(true, true)).toBe("in_match")
+			expect(EconomyRules.lockReason(false, false)).toBeNil()
+		end)
+	end)
+
 	describe("Coffre et équipement", function()
 		it("équiper depuis le coffre, l'ancien objet revient au coffre", function()
 			local p = profile()
@@ -219,7 +229,8 @@ return function(T, H)
 		it("valeur assurée : équipement uniquement", function()
 			local loadout = { ranged = create("needle", { condition = 4 }) } -- 1500
 			local bag = { create("cell_light"), create("vest", { condition = 4 }) } -- 900
-			expect(EconomyRules.insuredValue(loadout, bag)).toBe(2400)
+			local Pricing = H.require("ReplicatedStorage/Shared/Economy/Pricing")
+			expect(Pricing.insuredValue(loadout, bag)).toBe(2400)
 		end)
 
 		it("livraison via l'écran de tri", function()

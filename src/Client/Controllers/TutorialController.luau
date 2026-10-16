@@ -126,7 +126,11 @@ local function arrivalCinematic(level: number?)
 	for _ = 1, 100 do
 		local character = player.Character
 		local candidate = if character then character:FindFirstChild("HumanoidRootPart") else nil
-		if candidate and candidate:IsA("BasePart") and (candidate.Position - platform.Position).Magnitude < 260 then
+		if
+			candidate
+			and candidate:IsA("BasePart")
+			and (candidate.Position - platform.Position).Magnitude < Config.Maps.hub.radius
+		then
 			rootPart = candidate
 			break
 		end

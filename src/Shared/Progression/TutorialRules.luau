@@ -43,9 +43,4 @@ function TutorialRules.complete(profile: { level: number, xp: number, tutorialDo
 	return changed
 end
 
--- Peut-on jouer ? (niveau minimum, atteint par le tutoriel)
-function TutorialRules.canPlay(level: number): boolean
-	return level >= Config.Progression.minLevelToPlay
-end
-
 return TutorialRules

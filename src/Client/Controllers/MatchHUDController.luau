@@ -140,6 +140,23 @@ function MatchHUDController.status(): string
 	return status
 end
 
+--[[
+	Deux questions différentes, à ne pas confondre (statuts : none, alive,
+	orb, dead, extracted, left) :
+	- `isPlaying` : le joueur est SUR LE TERRAIN (vivant, ou en orbe en duo).
+	  Mort ou extrait, sa partie est finie : il peut retourner au Terminus et
+	  s'en servir (le serveur l'autorise aussi : participant `finished`).
+	- `inMatchSession` : une partie est encore en cours POUR LUI (jusqu'à ce que
+	  le serveur le remette à « none ») : pas de nouvelle file d'attente.
+]]
+function MatchHUDController.isPlaying(): boolean
+	return status == "alive" or status == "orb"
+end
+
+function MatchHUDController.inMatchSession(): boolean
+	return status ~= "none"
+end
+
 local function formatTime(seconds: number): string
 	local total = math.max(0, math.ceil(seconds))
 	return string.format("%02d:%02d", math.floor(total / 60), total % 60)

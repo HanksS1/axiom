@@ -65,10 +65,6 @@ function Matchmaking.ticketSize(format: Format): number
 	return if format == "duo" then 2 else 1
 end
 
-function Matchmaking.isPlatform(value: any): boolean
-	return type(value) == "string" and table.find(Config.Matchmaking.platforms, value) ~= nil
-end
-
 --[[
 	Groupe de plateformes d'un ticket. Retourne aussi `forced` : vrai quand
 	le crossplay est imposé (duo de deux plateformes différentes).

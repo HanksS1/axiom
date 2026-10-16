@@ -407,4 +407,61 @@ return function(T, H)
 			end)
 		end)
 	end
+
+	describe("Zones dangereuses (HazardRules)", function()
+		local HazardRules = H.require("ServerScriptService/Server/Maps/HazardRules")
+		local radiation = Config.Maps.byId.terres_brulees.radiation
+		local pool = { kind = "molten", center = Vector3.new(0, 0, 0), size = Vector3.new(10, 0, 6), height = 5 }
+		local cloud = { kind = "radiation", center = Vector3.new(30, 0, 0), radius = 8, height = 20 }
+		local hazards = { cloud, pool }
+
+		it("boîte et cylindre : bornes horizontales et verticales", function()
+			expect(HazardRules.inside(pool, Vector3.new(4.9, 1, 2.9))).toBe(true)
+			expect(HazardRules.inside(pool, Vector3.new(5.1, 1, 0))).toBe(false)
+			expect(HazardRules.inside(pool, Vector3.new(0, -0.9, 0))).toBe(true) -- 1 stud de marge sous le sol
+			expect(HazardRules.inside(pool, Vector3.new(0, 5.1, 0))).toBe(false) -- au-dessus (saut) : épargné
+			expect(HazardRules.inside(cloud, Vector3.new(30 + 7.9, 10, 0))).toBe(true)
+			expect(HazardRules.inside(cloud, Vector3.new(30 + 6, 10, 6))).toBe(false) -- coin : hors du cercle
+		end)
+
+		it("métal en fusion : mortel pour tous, prioritaire sur la radiation", function()
+			expect(HazardRules.effect(hazards, Vector3.new(0, 1, 0), false, radiation)).toBe("molten")
+			expect(HazardRules.effect(hazards, Vector3.new(0, 1, 0), true, radiation)).toBe("molten")
+			local overlap =
+				{ cloud, { kind = "molten", center = Vector3.new(30, 0, 0), size = Vector3.new(4, 0, 4), height = 5 } }
+			expect(HazardRules.effect(overlap, Vector3.new(30, 1, 0), false, radiation)).toBe("molten")
+		end)
+
+		it("radiation : joueurs et mercenaires seulement, et seulement sur la carte qui la définit", function()
+			expect(HazardRules.effect(hazards, Vector3.new(30, 1, 0), false, radiation)).toBe("radiation")
+			expect(HazardRules.effect(hazards, Vector3.new(30, 1, 0), true, radiation)).toBeNil() -- robot
+			expect(HazardRules.effect(hazards, Vector3.new(30, 1, 0), false, nil)).toBeNil()
+			expect(HazardRules.effect(hazards, Vector3.new(60, 1, 0), false, radiation)).toBeNil()
+		end)
+
+		it("radiation : −5 bouclier/s tant qu'il en reste, puis −3 PV/s (spécification)", function()
+			expect(radiation.shieldPerSecond).toBe(5)
+			expect(radiation.healthPerSecond).toBe(3)
+			local tick = Config.Maps.hazardTick
+			expect(HazardRules.radiationDamage(radiation, 40, tick)).toBeNear(5 * tick, 1e-9)
+			expect(HazardRules.radiationDamage(radiation, 0, tick)).toBeNear(3 * tick, 1e-9)
+		end)
+
+		it("cartes réelles : Forge-7 a du métal en fusion, les Terres Brûlées de la radiation", function()
+			local kinds = {}
+			for _, mapId in { "forge_7", "terres_brulees" } do
+				local def = Config.Maps.byId[mapId]
+				local built = Registry[mapId](LayoutBuilder.random(def.seed))
+				kinds[mapId] = {}
+				for _, hazard in built.hazards do
+					kinds[mapId][hazard.kind] = true
+					-- Le centre d'une zone est bien dedans (géométrie cohérente).
+					local probe = hazard.center + Vector3.new(0, 1, 0)
+					expect(HazardRules.inside(hazard, probe)).toBe(true)
+				end
+			end
+			expect(kinds.forge_7.molten).toBe(true)
+			expect(kinds.terres_brulees.radiation).toBe(true)
+		end)
+	end)
 end

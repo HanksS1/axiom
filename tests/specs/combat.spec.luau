@@ -372,6 +372,27 @@ return function(T, H)
 		end)
 	end)
 
+	describe("Rafale espacée", function()
+		it("Vigil : trois projectiles à burstInterval d'écart", function()
+			local def = W.vigil_pistol
+			local schedule = WeaponLogic.burstSchedule(def)
+			expect(#schedule).toBe(def.burstCount)
+			expect(schedule[1]).toBe(0)
+			for index = 2, #schedule do
+				expect(schedule[index] - schedule[index - 1]).toBeNear(def.burstInterval)
+			end
+			expect(def.burstInterval > 0).toBe(true)
+		end)
+
+		it("arme sans rafale : un seul tir immédiat ; chargeur presque vide : rafale tronquée", function()
+			local single = WeaponLogic.burstSchedule(W.sentinel_rifle)
+			expect(#single).toBe(1)
+			expect(single[1]).toBe(0)
+			expect(#WeaponLogic.burstSchedule(W.vigil_pistol, 2)).toBe(2)
+			expect(#WeaponLogic.burstSchedule(W.vigil_pistol, 0)).toBe(1)
+		end)
+	end)
+
 	describe("Movement", function()
 		local function state(overrides)
 			local base = { stance = "stand", sprinting = false, parrying = false, stunned = false, speedMultiplier = 1 }
@@ -509,6 +530,74 @@ return function(T, H)
 			expect(v.dropped).toBe(1)
 		end)
 
+		it("impact hors de l'axe du tir (derrière, sur le côté) : refusé", function()
+			local behind = { Name = "UpperTorso", Size = Vector3.new(2, 1.6, 1), Position = Vector3.new(0, 1.5, 30) }
+			local side = { Name = "UpperTorso", Size = Vector3.new(2, 1.6, 1), Position = Vector3.new(30, 1.5, -5) }
+			parts[behind] = target
+			parts[side] = target
+			local ctx = context({ maxSpread = 5 })
+			local v = HitValidator.validate(shot({ { part = behind, position = Vector3.new(0, 1.5, 29.5) } }), ctx)
+			expect(v.ok).toBe(false)
+			v = HitValidator.validate(shot({ { part = side, position = Vector3.new(29.5, 1.5, -5) } }), ctx)
+			expect(v.ok).toBe(false)
+			parts[behind] = nil
+			parts[side] = nil
+		end)
+
+		it("impact dans le cône de dispersion (et sa marge) : accepté", function()
+			local V = Config.Combat.validation
+			local spread = 5
+			-- Juste à l'intérieur du cône élargi par la marge, à 50 studs.
+			local inside = math.rad(spread + V.directionTolerance - 0.5)
+			local torsoWide = { Name = "UpperTorso", Size = Vector3.new(12, 2, 1), Position = Vector3.new(0, 1.5, -50) }
+			parts[torsoWide] = target
+			local position = Vector3.new(math.tan(inside) * 50, 1.5, -50)
+			local v = HitValidator.validate(
+				shot({ { part = torsoWide, position = position } }),
+				context({ maxSpread = spread })
+			)
+			expect(v.ok).toBe(true)
+			expect(#v.hits).toBe(1)
+			-- Juste au-delà : refusé.
+			local outside = math.rad(spread + V.directionTolerance + 0.5)
+			v = HitValidator.validate(
+				shot({ { part = torsoWide, position = Vector3.new(math.tan(outside) * 50, 1.5, -50) } }),
+				context({ maxSpread = spread })
+			)
+			expect(v.ok).toBe(false)
+			parts[torsoWide] = nil
+		end)
+
+		it("dispersion maximale réelle : chaque arme accepte ses propres tirs, plombs compris", function()
+			local Movement2 = H.require("ReplicatedStorage/Shared/Combat/Movement")
+			for _, def in W do
+				local worst = Movement2.spread(def.spread, "stand", false, true, true)
+				-- Le tir le plus dévié que le client puisse produire, à 40 studs.
+				local angle = math.rad(worst)
+				local wide =
+					{ Name = "UpperTorso", Size = Vector3.new(200, 200, 1), Position = Vector3.new(0, 1.5, -40) }
+				parts[wide] = target
+				local position = Vector3.new(math.sin(angle) * 40, 1.5, -math.cos(angle) * 40)
+				local v = HitValidator.validate(
+					shot({ { part = wide, position = position } }),
+					context({ maxSpread = worst, effectiveRange = 200 })
+				)
+				expect(v.ok).toBe(true)
+				parts[wide] = nil
+			end
+		end)
+
+		it("cible au contact : pas de contrôle d'angle", function()
+			local close = { Name = "UpperTorso", Size = Vector3.new(2, 1.6, 1), Position = Vector3.new(0.8, 1.5, 0.6) }
+			parts[close] = target
+			local v = HitValidator.validate(
+				shot({ { part = close, position = Vector3.new(0.8, 1.5, 0.6) } }),
+				context({ maxSpread = 1 })
+			)
+			expect(v.ok).toBe(true)
+			parts[close] = nil
+		end)
+
 		it("ignore le tireur lui-même et les pièces sans propriétaire", function()
 			local own = { Name = "Head", Size = Vector3.new(1, 1, 1), Position = Vector3.new(0, 1.5, 0) }
 			parts[own] = shooter
@@ -531,16 +620,6 @@ return function(T, H)
 			expect(inv:takeCells("cell_light", 100)).toBe(28)
 			expect(inv:countCells("cell_light")).toBe(0)
 			expect(inv:takeCells("cell_heavy", 5)).toBe(0)
-		end)
-
-		it("cellules comptées depuis le sac", function()
-			local cells = Fighter.cellsFromBag({
-				{ uid = "a", itemId = "cell_light", stack = 30 },
-				{ uid = "b", itemId = "cell_light", stack = 12 },
-				{ uid = "c", itemId = "nanite_injector", stack = 3 },
-			})
-			expect(cells.cell_light).toBe(42)
-			expect(cells.nanite_injector).toBeNil()
 		end)
 	end)
 
@@ -741,6 +820,253 @@ return function(T, H)
 					end
 				end
 			end
+		end)
+	end)
+
+	describe("Visée assistée (AimAssist)", function()
+		local roblox = require("@lune/roblox")
+		local Vector3 = roblox.Vector3
+		local AimAssist = H.require("ReplicatedStorage/Shared/Combat/AimAssist")
+		local A = H.require("ReplicatedStorage/Shared/Config").Combat.aimAssist
+		local origin, look = Vector3.new(0, 0, 0), Vector3.new(0, 0, -1)
+
+		-- Point à `distance` studs, décalé de `degrees` du centre de l'écran.
+		local function at(degrees, distance, id)
+			local r = math.rad(degrees)
+			return { point = Vector3.new(math.sin(r), 0, -math.cos(r)) * distance, model = id }
+		end
+
+		it("jamais à la souris ; désactivable ; force bornée à [0, 1]", function()
+			expect(AimAssist.strength("keyboard", true, 1)).toBe(0)
+			expect(AimAssist.strength("gamepad", false, 1)).toBe(0)
+			expect(AimAssist.strength("touch", true, 0.5)).toBe(0.5)
+			expect(AimAssist.strength("gamepad", true, 3)).toBe(1)
+		end)
+
+		it("cible : dans le cône de 6° et à portée, la plus proche du centre", function()
+			expect(A.cone).toBe(6)
+			expect(AimAssist.pick(origin, look, { at(A.cone + 0.5, 50, "hors cône") })).toBeNil()
+			expect(AimAssist.pick(origin, look, { at(0, A.range + 1, "trop loin") })).toBeNil()
+			expect(AimAssist.pick(origin, look, { at(0, 0.5, "collé") })).toBeNil()
+			local best = AimAssist.pick(origin, look, { at(4, 30, "a"), at(1, 120, "b"), at(-2.5, 60, "c") })
+			expect(best.model).toBe("b")
+		end)
+
+		it("ralentissement : 45 % au maximum, rien sans cible", function()
+			expect(AimAssist.slowdown(1, false)).toBe(1)
+			expect(AimAssist.slowdown(1, true)).toBeNear(1 - 0.45, 1e-9)
+			expect(AimAssist.slowdown(0.5, true)).toBeNear(1 - 0.45 * 0.5, 1e-9)
+		end)
+
+		it("adhérence : au plus 7°/s × force, par le plus court chemin", function()
+			local maxPitch = math.rad(80)
+			-- Cible loin à droite : le pas est borné.
+			local direction = Vector3.new(math.sin(math.rad(-90)), 0, -math.cos(math.rad(-90)))
+			local yaw = AimAssist.pull(0, 0, direction, 1, 1, maxPitch)
+			expect(math.abs(math.deg(yaw))).toBeNear(A.pull, 1e-6)
+			yaw = AimAssist.pull(0, 0, direction, 0.5, 0.1, maxPitch)
+			expect(math.abs(math.deg(yaw))).toBeNear(A.pull * 0.5 * 0.1, 1e-6)
+			-- Cible presque atteinte : on s'arrête dessus, sans la dépasser.
+			local near = Vector3.new(math.sin(math.rad(-0.01)), 0, -math.cos(math.rad(-0.01)))
+			local yawNear = AimAssist.pull(0, 0, near, 1, 1, maxPitch)
+			expect(math.abs(math.deg(yawNear))).toBeNear(0.01, 1e-6)
+			-- Lacet à 179° et cible à -179° : 2° de rotation, pas 358.
+			local behind = Vector3.new(-math.sin(math.rad(-179)), 0, -math.cos(math.rad(-179)))
+			local start = math.rad(179)
+			local next = AimAssist.pull(start, 0, behind, 1, 10, maxPitch)
+			local moved = (next - start + math.pi) % (2 * math.pi) - math.pi
+			expect(math.abs(math.deg(moved))).toBeNear(2, 1e-6)
+		end)
+	end)
+
+	describe("Contrôle des déplacements (MovementCheck)", function()
+		local roblox = require("@lune/roblox")
+		local Vector3, CFrame = roblox.Vector3, roblox.CFrame
+		local MovementCheck = H.require("ServerScriptService/Server/Combat/MovementCheck")
+		local Movement = H.require("ReplicatedStorage/Shared/Combat/Movement")
+		local Config = H.require("ReplicatedStorage/Shared/Config")
+		local G = Config.Combat.movementGuard
+		local M = Config.Combat.movement
+		local GRAVITY = 196.2 -- gravité par défaut de Roblox
+		local DT = G.interval
+
+		local function state(overrides)
+			local s = { stance = "stand", sprinting = false, parrying = false, stunned = false, speedMultiplier = 1 }
+			for k, v in overrides or {} do
+				s[k] = v
+			end
+			return s
+		end
+
+		-- Piste neuve, sortie de la seconde de grâce d'apparition (clock = 2).
+		local function track(at)
+			local t = MovementCheck.newTrack(CFrame.new(at or Vector3.new(0, 0, 0)), 0)
+			return t, 2
+		end
+
+		-- `steps` contrôles à `speed` studs/s (+ `rise` studs de montée par contrôle).
+		local function run(t, clock, from, speed, steps, baseSpeed, rise)
+			local verdicts, position = {}, from
+			for _ = 1, steps do
+				clock += DT
+				position += Vector3.new(speed * DT, rise or 0, 0)
+				table.insert(verdicts, (MovementCheck.step(t, CFrame.new(position), clock, DT, baseSpeed, false)))
+			end
+			return verdicts, clock, position
+		end
+
+		local function count(verdicts, kind)
+			local n = 0
+			for _, v in verdicts do
+				if v == kind then
+					n += 1
+				end
+			end
+			return n
+		end
+
+		it("joueur honnête : marche, sprint, sprint sous Surcharge, accroupi → jamais d'infraction", function()
+			local surcharge = Config.Equipment.consumables.overdrive.effect.speedMultiplier
+			for _, s in
+				{
+					state(),
+					state({ sprinting = true }),
+					state({ sprinting = true, speedMultiplier = surcharge }),
+					state({ stance = "crouch" }),
+				}
+			do
+				local t, clock = track()
+				local speed = Movement.walkSpeed(s)
+				local verdicts = run(t, clock, Vector3.new(0, 0, 0), speed, 40, speed)
+				expect(count(verdicts, "ok")).toBe(40)
+			end
+		end)
+
+		it("fin de sprint : l'ancienne vitesse reste admise le temps de la latence", function()
+			local t, clock = track()
+			local sprint = Movement.walkSpeed(state({ sprinting = true }))
+			local verdicts, position
+			verdicts, clock, position = run(t, clock, Vector3.new(0, 0, 0), sprint, 4, sprint)
+			MovementCheck.speedChanged(t, sprint, clock)
+			-- Le serveur passe à la marche ; le client sprinte encore un instant.
+			MovementCheck.speedChanged(t, M.walkSpeed, clock)
+			verdicts, clock, position = run(t, clock, position, sprint, 2, M.walkSpeed)
+			expect(count(verdicts, "ok")).toBe(2)
+			-- Au-delà du délai de grâce, sprinter en marchant finit en recalage.
+			verdicts = run(t, clock + G.speedGraceTime, position, sprint * 1.6, 3, M.walkSpeed)
+			expect(count(verdicts, "correct") >= 1).toBe(true)
+		end)
+
+		it("latence : paquets regroupés et pic d'1 s rattrapés d'un coup → jamais de recalage", function()
+			local t, clock = track()
+			local step = M.walkSpeed * DT
+			local verdicts, position
+			verdicts, clock, position = run(t, clock, Vector3.new(0, 0, 0), M.walkSpeed, 4, M.walkSpeed)
+			local all = {}
+			local function at(p)
+				clock += DT
+				table.insert(all, (MovementCheck.step(t, CFrame.new(p), clock, DT, M.walkSpeed, false)))
+			end
+			-- Un intervalle sans nouvelles, puis deux d'un coup.
+			at(position)
+			position += Vector3.new(2 * step, 0, 0)
+			at(position)
+			-- Pic d'une seconde (4 contrôles immobiles), puis tout le trajet d'un coup.
+			for _ = 1, 4 do
+				at(position)
+			end
+			position += Vector3.new(5 * step, 0, 0)
+			at(position)
+			for _ = 1, 4 do
+				position += Vector3.new(step, 0, 0)
+				at(position)
+			end
+			expect(count(all, "correct")).toBe(0)
+			expect(count(verdicts, "ok")).toBe(4)
+		end)
+
+		it("téléportation unique (même courte) recalée à la dernière position valide", function()
+			for _, distance in { 30, 120 } do
+				local t, clock = track()
+				local _, position
+				_, clock, position = run(t, clock, Vector3.new(0, 0, 0), M.walkSpeed, 4, M.walkSpeed)
+				local valid = t.lastValid.Position
+				local far = position + Vector3.new(distance, 0, 0)
+				clock += DT
+				expect(MovementCheck.step(t, CFrame.new(far), clock, DT, M.walkSpeed, false)).toBe("strike")
+				-- Le tricheur reste sur place (ou repart normalement) : rien ne la « blanchit ».
+				clock += DT
+				local verdict, reason =
+					MovementCheck.step(t, CFrame.new(far + Vector3.new(1, 0, 0)), clock, DT, M.walkSpeed, false)
+				expect(verdict).toBe("correct")
+				expect(string.find(reason, "vitesse anormale", 1, true) ~= nil).toBe(true)
+				expect((t.lastValid.Position - valid).Magnitude).toBeNear(0, 1e-6)
+			end
+		end)
+
+		it("rester immobile n'ouvre qu'un crédit borné : grande téléportation ensuite recalée", function()
+			local t, clock = track()
+			local verdicts
+			verdicts, clock = run(t, clock, Vector3.new(0, 0, 0), 0, 40, M.walkSpeed) -- 10 s immobile
+			expect(count(verdicts, "ok")).toBe(40)
+			local reach = M.walkSpeed * (G.catchUpWindow + DT) * G.speedTolerance + G.flatTolerance
+			local far = Vector3.new(reach + 5, 0, 0)
+			clock += DT
+			expect(MovementCheck.step(t, CFrame.new(far), clock, DT, M.walkSpeed, false)).toBe("strike")
+			clock += DT
+			expect(MovementCheck.step(t, CFrame.new(far), clock, DT, M.walkSpeed, false)).toBe("correct")
+		end)
+
+		it("triche de vitesse continue (×2) : recalée", function()
+			local t, clock = track()
+			local verdicts = run(t, clock, Vector3.new(0, 0, 0), M.sprintSpeed * 2, 6, M.sprintSpeed)
+			expect(count(verdicts, "correct") >= 2).toBe(true)
+		end)
+
+		it("montée : saut et escaliers admis, vol refusé ; chute jamais limitée", function()
+			local t, clock = track()
+			local verdicts = run(t, clock, Vector3.new(0, 0, 0), M.walkSpeed, 4, M.walkSpeed, G.maxVerticalRise)
+			expect(count(verdicts, "ok")).toBe(4)
+			t, clock = track()
+			local reason
+			clock += DT
+			MovementCheck.step(t, CFrame.new(0, 30, 0), clock, DT, M.walkSpeed, false)
+			clock += DT
+			verdicts, reason = MovementCheck.step(t, CFrame.new(0, 60, 0), clock, DT, M.walkSpeed, false)
+			expect(verdicts).toBe("correct")
+			expect(reason).toBe("montée anormale")
+			t, clock = track(Vector3.new(0, 500, 0))
+			verdicts = run(t, clock, Vector3.new(0, 500, 0), 0, 6, M.walkSpeed, -80)
+			expect(count(verdicts, "ok")).toBe(6)
+		end)
+
+		it("bottes de saut, grappin, repoussement du Gantelet : tolérance accordée puis retirée", function()
+			-- Bottes de saut : montée de la hauteur du saut (GadgetService).
+			local t, clock = track()
+			local height = 30
+			MovementCheck.grant(t, math.sqrt(2 * GRAVITY * height), 2.5, height + 4, clock)
+			local verdicts = run(t, clock, Vector3.new(0, 0, 0), M.walkSpeed, 2, M.walkSpeed, height / 2)
+			expect(count(verdicts, "ok")).toBe(2)
+			-- Repoussement : vol plané latéral rapide.
+			t, clock = track()
+			local velocity = Vector3.new(80, 50, 0)
+			local speed, duration, rise = MovementCheck.knockbackAllowance(velocity, 0.4, GRAVITY)
+			expect(duration).toBeNear(1.0, 1e-9)
+			MovementCheck.grant(t, speed, duration, rise, clock)
+			verdicts, clock = run(t, clock, Vector3.new(0, 0, 0), 80, 3, M.walkSpeed, rise * 0.9)
+			expect(count(verdicts, "ok")).toBe(3)
+			-- Allocation échue : la même vitesse redevient une infraction.
+			verdicts = run(t, clock + 2, Vector3.new(0, 0, 0), 80, 2, M.walkSpeed)
+			expect(verdicts[2]).toBe("correct")
+		end)
+
+		it("apparition, téléportation serveur ou personnage ancré : aucun contrôle", function()
+			local t = MovementCheck.newTrack(CFrame.new(0, 0, 0), 0)
+			expect(MovementCheck.step(t, CFrame.new(500, 0, 0), 0.25, DT, M.walkSpeed, false)).toBe("ok")
+			expect(MovementCheck.step(t, CFrame.new(900, 0, 0), 0.5, DT, M.walkSpeed, false)).toBe("ok")
+			expect(MovementCheck.step(t, CFrame.new(1400, 0, 0), 5, DT, M.walkSpeed, true)).toBe("ok")
+			expect(t.strikes).toBe(0)
+			expect(t.lastValid.Position.X).toBe(1400)
 		end)
 	end)
 end

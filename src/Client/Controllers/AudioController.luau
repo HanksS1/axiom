@@ -46,9 +46,9 @@ local pool: { Source } = {}
 local poolIndex = 0
 local uiSounds: { [string]: Sound } = {}
 
+-- Musique de partie : sur le terrain, et aussi mort en attendant la fin (spectateur).
 local function inMatch(): boolean
-	local status = MatchHUDController.status()
-	return status == "alive" or status == "orb" or status == "dead"
+	return MatchHUDController.isPlaying() or MatchHUDController.status() == "dead"
 end
 
 -- Couche voulue à cet instant.

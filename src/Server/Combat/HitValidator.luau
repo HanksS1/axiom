@@ -5,7 +5,8 @@
 	Le client affiche son tir immédiatement puis envoie une INTENTION :
 	{ t, origin, direction, hits = { { part, position } } }. Le serveur
 	vérifie l'âge du tir, la position du tireur, la portée, la cohérence du
-	point d'impact avec la position de la cible, et la ligne de vue.
+	point d'impact avec la position de la cible, que chaque impact est dans
+	l'axe du tir (cône de dispersion maximal de l'arme), et la ligne de vue.
 	Les dégâts sont ensuite calculés uniquement par le serveur.
 
 	Le lancer de rayon est injecté (`castRay`) pour pouvoir tester hors Studio.
@@ -57,6 +58,9 @@ export type Context = {
 	shooter: any, -- Fighter du tireur
 	castRay: CastRay,
 	castThrough: CastThrough?, -- armes qui traversent les couverts légers
+	-- Demi-angle (degrés) du cône de dispersion maximal de l'arme : un impact hors
+	-- de ce cône (plus `directionTolerance`) autour de `shot.direction` est refusé.
+	maxSpread: number?,
 }
 
 export type Verdict = {
@@ -100,6 +104,9 @@ function HitValidator.validate(shot: Shot, context: Context): Verdict
 
 	local maxRange = Damage.maxRange(context.effectiveRange) + V.rangeTolerance
 	local verdict: Verdict = { ok = true, reason = nil, hits = {}, dropped = 0 }
+	local maxSpread = context.maxSpread
+	local minCos = if maxSpread then math.cos(math.rad(math.min(180, maxSpread + V.directionTolerance))) else nil
+	local direction = shot.direction.Unit
 
 	for _, claim in shot.hits do
 		local target = context.findTarget(claim.part)
@@ -112,6 +119,11 @@ function HitValidator.validate(shot: Shot, context: Context): Verdict
 		local distance = offset.Magnitude
 		if distance > maxRange then
 			return reject("impact hors de portée")
+		end
+		-- Dans l'axe du tir : un client modifié ne peut pas toucher une cible hors
+		-- de son viseur (derrière lui, sur le côté).
+		if minCos and distance > V.directionMinDistance and (offset / distance):Dot(direction) < minCos then
+			return reject("impact hors de l'axe du tir")
 		end
 		local partRadius = claim.part.Size.Magnitude / 2
 		if (claim.position - claim.part.Position).Magnitude > partRadius + V.maxHitPositionError then

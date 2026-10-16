@@ -110,18 +110,6 @@ function Fighter.simpleInventory(cells: { [string]: number }): FighterInventory
 	return inventory :: FighterInventory
 end
 
--- Compte les cellules d'un sac (liste d'objets) par type.
-function Fighter.cellsFromBag(bag: { ItemInstance }): { [string]: number }
-	local cells = {}
-	for _, item in bag do
-		local info = ItemCatalog.get(item.itemId)
-		if info and info.category == "cell" then
-			cells[item.itemId] = (cells[item.itemId] or 0) + (item.stack or 0)
-		end
-	end
-	return cells
-end
-
 export type Equipment = {
 	ranged: ItemInstance?,
 	melee: ItemInstance?,

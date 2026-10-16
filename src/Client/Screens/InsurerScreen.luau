@@ -11,7 +11,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
-local ItemRules = require(Shared.Items.ItemRules)
 local Pricing = require(Shared.Economy.Pricing)
 local Types = require(Shared.Types)
 
@@ -38,14 +37,15 @@ function InsurerScreen.create(parent: Instance, t: Translate): Screen
 	local function render(view: Types.ProfileView)
 		panel.title.Text = t("station.insurer")
 		Panel.clear(content)
-		local score = ItemRules.equipmentScore(view.loadout, view.bag)
-		local header = Panel.label(t("insurer.score", { score = score }), 18, Theme.text)
+		-- Base du prix : ce qui serait rendu (équipement à état), pas tout le SE.
+		local score = Pricing.insuredValue(view.loadout, view.bag)
+		local header = Panel.label(t("insurer.value", { value = score }), 18, Theme.text)
 		header.LayoutOrder = 1
 		header.Parent = content
 		local note = Panel.label(t("insurer.note"), 14, Theme.textDim)
 		note.LayoutOrder = 2
 		note.Parent = content
-		-- Équipement sans valeur (kit de base) : le prix plancher s'applique, on le dit.
+		-- Rien d'assurable (kit de base, consommables) : aucune formule n'est proposée.
 		if score <= 0 then
 			local free = Panel.label(t("insurer.noValue"), 14, Theme.orange)
 			free.LayoutOrder = 3
@@ -101,9 +101,13 @@ function InsurerScreen.create(parent: Instance, t: Translate): Screen
 					Text = effect,
 				}),
 			})
+			local nothing = score <= 0
 			local button = Panel.button(
-				if selected then "✔ " .. t("insurer.selected") else t("insurer.choose", { credits = price }),
-				if selected then Theme.green else Theme.cyan,
+				if selected
+					then "✔ " .. t("insurer.selected")
+					elseif nothing then t("insurer.nothing")
+					else t("insurer.choose", { credits = price }),
+				if selected then Theme.green elseif nothing then Theme.textDim else Theme.cyan,
 				220
 			)
 			button.AnchorPoint = Vector2.new(1, 0.5)

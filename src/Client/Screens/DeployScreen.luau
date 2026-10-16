@@ -20,7 +20,6 @@ local SocialService = game:GetService("SocialService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
-local ItemRules = require(Shared.Items.ItemRules)
 local Matchmaking = require(Shared.Match.Matchmaking)
 local Pricing = require(Shared.Economy.Pricing)
 local Types = require(Shared.Types)
@@ -440,8 +439,10 @@ function DeployScreen.create(parent: Instance, t: Translate, hooks: Hooks?): Scr
 			if view.tempItem then
 				table.insert(bag, view.tempItem)
 			end
-			local cost = Pricing.insuranceCost(tier, ItemRules.equipmentScore(view.loadout, bag)) or 0
-			insuranceText = t("deploy.insurance", { tier = t("insurer.tier." .. tier), credits = cost })
+			local cost = Pricing.insuranceCost(tier, Pricing.insuredValue(view.loadout, bag)) or 0
+			insuranceText = if cost > 0
+				then t("deploy.insurance", { tier = t("insurer.tier." .. tier), credits = cost })
+				else t("deploy.insuranceNothing")
 		else
 			insuranceText = t("deploy.noInsurance")
 		end
