@@ -95,4 +95,18 @@ return function(T, H)
 			end
 		)
 	end)
+
+	describe("Cartes de partie (Zone.onMatchMap)", function()
+		local roblox = require("@lune/roblox")
+		local Vector3 = roblox.Vector3
+
+		it("carte de partie, mais ni le Terminus ni l'Arène FFA", function()
+			local origin = Config.Maps.origin
+			expect(Zone.onMatchMap(origin)).toBe(true)
+			expect(Zone.onMatchMap(origin + Vector3.new(Config.Maps.size / 2 - 1, 80, 0))).toBe(true)
+			expect(Zone.onMatchMap(Vector3.new(0, 4, 400))).toBe(false) -- Terminus
+			expect(Zone.onMatchMap(Vector3.new(0, 3, 0))).toBe(false) -- Arène FFA
+			expect(Zone.onMatchMap(origin + Vector3.new(Config.Maps.size, 0, 0))).toBe(false)
+		end)
+	end)
 end

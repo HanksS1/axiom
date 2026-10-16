@@ -21,6 +21,8 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local MatchLifecycle = require(Shared.Match.MatchLifecycle)
+local Zone = require(Shared.Match.Zone)
 local Config = require(Shared.Config)
 local InventoryLogic = require(Shared.Items.InventoryLogic)
 local Leveling = require(Shared.Progression.Leveling)
@@ -84,6 +86,8 @@ MatchService.Ended = Signal.new() :: Signal.Signal<>
 MatchService.ScoreRecorded = Signal.new() :: Signal.Signal<Player, string, number>
 
 local running = false
+-- Une partie locale à la fois, et aucune pendant le retour des joueurs (Shared/Match/MatchLifecycle).
+local lifecycle = MatchLifecycle.new()
 local matchId = ""
 local modeId = "easy"
 local format: "solo" | "duo" = "solo"
@@ -117,6 +121,17 @@ end
 
 function MatchService.isRunning(): boolean
 	return running
+end
+
+-- Le serveur ne peut pas lancer de partie : une partie tourne, ou ses joueurs sont
+-- en train d'être ramenés au Terminus.
+function MatchService.isBusy(): boolean
+	return not MatchLifecycle.canStart(lifecycle)
+end
+
+-- Attente (secondes) avant qu'une partie locale puisse démarrer, ou nil si le serveur est libre.
+function MatchService.waitEstimate(): number?
+	return MatchLifecycle.waitEstimate(lifecycle, now(), Config.Match.returnDelay)
 end
 
 function MatchService.participant(player: Player): Participant?
@@ -242,6 +257,24 @@ local function applyOutcome(
 		xp = profile.xp,
 		xpToNext = Leveling.xpToNext(profile.level),
 	}
+end
+
+-- Ramène un joueur au Terminus : statut « hors partie » (le bilan et l'écran de tri
+-- se ferment), puis réapparition au Terminus, ou téléportation (serveur de partie).
+local function returnPlayer(player: Player)
+	player:SetAttribute("TeamId", nil)
+	if player.Parent ~= Players then
+		return -- parti pendant le délai de retour : rien à ramener
+	end
+	ServerNet.fire("MatchStatus", player, "none")
+	local handler = returnHandler
+	if handler then
+		task.spawn(handler, player)
+	else
+		task.spawn(function()
+			player:LoadCharacter()
+		end)
+	end
 end
 
 local function checkEnd()
@@ -455,7 +488,8 @@ end
 	en Studio, depuis le panneau DEV dans l'arène).
 ]]
 function MatchService.begin(config: StartConfig): boolean
-	if running or Config.Modes.byId[config.modeId] == nil then
+	-- Une partie à la fois, et pas pendant le retour des joueurs de la précédente.
+	if not MatchLifecycle.canStart(lifecycle) or Config.Modes.byId[config.modeId] == nil then
 		return false
 	end
 	running = true
@@ -463,6 +497,7 @@ function MatchService.begin(config: StartConfig): boolean
 	-- qui déclencherait la Purge pendant le chargement). Il est remis à zéro au déploiement.
 	startTime = now()
 	matchId = Uid.new()
+	MatchLifecycle.start(lifecycle, matchId, startTime + Config.Match.duration)
 	modeId = config.modeId
 	format = config.format
 	alerted = false
@@ -621,6 +656,7 @@ function MatchService.begin(config: StartConfig): boolean
 	end
 
 	startTime = now()
+	lifecycle.endsAt = startTime + Config.Match.duration
 	MapRuntimeService.startMechanics(startTime)
 	-- Mercenaires IA : sur les points de départ restants.
 	local mercenaries = math.max(0, (config.mercenaries or 0) - #partners)
@@ -670,34 +706,40 @@ function MatchService.finish()
 	CharacterService.setLoadoutProvider(nil)
 	MatchService.Ended:Fire()
 
+	-- Les joueurs de CETTE partie, capturés maintenant : leur retour se fait quoi
+	-- qu'il arrive pendant le délai (le retour n'est jamais abandonné).
+	local returning: { Player } = {}
+	for player in participants do
+		table.insert(returning, player)
+	end
+	local batch = MatchLifecycle.finish(lifecycle, returning, now() + Config.Match.returnDelay)
 	task.delay(Config.Match.returnDelay, function()
-		if running then
+		if batch == nil then
 			return
 		end
-		LootService.clearAll()
-		GadgetService.reset()
-		-- Serveur qui accueille aussi le Terminus : la carte disparaît, l'arène redevient active.
-		if returnHandler == nil then
-			MapRuntimeService.unload()
-		end
-		Players.CharacterAutoLoads = true
-		for player in participants do
-			player:SetAttribute("TeamId", nil)
-			if player.Parent == Players then
-				ServerNet.fire("MatchStatus", player, "none")
-				local handler = returnHandler
-				if handler then
-					task.spawn(handler, player)
-				else
-					task.spawn(function()
-						player:LoadCharacter()
-					end)
-				end
+		local resetWorld = MatchLifecycle.complete(lifecycle, batch)
+		if resetWorld then
+			LootService.clearAll()
+			GadgetService.reset()
+			-- Serveur qui accueille aussi le Terminus : la carte disparaît, l'arène redevient active.
+			if returnHandler == nil then
+				MapRuntimeService.unload()
 			end
+			Players.CharacterAutoLoads = true
 		end
-		table.clear(participants)
-		table.clear(teams)
-		ArenaService.setSandbox(true)
+		for _, player in batch.players do
+			-- Déjà reparti dans une nouvelle partie (démarrage forcé) : elle le gère.
+			local current = participants[player]
+			if running and current ~= nil and not current.finished then
+				continue
+			end
+			returnPlayer(player)
+		end
+		if resetWorld then
+			table.clear(participants)
+			table.clear(teams)
+			ArenaService.setSandbox(true)
+		end
 	end)
 end
 
@@ -714,8 +756,53 @@ function MatchService.skip(seconds: number)
 	end
 end
 
+-- Joueur en partie (ou en attente de son retour) : il a le droit d'être sur la carte.
+local function expectedOnMap(player: Player): boolean
+	if participants[player] ~= nil then
+		return true
+	end
+	local batch = lifecycle.batch
+	return batch ~= nil and table.find(batch.players, player) ~= nil
+end
+
+--[[
+	Filet de sécurité (serveur qui accueille aussi le Terminus) : un joueur qui se
+	trouve sur une carte de partie sans y participer est ramené au Terminus. Et à
+	chaque apparition hors partie, le client reçoit « hors partie » (le bilan et
+	l'écran de tri ne dépendent pas d'un seul message qui aurait pu se perdre).
+]]
+local function strandedLoop()
+	while true do
+		task.wait(Config.Match.strandedCheckInterval)
+		if returnHandler ~= nil then
+			continue -- serveur de partie dédié : il n'y a pas de Terminus ici
+		end
+		for _, player in Players:GetPlayers() do
+			local character = player.Character
+			local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+			if root and root:IsA("BasePart") and Zone.onMatchMap(root.Position) and not expectedOnMap(player) then
+				warn(`[MatchService] {player.Name} hors partie sur une carte : retour au Terminus`)
+				returnPlayer(player)
+			end
+		end
+	end
+end
+
 function MatchService.init()
 	state.Parent = ReplicatedStorage
+	task.spawn(strandedLoop)
+	local function watchSpawns(player: Player)
+		player.CharacterAdded:Connect(function()
+			local participant = participants[player]
+			if not running or participant == nil then
+				ServerNet.fire("MatchStatus", player, "none")
+			end
+		end)
+	end
+	for _, player in Players:GetPlayers() do
+		watchSpawns(player)
+	end
+	Players.PlayerAdded:Connect(watchSpawns)
 
 	ExtractionService.TeamExtracted:Connect(function(_zoneId, _teamId, members)
 		for _, player in members do

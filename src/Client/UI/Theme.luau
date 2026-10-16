@@ -30,6 +30,8 @@ local Theme = {
 	fontText = Enum.Font.GothamMedium,
 
 	minButtonSize = 44, -- px (mobile)
+	-- Voile sous un menu ouvert (UI/ClickShield) : bloque les clics, assombrit à peine.
+	shieldTransparency = 0.7,
 }
 
 function Theme.conditionColor(condition: number?): Color3

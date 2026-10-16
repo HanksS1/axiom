@@ -27,6 +27,7 @@ local MatchRules = require(Shared.Match.MatchRules)
 local Signal = require(Shared.Util.Signal)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
+local ClickShield = require(script.Parent.Parent.UI.ClickShield)
 local Create = require(script.Parent.Parent.UI.Create)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -632,6 +633,8 @@ function MatchHUDController.start()
 		Layout = Create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }),
 		SizeLimit = Create("UISizeConstraint", { MaxSize = Vector2.new(520, 900) }),
 	})
+	-- Bilan de fin de partie : rien n'est cliquable à travers (UI/ClickShield).
+	ClickShield.attach(resultPanel)
 
 	ClientNet.on("Announce", function(key: string)
 		if type(key) == "string" then

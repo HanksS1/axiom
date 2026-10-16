@@ -94,6 +94,8 @@ local function push(entry: Entry)
 		suggestCrossplay = Matchmaking.suggestCrossplay(ticket.group, waited, entry.forced),
 		maps = ticket.maps,
 		mapCounts = entry.mapCounts,
+		-- Une seule partie locale à la fois : le joueur sait qu'il attend son tour.
+		serverBusy = if isLocal() then MatchService.waitEstimate() else nil,
 	}
 	for _, member in entry.members do
 		sendState(member, state)
@@ -289,7 +291,7 @@ local function startLocal(composition: Matchmaking.Composition)
 	if #players == 0 then
 		return
 	end
-	MatchService.begin({
+	local started = MatchService.begin({
 		modeId = first.modeId,
 		format = first.format,
 		players = players,
@@ -298,6 +300,12 @@ local function startLocal(composition: Matchmaking.Composition)
 		-- Studio : une carte imposée par le panneau DEV passe avant la sélection.
 		mapId = if RunService:IsStudio() and MapRuntimeService.devChoice ~= "random" then nil else composition.mapId,
 	})
+	-- Refus (partie lancée entre-temps depuis le panneau DEV…) : jamais une sortie de file muette.
+	if not started then
+		for _, player in players do
+			ServerNet.notify(player, "queue.failed")
+		end
+	end
 end
 
 -- Tirage au sort parmi des cartes à égalité.
@@ -387,7 +395,9 @@ local function matchmakerLoop()
 						entry.mapCounts = counts
 					end
 				end
-				if not MatchService.isRunning() then
+				-- Une partie tourne, ou ses joueurs sont ramenés au Terminus : on attend
+				-- (le bandeau de file l'indique, avec l'attente estimée).
+				if not MatchService.isBusy() then
 					local composition = Matchmaking.compose(tickets, {
 						now = os.time(),
 						matchSize = MM.matchSize,

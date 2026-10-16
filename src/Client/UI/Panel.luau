@@ -11,6 +11,7 @@
 local GuiService = game:GetService("GuiService")
 local TweenService = game:GetService("TweenService")
 
+local ClickShield = require(script.Parent.ClickShield)
 local Create = require(script.Parent.Create)
 local PanelState = require(script.Parent.PanelState)
 local Flicker = require(script.Parent.Flicker)
@@ -173,6 +174,8 @@ function Panel.create(name: string, parent: Instance, accent: Color3?): Panel
 
 	decorate(frame)
 	Flicker.attach(title)
+	-- Menu ouvert : rien n'est cliquable à travers (UI/ClickShield).
+	ClickShield.attach(frame)
 
 	local panel = {} :: any
 	panel.name = name

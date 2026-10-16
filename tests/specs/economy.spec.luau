@@ -320,4 +320,126 @@ return function(T, H)
 			end
 		end)
 	end)
+
+	describe("Sections du Marchand (MerchantSort)", function()
+		local MerchantSort = H.require("ReplicatedStorage/Shared/Economy/MerchantSort")
+		local ItemCatalog = H.require("ReplicatedStorage/Shared/Items/ItemCatalog")
+		local Localization = H.require("ReplicatedStorage/Shared/Localization")
+		local Config = H.require("ReplicatedStorage/Shared/Config")
+
+		local function allIds()
+			local ids = {}
+			for id in ItemCatalog.all() do
+				table.insert(ids, id)
+			end
+			return ids
+		end
+
+		it("ordre des sections et place de chaque catégorie", function()
+			local expected = {
+				ranged = "weapons",
+				melee = "weapons",
+				gadget = "gadgets",
+				helmet = "protection",
+				vest = "protection",
+				backpack = "backpacks",
+				consumable = "consumables",
+				cell = "ammo",
+			}
+			for category, section in expected do
+				expect((MerchantSort.sectionOf(category))).toBe(section)
+			end
+			local seen, order = {}, {}
+			for _, group in MerchantSort.groupIds(allIds()) do
+				if not seen[group.section] then
+					seen[group.section] = true
+					table.insert(order, group.section)
+				end
+			end
+			local wanted = { "weapons", "gadgets", "protection", "backpacks", "consumables", "ammo" }
+			local filtered = {}
+			for _, key in order do
+				if table.find(wanted, key) then
+					table.insert(filtered, key)
+				end
+			end
+			expect(table.concat(filtered, ",")).toBe(table.concat(wanted, ","))
+		end)
+
+		it("armes : à distance puis mêlée, dans l'ordre de progression (valeur croissante)", function()
+			local groups = MerchantSort.groupIds(allIds())
+			expect(groups[1].category).toBe("ranged")
+			expect(groups[2].category).toBe("melee")
+			for _, group in { groups[1], groups[2] } do
+				for index = 2, #group.entries do
+					local before = ItemCatalog.get(group.entries[index - 1]).baseValue
+					local after = ItemCatalog.get(group.entries[index]).baseValue
+					expect(before <= after).toBe(true)
+				end
+			end
+			expect(groups[1].entries[1]).toBe("scrap_laser_pistol") -- l'arme du kit de départ
+		end)
+
+		it("chaque objet du catalogue est rangé une fois ; un objet inconnu part en dernier (« Autres »)", function()
+			local ids = allIds()
+			table.insert(ids, "plasma_banana")
+			local count, unknownSection, otherLast = 0, nil, true
+			local groups = MerchantSort.groupIds(ids)
+			for index, group in groups do
+				for _, id in group.entries do
+					count += 1
+					if id == "plasma_banana" then
+						unknownSection = group.section
+					end
+				end
+				-- « Autres » (catégories sans section, Module de calibration compris) : en dernier.
+				if group.section == MerchantSort.OTHER and index < #groups then
+					otherLast = otherLast and groups[index + 1].section == MerchantSort.OTHER
+				end
+			end
+			expect(count).toBe(#ids)
+			expect(unknownSection).toBe(MerchantSort.OTHER)
+			expect(otherLast).toBe(true)
+			-- Ajouter un objet ne change pas l'ordre des sections connues.
+			local before = MerchantSort.groupIds(allIds())
+			local after = MerchantSort.groupIds(ids)
+			for index, group in before do
+				if group.section == MerchantSort.OTHER then
+					break
+				end
+				expect(after[index].category).toBe(group.category)
+				expect(table.concat(after[index].entries, ",")).toBe(table.concat(group.entries, ","))
+			end
+		end)
+
+		it("revente : même découpage, à objet égal le meilleur état d'abord", function()
+			local items = {
+				{ uid = "a", itemId = "helmet", condition = 2 },
+				{ uid = "b", itemId = "sentinel_rifle", condition = 3 },
+				{ uid = "c", itemId = "helmet", condition = 5 },
+				{ uid = "d", itemId = "cell_light", stack = 30 },
+			}
+			local groups = MerchantSort.groupItems(items)
+			expect(groups[1].section).toBe("weapons")
+			expect(groups[2].section).toBe("protection")
+			expect(groups[2].entries[1].uid).toBe("c")
+			expect(groups[2].entries[2].uid).toBe("a")
+			expect(groups[#groups].section).toBe("ammo")
+		end)
+
+		it("chaque en-tête a son texte (FR et EN), sous-groupes compris", function()
+			for _, section in MerchantSort.SECTIONS do
+				for _, lang in { "fr", "en" } do
+					expect(Localization.has(lang, "merchant.section." .. section.key)).toBe(true)
+					if MerchantSort.hasSubgroups(section.key) then
+						for _, category in section.categories do
+							expect(Localization.has(lang, "merchant.category." .. category)).toBe(true)
+						end
+					end
+				end
+			end
+			expect(Localization.has("fr", "merchant.section." .. MerchantSort.OTHER)).toBe(true)
+			expect(Config.Economy.merchant.survivalItems ~= nil).toBe(true)
+		end)
+	end)
 end

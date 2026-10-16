@@ -188,4 +188,53 @@ return function(T, H)
 			expect(ReviveRules.inReach(reach + 10)).toBe(false)
 		end)
 	end)
+
+	describe("Une partie locale à la fois (MatchLifecycle)", function()
+		local MatchLifecycle = H.require("ReplicatedStorage/Shared/Match/MatchLifecycle")
+
+		it("refuse de démarrer pendant une partie ET pendant le retour de ses joueurs", function()
+			local lc = MatchLifecycle.new()
+			expect((MatchLifecycle.canStart(lc))).toBe(true)
+			expect(MatchLifecycle.start(lc, "A", 900)).toBe(true)
+			local ok, reason = MatchLifecycle.canStart(lc)
+			expect(ok).toBe(false)
+			expect(reason).toBe("running")
+			expect(MatchLifecycle.start(lc, "B", 900)).toBe(false)
+			local batch = MatchLifecycle.finish(lc, { "ada", "bo" }, 1020)
+			ok, reason = MatchLifecycle.canStart(lc)
+			expect(ok).toBe(false)
+			expect(reason).toBe("returning") -- la carte de B se chargerait sous les pieds de A
+			expect(MatchLifecycle.complete(lc, batch)).toBe(true)
+			expect((MatchLifecycle.canStart(lc))).toBe(true)
+		end)
+
+		it("le retour des joueurs survit à ce qui arrive pendant le délai (partie suivante comprise)", function()
+			local lc = MatchLifecycle.new()
+			MatchLifecycle.start(lc, "A", 900)
+			local players = { "ada", "bo" }
+			local batch = MatchLifecycle.finish(lc, players, 1020)
+			-- La table des participants est vidée et remplie par une autre partie…
+			table.clear(players)
+			table.insert(players, "cyd")
+			lc.phase, lc.matchId = "running", "B" -- démarrage forcé (outil de test)
+			-- …le retour concerne toujours les joueurs de A, sans toucher au monde de B.
+			expect(batch.players[1]).toBe("ada")
+			expect(batch.players[2]).toBe("bo")
+			expect(#batch.players).toBe(2)
+			expect(MatchLifecycle.complete(lc, batch)).toBe(false) -- carte et butin de B intacts
+			expect(lc.phase).toBe("running")
+			expect(lc.matchId).toBe("B")
+		end)
+
+		it("fin sans partie en cours : rien à ramener ; attente estimée pour la file", function()
+			local lc = MatchLifecycle.new()
+			expect(MatchLifecycle.finish(lc, { "ada" }, 10)).toBeNil()
+			expect(MatchLifecycle.waitEstimate(lc, 0, 20)).toBeNil()
+			MatchLifecycle.start(lc, "A", 900)
+			expect(MatchLifecycle.waitEstimate(lc, 300, 20)).toBe(620) -- reste de la partie + retour
+			MatchLifecycle.finish(lc, { "ada" }, 920)
+			expect(MatchLifecycle.waitEstimate(lc, 910, 20)).toBe(10)
+			expect(MatchLifecycle.waitEstimate(lc, 999, 20)).toBe(0)
+		end)
+	end)
 end

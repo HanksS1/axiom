@@ -266,6 +266,38 @@ aucune différence ; `rojo build` → OK.
   InventoryLogic sur 1 500 situations ; mutations attrapées), `combat.spec` (effet de
   l'état), `localization.spec` (toute clé `t("…")` du client existe) ; rendu : M-22 à M-24.
 
+### [BUG-11] Partie suivante lancée pendant le retour : joueurs bloqués sur la carte (retours de test)
+- **Gravité** : élevée (bloquant à deux joueurs, hub et partie sur le même serveur)
+- **Statut** : ✅ corrigé (branche `menus-bloquants`)
+- **Domaine** : Boucle de partie & extraction, Matchmaking
+- **Constat** : `MatchService.finish` remettait `running = false` puis différait de
+  `returnDelay` (20 s) le retour des joueurs. La file lançait la partie suivante pendant
+  ce délai ; le retour différé sortait alors sur `if running then return`, et de toute
+  façon `begin` avait vidé `participants` et chargé la nouvelle carte au même endroit.
+  Les joueurs de la première partie restaient sur la carte de la seconde, sans
+  `MatchStatus "none"` ni réapparition. La file attendait sans rien dire.
+- **Correction** : `Shared/Match/MatchLifecycle` (idle → running → returning) : aucune
+  partie ne démarre pendant le retour ; les joueurs de la partie finie sont capturés et
+  ramenés quoi qu'il arrive ; le monde (carte, butin, gadgets) n'est remis à zéro que si
+  aucune partie n'a démarré depuis. Filet de sécurité : un joueur hors partie trouvé sur
+  une carte de partie est ramené au Terminus (`Config.Match.strandedCheckInterval`) ; à
+  chaque apparition hors partie, le client reçoit « hors partie ». La file affiche
+  l'attente estimée quand le serveur est occupé (`QueueView.serverBusy`) ; un démarrage
+  refusé prévient les joueurs au lieu de les sortir de la file en silence.
+- **Vérification** : `match.spec` « Une partie locale à la fois » (3 tests ; 3 mutations
+  attrapées), `zones.spec` (bornes des cartes) ; scénario à deux joueurs : M-25.
+- **Arbitrage** : option A (une partie locale à la fois) retenue d'après le cahier des
+  charges (§ 16.1 : une partie par serveur réservé) ; plusieurs parties simultanées sur un
+  même serveur (option B) non entreprises.
+
+### [UX-02] Menus cliquables à travers (retours de test)
+- **Statut** : ✅ corrigé (branche `menus-bloquants`)
+- **Constat** : un menu ouvert (cadre) laissait passer les clics vers ce qui était dessous
+  (HUD, autre écran) ; seul l'écran d'ouverture des caisses du Holo-Bazar les arrêtait.
+- **Correction** : `UI/ClickShield` (bouton plein écran sous le menu), posé par
+  `Panel.create` (13 écrans) et sur le sac, le conteneur, la confirmation, la carte, le
+  bilan de fin de partie et la caisse gratuite.
+
 ### [BUG-04] Trois définitions différentes de « en partie » côté client
 - **Gravité** : faible
 - **Statut (phase 2)** : ✅ corrigé — le comportement était correct ; les trois définitions sont remplacées par `MatchHUDController.isPlaying()` (sur le terrain) et `inMatchSession()` (partie en cours), documentées.

@@ -24,6 +24,7 @@ local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
+local ClickShield = require(script.Parent.Parent.UI.ClickShield)
 local Create = require(script.Parent.Parent.UI.Create)
 local ItemIcon = require(script.Parent.Parent.UI.ItemIcon)
 local Panel = require(script.Parent.Parent.UI.Panel)
@@ -241,6 +242,8 @@ local function buildCrateOverlay(root: Instance)
 		Result = crateText,
 		Close = crateClose,
 	})
+	-- Caisse gratuite : rien n'est cliquable à travers (UI/ClickShield).
+	ClickShield.attach(crateOverlay)
 	crateClose.Activated:Connect(closeCrate)
 end
 

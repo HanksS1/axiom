@@ -41,6 +41,7 @@ local queueFrame: Frame
 local queueTitle: TextLabel
 local queueCount: TextLabel
 local queueWait: TextLabel
+local queueBusy: TextLabel
 local crossplayButton: TextButton
 local cancelButton: TextButton
 local inviteFrame: Frame
@@ -65,6 +66,12 @@ local function buildQueueBanner(root: Instance)
 	queueWait = Panel.label("", 14, Theme.textDim)
 	queueWait.Size = UDim2.new(1, 0, 0, 20)
 	queueWait.TextXAlignment = Enum.TextXAlignment.Center
+	-- Serveur occupé par une autre partie : pourquoi on attend, et combien de temps.
+	queueBusy = Panel.label("", 14, Theme.orange)
+	queueBusy.Size = UDim2.new(1, 0, 0, 0)
+	queueBusy.AutomaticSize = Enum.AutomaticSize.Y
+	queueBusy.TextXAlignment = Enum.TextXAlignment.Center
+	queueBusy.Visible = false
 	crossplayButton = Panel.button("", Theme.cyan, 220)
 	cancelButton = Panel.button("", Theme.textDim, 140)
 	queueFrame = Create("Frame", {
@@ -94,14 +101,16 @@ local function buildQueueBanner(root: Instance)
 		Title = queueTitle,
 		Count = queueCount,
 		Wait = queueWait,
+		Busy = queueBusy,
 		Crossplay = crossplayButton,
 		Cancel = cancelButton,
 	})
 	queueTitle.LayoutOrder = 1
 	queueCount.LayoutOrder = 2
 	queueWait.LayoutOrder = 3
-	crossplayButton.LayoutOrder = 4
-	cancelButton.LayoutOrder = 5
+	queueBusy.LayoutOrder = 4
+	crossplayButton.LayoutOrder = 5
+	cancelButton.LayoutOrder = 6
 
 	cancelButton.Activated:Connect(function()
 		ClientNet.fire("QueueLeave")
@@ -129,6 +138,13 @@ local function renderQueue()
 	local waited = math.max(0, os.time() - (queue.since or os.time()))
 	queueWait.Text = t("queue.wait", { time = string.format("%d:%02d", math.floor(waited / 60), waited % 60) })
 		.. if queue.group == "crossplay" then "  ·  " .. t("deploy.crossplay") else ""
+	local busy = queue.serverBusy
+	queueBusy.Visible = status == "queued" and busy ~= nil
+	if busy then
+		local seconds = math.ceil(busy)
+		queueBusy.Text =
+			t("queue.serverBusy", { time = string.format("%d:%02d", math.floor(seconds / 60), seconds % 60) })
+	end
 	crossplayButton.Visible = status == "queued" and queue.suggestCrossplay == true
 	crossplayButton.Text = t("queue.switchCrossplay")
 	cancelButton.Visible = status == "queued"

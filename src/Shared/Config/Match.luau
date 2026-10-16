@@ -40,6 +40,10 @@ return Freeze.deep({
 	deathScreenDelay = 1.5,
 	-- Fin de partie : délai avant le retour (Terminus ; arène de test en Studio).
 	returnDelay = 20,
+	-- Filet de sécurité : un joueur hors partie trouvé sur une carte de partie est
+	-- ramené au Terminus (vérification toutes les n secondes ; marge autour de la carte).
+	strandedCheckInterval = 3,
+	strandedMargin = 60,
 
 	-- Orbe et Accélérateur (duo, section 6.10).
 	revive = {

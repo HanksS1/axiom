@@ -23,6 +23,7 @@ local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local CapacityGauge = require(script.Parent.Parent.UI.CapacityGauge)
+local ClickShield = require(script.Parent.Parent.UI.ClickShield)
 local Create = require(script.Parent.Parent.UI.Create)
 local ItemCard = require(script.Parent.Parent.UI.ItemCard)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
@@ -357,6 +358,8 @@ function ContainerController.start()
 		TakeAll = takeAllButton,
 		Close = close,
 	})
+	-- Conteneur ouvert : rien n'est cliquable à travers (le sac, au même niveau, reste utilisable).
+	ClickShield.attach(panel, 1)
 	close.Activated:Connect(function()
 		ContainerController.close(true)
 	end)
