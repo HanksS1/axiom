@@ -247,6 +247,25 @@ aucune différence ; `rojo build` → OK.
   d'écriture `seq` gardé dans l'enregistrement) ; les événements rares sont aussi conservés
   dans le journal des transactions (DataStore) pour une enquête après coup.
 
+### [UX-01] Fiche d'arme introuvable, refus découverts trop tard (retours de test)
+- **Gravité** : moyenne (ergonomie)
+- **Statut** : ✅ corrigé (branche `fiches-inventaire`)
+- **Domaine** : Interface & HUD, Butin & inventaire
+- **Constat** : la fiche d'arme (complète) ne s'ouvrait que par un bouton « i » de 22 px
+  dans le coin de la vignette, qui chevauchait le nom en mode étroit. Les largeurs du texte
+  des cartes supposaient deux boutons d'action (`-(x + 188)` en dur) : un troisième
+  recouvrait le nom. L'inventaire était deux listes verticales reconstruites entières
+  (vignettes 3D comprises) à chaque synchronisation, sans case pour un emplacement vide.
+  L'encombrement était noyé dans une ligne de détails et « Sac plein » n'apparaissait
+  qu'après la tentative.
+- **Correction** : action « Détails » et vignette cliquable (`ItemCard`) ; largeurs
+  mesurées, actions sur une seconde ligne en mode étroit ; badge UP aligné ; inventaire en
+  zones et grille (`LoadoutView`, mises à jour ciblées par uid) ; `SpaceCheck` signale
+  avant toute tentative ce qui ne rentre pas et de combien (serveur inchangé).
+- **Vérification** : `items.spec` « SpaceCheck » (verdicts identiques à EconomyRules /
+  InventoryLogic sur 1 500 situations ; mutations attrapées), `combat.spec` (effet de
+  l'état), `localization.spec` (toute clé `t("…")` du client existe) ; rendu : M-22 à M-24.
+
 ### [BUG-04] Trois définitions différentes de « en partie » côté client
 - **Gravité** : faible
 - **Statut (phase 2)** : ✅ corrigé — le comportement était correct ; les trois définitions sont remplacées par `MatchHUDController.isPlaying()` (sur le terrain) et `inMatchSession()` (partie en cours), documentées.

@@ -341,4 +341,144 @@ return function(T, H)
 			end
 		end)
 	end)
+
+	describe("SpaceCheck : ça rentre ? (mêmes règles que le serveur)", function()
+		local SpaceCheck = H.require("ReplicatedStorage/Shared/Items/SpaceCheck")
+		local InventoryLogic = H.require("ReplicatedStorage/Shared/Items/InventoryLogic")
+		local ItemCatalog = H.require("ReplicatedStorage/Shared/Items/ItemCatalog")
+		local EconomyRules = H.require("ServerScriptService/Server/Economy/EconomyRules")
+		local ProfileTemplate = H.require("ServerScriptService/Server/Data/ProfileTemplate")
+		local Freeze = H.require("ReplicatedStorage/Shared/Util/Freeze")
+		local random = H.FakeRandom.new(42)
+
+		local counter = 0
+		local function create(itemId, options)
+			counter += 1
+			options = options or {}
+			local info = ItemCatalog.get(itemId)
+			return {
+				uid = "s" .. counter,
+				itemId = itemId,
+				condition = if info.hasCondition then (options.condition or 3) else nil,
+				stack = if info.stackSize then (options.stack or info.stackSize) else nil,
+			}
+		end
+		local ids = {}
+		for id, info in ItemCatalog.all() do
+			if info.up > 0 then
+				table.insert(ids, id)
+			end
+		end
+		table.sort(ids)
+		local function anyItem()
+			local id = ids[random:NextInteger(1, #ids)]
+			local info = ItemCatalog.get(id)
+			local stack = if info.stackSize then random:NextInteger(1, info.stackSize) else nil
+			return create(id, { stack = stack })
+		end
+		-- Profil au coffre rempli au hasard (jusqu'à dépasser parfois la capacité).
+		local function randomProfile()
+			local profile = ProfileTemplate.new(0)
+			profile.credits = 10 ^ 9
+			for _ = 1, random:NextInteger(0, 14) do
+				table.insert(profile.vault, anyItem())
+			end
+			for _ = 1, random:NextInteger(0, 6) do
+				table.insert(profile.bag, anyItem())
+			end
+			if random:NextNumber() < 0.6 then
+				profile.loadout.backpack = create("backpack_small", { condition = random:NextInteger(1, 5) })
+			end
+			return profile
+		end
+
+		it("vide : tout rentre, rien ne manque", function()
+			local fit = SpaceCheck.intoBag(InventoryLogic.new({}, {}), create("cell_light", { stack = 1 }))
+			expect(fit.fits).toBe(true)
+			expect(fit.missing).toBe(0)
+		end)
+
+		it("achat chez le Marchand : verdict identique à EconomyRules.buy (400 situations)", function()
+			for _ = 1, 400 do
+				local profile = randomProfile()
+				local id = ids[random:NextInteger(1, #ids)]
+				local info = ItemCatalog.get(id)
+				local amount = if info.stackSize and random:NextNumber() < 0.5 then 1 else nil
+				local condition = if info.hasCondition then 3 else nil
+				local capacity = ItemRules.vaultCapacity(profile.hasVaultExtension)
+				local fit = SpaceCheck.intoVault(profile.vault, capacity, id, amount)
+				local ok, reason = EconomyRules.buy(Freeze.copy(profile), id, condition, amount, create)
+				if reason ~= "not_for_sale" then
+					expect(ok).toBe(fit.fits)
+					if not ok then
+						expect(reason).toBe("vault_full")
+					end
+				end
+			end
+		end)
+
+		it(
+			"coffre → sac : verdict identique à EconomyRules.vaultToBag ; garder un objet trié : à keepPending",
+			function()
+				for _ = 1, 300 do
+					local profile = randomProfile()
+					local item = anyItem()
+					table.insert(profile.vault, item)
+					local fit = SpaceCheck.vaultToBag(profile.bag, profile.loadout.backpack, item)
+					expect((EconomyRules.vaultToBag(Freeze.copy(profile), item.uid))).toBe(fit.fits)
+
+					local loot = anyItem()
+					local sorting = randomProfile()
+					table.insert(sorting.pendingLoot, loot)
+					local capacity = ItemRules.vaultCapacity(sorting.hasVaultExtension)
+					-- Garder : l'objet entier rejoint le coffre (pas de fusion de piles).
+					local keep = SpaceCheck.keepInVault(sorting.vault, capacity, loot)
+					expect((EconomyRules.keepPending(Freeze.copy(sorting), loot.uid))).toBe(keep.fits)
+					local back =
+						SpaceCheck.keepInVault(profile.vault, ItemRules.vaultCapacity(false), profile.bag[1] or loot)
+					if profile.bag[1] then
+						expect((EconomyRules.bagToVault(Freeze.copy(profile), profile.bag[1].uid))).toBe(back.fits)
+					end
+				end
+			end
+		)
+
+		it("ramassage : verdict identique au rangement complet (InventoryLogic.store)", function()
+			for _ = 1, 400 do
+				local profile = randomProfile()
+				local inventory = InventoryLogic.new(Freeze.copy(profile.loadout), Freeze.copy(profile.bag))
+				local item = anyItem()
+				local fit = SpaceCheck.intoBag(inventory, item)
+				local stored, leftover = InventoryLogic.store(inventory, Freeze.copy(item))
+				expect(stored and leftover == nil).toBe(fit.fits)
+			end
+		end)
+
+		it("espace manquant exact : libérer ce qui manque suffit, une UP de moins ne suffit pas", function()
+			local checked = 0
+			for _ = 1, 400 do
+				local profile = randomProfile()
+				local item = anyItem()
+				local fit = SpaceCheck.vaultToBag(profile.bag, profile.loadout.backpack, item)
+				if not fit.fits then
+					checked += 1
+					local capacity = ItemRules.bagCapacity(profile.loadout.backpack)
+					local free = capacity - ItemRules.totalUp(profile.bag)
+					expect(free + fit.missing).toBe(ItemRules.up(item))
+					expect(fit.missing > 0).toBe(true)
+				end
+			end
+			expect(checked > 20).toBe(true)
+			-- Cas lisible : poches pleines à une UP près, fusil → il manque (UP du fusil − 1).
+			local inventory = InventoryLogic.new({}, {})
+			local pockets = ItemRules.bagCapacity(nil)
+			while InventoryLogic.used(inventory) < pockets - 1 do
+				table.insert(inventory.bag, create("cell_light", { stack = 1 }))
+			end
+			local rifle = create("sentinel_rifle")
+			local fit = SpaceCheck.intoBag(inventory, rifle)
+			expect(fit.fits).toBe(ItemRules.up(rifle) <= 1)
+			expect(fit.missing).toBe(math.max(0, ItemRules.up(rifle) - 1))
+		end)
+	end)
 end

@@ -13,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local ItemRules = require(Shared.Items.ItemRules)
+local SpaceCheck = require(Shared.Items.SpaceCheck)
 local Pricing = require(Shared.Economy.Pricing)
 local Types = require(Shared.Types)
 
@@ -100,7 +101,6 @@ function SortScreen.create(parent: Instance, t: Translate): Screen
 		keepAll.Visible = #view.pendingLoot > 0
 		Panel.clear(list)
 		local vaultUsed = ItemRules.totalUp(view.vault)
-		local free = view.vaultCapacity - vaultUsed
 		vaultGauge.set(vaultUsed, view.vaultCapacity)
 		-- Coffre plein : le dire en tête, avec ce qu'on peut faire.
 		local vaultFull = ItemRules.fillLevel(vaultUsed, view.vaultCapacity) == "full"
@@ -111,15 +111,16 @@ function SortScreen.create(parent: Instance, t: Translate): Screen
 		info.TextColor3 = if vaultFull and #view.pendingLoot > 0 then Theme.red else Theme.textDim
 		for index, item in view.pendingLoot do
 			local actions: { ItemCard.Action } = {}
-			if ItemRules.up(item) <= free then
-				table.insert(actions, {
-					label = t("sort.keep"),
-					color = Theme.green,
-					callback = function()
-						ClientNet.fire("VaultAction", "keep", item.uid, nil)
-					end,
-				})
-			end
+			-- Garder : toujours affiché ; grisé, avec l'espace manquant, s'il ne tient pas.
+			local fit = SpaceCheck.keepInVault(view.vault, view.vaultCapacity, item)
+			table.insert(actions, {
+				label = t("sort.keep"),
+				color = Theme.green,
+				disabled = not fit.fits,
+				callback = function()
+					ClientNet.fire("VaultAction", "keep", item.uid, nil)
+				end,
+			})
 			if ItemRules.isSellable(item) then
 				table.insert(actions, {
 					label = t("sort.sell", { credits = Pricing.sellPrice(item) }),
@@ -136,7 +137,14 @@ function SortScreen.create(parent: Instance, t: Translate): Screen
 					ClientNet.fire("VaultAction", "discard", item.uid, nil)
 				end,
 			})
-			ItemCard.create(item, t, actions, index).Parent = list
+			ItemCard.create(
+				item,
+				t,
+				actions,
+				index,
+				if fit.fits then nil else { warning = t("fit.vault", { up = fit.missing }) }
+			).Parent =
+				list
 		end
 	end
 

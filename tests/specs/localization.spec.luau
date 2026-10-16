@@ -22,6 +22,31 @@ return function(T, H)
 			end
 		end)
 
+		it('chaque clé écrite en toutes lettres dans le client (t("…")) existe', function()
+			local fs = require("@lune/fs")
+			local tables = Localization._tables()
+			local missing = {}
+			local function scan(dir)
+				for _, entry in fs.readDir(dir) do
+					local path = dir .. "/" .. entry
+					if fs.isDir(path) then
+						scan(path)
+					elseif string.sub(entry, -5) == ".luau" then
+						local source = fs.readFile(path)
+						-- t("clé") ou t("clé", …) : clé littérale complète (pas de « .. »).
+						for key in string.gmatch(source, '%f[%w_]t%("([%w%._]+)"%s*[,%)]') do
+							if tables.fr[key] == nil then
+								table.insert(missing, `{path} : {key}`)
+							end
+						end
+					end
+				end
+			end
+			scan("src/Client")
+			table.sort(missing)
+			expect(table.concat(missing, "\n")).toBe("")
+		end)
+
 		it("mêmes paramètres {x} dans les deux langues", function()
 			local tables = Localization._tables()
 			for key, fr in tables.fr do

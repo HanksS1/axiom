@@ -2,8 +2,13 @@
 --[[
 	VaultScreen : coffre et équipement (section 17.3, écran 4).
 
-	- À gauche : les 7 emplacements équipés, puis le sac préparé (UP du sac).
-	- À droite : le coffre en cartes, triables par type, état ou valeur.
+	- À gauche : ce que le joueur PORTE, en zones (UI/LoadoutView, comme le
+	  sac en partie) : armes, protections, gadgets, sac à dos et sa place,
+	  grille du sac préparé.
+	- À droite : le coffre en cartes (liste : on y choisit, trie et compare),
+	  triables par type, état ou valeur. « Au sac » est grisé, avec l'espace
+	  manquant, quand l'objet ne tient pas dans le sac préparé (Shared/Items/
+	  SpaceCheck) ; idem pour « Ranger » vers un coffre plein.
 	- En bas : jauge « Coffre : x / 30 UP » et jauge de SE avec les modes
 	  accessibles (grisés avec la raison sinon).
 ]]
@@ -16,6 +21,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
 local ItemRules = require(Shared.Items.ItemRules)
+local SpaceCheck = require(Shared.Items.SpaceCheck)
 local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
@@ -24,6 +30,7 @@ local CapacityGauge = require(script.Parent.Parent.UI.CapacityGauge)
 local Create = require(script.Parent.Parent.UI.Create)
 local DragDrop = require(script.Parent.Parent.UI.DragDrop)
 local ItemCard = require(script.Parent.Parent.UI.ItemCard)
+local LoadoutView = require(script.Parent.Parent.UI.LoadoutView)
 local Panel = require(script.Parent.Parent.UI.Panel)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -109,17 +116,46 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 		viewportCamera.CFrame = CFrame.lookAt(viewportCamera.CFrame.Position, Vector3.new(0, 0.3, 0))
 	end)
 
-	local equippedList = Panel.list("Equipped")
-	equippedList.Position = UDim2.fromScale(0, 0.3)
-	equippedList.Size = UDim2.new(1, 0, 0.32, 0)
-	equippedList.Parent = left
-	local bagTitle = Panel.label("", 14, Theme.cyan)
-	bagTitle.Position = UDim2.new(0, 0, 0.62, 4)
-	bagTitle.Parent = left
-	local bagList = Panel.list("Bag")
-	bagList.Position = UDim2.new(0, 0, 0.62, 30)
-	bagList.Size = UDim2.new(1, 0, 0.38, -30)
-	bagList.Parent = left
+	local function vaultAction(action: string, uid: string?, slot: string?)
+		ClientNet.fire("VaultAction", action, uid, slot)
+	end
+
+	-- Équipement et sac préparé, en zones (actions : vers le coffre).
+	local loadout = LoadoutView.create({
+		t = t,
+		actionsFor = function(item, where, slot)
+			local view = current
+			local fit = if view then SpaceCheck.keepInVault(view.vault, view.vaultCapacity, item) else nil
+			return {
+				{
+					label = t("inventory.action.store"),
+					disabled = fit ~= nil and not fit.fits,
+					callback = function()
+						if where == "equipped" then
+							vaultAction("unequip", nil, slot)
+						else
+							vaultAction("fromBag", item.uid)
+						end
+					end,
+				},
+			}
+		end,
+		cardOptions = function(item)
+			local view = current
+			local fit = if view then SpaceCheck.keepInVault(view.vault, view.vaultCapacity, item) else nil
+			return if fit and not fit.fits then { warning = t("fit.vault", { up = fit.missing }) } else nil
+		end,
+		drag = {
+			payload = function(item, where, slot)
+				return { from = where, uid = item.uid, slot = slot }
+			end,
+			slotTarget = "equipped",
+			bagTarget = "bag",
+		},
+	})
+	loadout.frame.Position = UDim2.fromScale(0, 0.3)
+	loadout.frame.Size = UDim2.fromScale(1, 0.7)
+	loadout.frame.Parent = left
 
 	local right = Create("Frame", {
 		Position = UDim2.new(0.42, 8, 0, 0),
@@ -170,10 +206,6 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 		Layout = Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6) }),
 	})
 
-	local function vaultAction(action: string, uid: string?, slot: string?)
-		ClientNet.fire("VaultAction", action, uid, slot)
-	end
-
 	local function sorted(items: { Types.ItemInstance }): { Types.ItemInstance }
 		local list = table.clone(items)
 		table.sort(list, function(a, b)
@@ -214,58 +246,18 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 		current = view
 		panel.title.Text = t("vault.title")
 		refreshPreview()
-		Panel.clear(equippedList)
-		Panel.clear(bagList)
 		Panel.clear(vaultList)
 		Panel.clear(sortRow)
 		Panel.clear(modesRow)
 
-		for index, slot in SLOTS do
-			local item = (view.loadout :: any)[slot] :: Types.ItemInstance?
-			if item then
-				local card = ItemCard.create(item, t, {
-					{
-						label = t("inventory.action.store"),
-						callback = function()
-							vaultAction("unequip", nil, slot)
-						end,
-					},
-				}, index)
-				card.Parent = equippedList
-				DragDrop.attach(card, { from = "equipped", uid = item.uid, slot = slot })
-			else
-				local empty = Panel.label(t("slot." .. slot) .. " — " .. t("inventory.empty"), 14, Theme.textDim)
-				empty.LayoutOrder = index
-				empty.Parent = equippedList
-			end
-		end
-
-		local bagUsed = ItemRules.totalUp(view.bag)
-		local bagCapacity = ItemRules.bagCapacity(view.loadout.backpack)
-		local bagLevel = ItemRules.fillLevel(bagUsed, bagCapacity)
-		bagTitle.Text = t("vault.bag", { used = bagUsed, capacity = bagCapacity })
-			.. (
-				if bagLevel == "full"
-					then "  ·  " .. t("capacity.full")
-					elseif bagLevel == "high" then "  ·  " .. t("capacity.high")
-					else ""
-			)
-		bagTitle.TextColor3 = if bagLevel == "full"
-			then Theme.red
-			elseif bagLevel == "high" then Theme.orange
-			else Theme.cyan
-		for index, item in view.bag do
-			local card = ItemCard.create(item, t, {
-				{
-					label = t("inventory.action.store"),
-					callback = function()
-						vaultAction("fromBag", item.uid)
-					end,
-				},
-			}, index)
-			card.Parent = bagList
-			DragDrop.attach(card, { from = "bag", uid = item.uid })
-		end
+		-- Ce qui est porté : zones (mise à jour ciblée, sans tout reconstruire).
+		loadout.refreshTexts()
+		loadout.set(
+			view.loadout :: any,
+			view.bag,
+			ItemRules.totalUp(view.bag),
+			ItemRules.bagCapacity(view.loadout.backpack)
+		)
 
 		for index, mode in { "type", "condition", "value" } do
 			local button =
@@ -291,9 +283,12 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 					end,
 				})
 			end
+			-- Au sac : grisé, avec l'espace manquant, si l'objet ne tient pas.
+			local fit = SpaceCheck.vaultToBag(view.bag, view.loadout.backpack, item)
 			table.insert(actions, {
 				label = t("vault.toBag"),
 				color = Theme.green,
+				disabled = not fit.fits,
 				callback = function()
 					vaultAction("toBag", item.uid)
 				end,
@@ -313,7 +308,13 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 					)
 				end,
 			})
-			local card = ItemCard.create(item, t, actions, index)
+			local card = ItemCard.create(
+				item,
+				t,
+				actions,
+				index,
+				if fit.fits then nil else { warning = t("fit.bag", { up = fit.missing }) }
+			)
 			card.Parent = vaultList
 			DragDrop.attach(card, { from = "vault", uid = item.uid, itemId = item.itemId })
 		end
@@ -345,12 +346,11 @@ function VaultScreen.create(parent: Instance, t: Translate): Screen
 	end
 
 	-- Glisser-déposer (PC) : coffre ↔ équipement ↔ sac préparé.
-	DragDrop.target(equippedList, "equipped")
-	DragDrop.target(bagList, "bag")
+	-- Les cases d'équipement et la grille du sac sont déclarées par LoadoutView.
 	DragDrop.target(vaultList, "vault")
 	DragDrop.Dropped:Connect(function(payload: any, target: string)
 		local view = current
-		if view == nil or not panel:isOpen() or type(payload) ~= "table" then
+		if view == nil or not panel:isOpen() or type(payload) ~= "table" or payload.uid == nil then
 			return
 		end
 		if payload.from == "vault" and target == "equipped" then

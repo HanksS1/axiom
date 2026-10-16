@@ -17,6 +17,7 @@ local Config = require(Shared.Config)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
 local ItemRules = require(Shared.Items.ItemRules)
 local Pricing = require(Shared.Economy.Pricing)
+local SpaceCheck = require(Shared.Items.SpaceCheck)
 local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
@@ -183,6 +184,15 @@ function MerchantScreen.create(parent: Instance, t: Translate): Screen
 
 	local function renderBuy(view: Types.ProfileView)
 		local order = 0
+		-- Un achat rejoint le coffre : grisé, avec l'espace manquant, s'il n'y tient
+		-- pas (le serveur refuse de toute façon). Toutes les offres impossibles :
+		-- carte estompée.
+		local function vaultFit(itemId: string, quantity: number?): SpaceCheck.Fit
+			return SpaceCheck.intoVault(view.vault, view.vaultCapacity, itemId, quantity)
+		end
+		local function blockedBy(fit: SpaceCheck.Fit): ItemCard.Options?
+			return if fit.fits then nil else { blocked = t("fit.vault", { up = fit.missing }) }
+		end
 		-- Survie (soins, batterie, Surcharge, exo-harnais) : achats de routine avant
 		-- chaque partie, à l'unité ou par pile, avec le nombre déjà possédé.
 		local survival = Config.Economy.merchant.survivalItems
@@ -206,6 +216,7 @@ function MerchantScreen.create(parent: Instance, t: Translate): Screen
 				return {
 					label = t(key, { credits = price, count = quantity }),
 					color = if view.credits >= price then Theme.green else Theme.textDim,
+					disabled = not vaultFit(itemId, quantity).fits,
 					callback = function()
 						confirmIfNeeded(price, "merchant.confirmBuy", function(confirmed)
 							ClientNet.fire("MerchantBuy", itemId, nil, quantity, confirmed)
@@ -213,10 +224,12 @@ function MerchantScreen.create(parent: Instance, t: Translate): Screen
 					end,
 				}
 			end
+			-- À l'unité, une pile entamée du coffre peut suffire : la carte n'est
+			-- estompée que si même une unité ne rentre pas.
 			local card = ItemCard.create(preview, t, {
 				buyAction(1, unitPrice, "merchant.buyOne"),
 				buyAction(stackSize, stackPrice, "merchant.buyStack"),
-			}, order)
+			}, order, blockedBy(vaultFit(itemId, 1)))
 			-- Ce que l'on possède déjà (coffre et sac préparé), en tête des détails.
 			local details = card:FindFirstChild("Details", true)
 			if details and details:IsA("TextLabel") then
@@ -240,17 +253,19 @@ function MerchantScreen.create(parent: Instance, t: Translate): Screen
 						itemId = cellId,
 						stack = info.stackSize,
 					}
+					local fit = vaultFit(cellId, nil)
 					ItemCard.create(preview, t, {
 						{
 							label = t("merchant.buy", { credits = price }),
 							color = if view.credits >= price then Theme.green else Theme.textDim,
+							disabled = not fit.fits,
 							callback = function()
 								confirmIfNeeded(price, "merchant.confirmBuy", function(confirmed)
 									ClientNet.fire("MerchantBuy", cellId, nil, nil, confirmed)
 								end)
 							end,
 						},
-					}, order).Parent =
+					}, order, blockedBy(fit)).Parent =
 						list
 				end
 			end
@@ -293,17 +308,19 @@ function MerchantScreen.create(parent: Instance, t: Translate): Screen
 					condition = condition,
 					stack = info.stackSize,
 				}
+				local fit = vaultFit(itemId, nil)
 				ItemCard.create(preview, t, {
 					{
 						label = t("merchant.buy", { credits = price }),
 						color = if view.credits >= price then Theme.green else Theme.textDim,
+						disabled = not fit.fits,
 						callback = function()
 							confirmIfNeeded(price, "merchant.confirmBuy", function(confirmed)
 								ClientNet.fire("MerchantBuy", itemId, condition, nil, confirmed)
 							end)
 						end,
 					},
-				}, order).Parent =
+				}, order, blockedBy(fit)).Parent =
 					list
 			end
 		end

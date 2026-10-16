@@ -322,3 +322,33 @@ Pour plusieurs joueurs : Test → Clients et serveurs (2 joueurs).
 2. Relancer : les crédits sont là. Sortie : `[Data] save … release=true result=ok seq=N`
    à l'arrêt, puis `[Data] load … seq=N` au chargement suivant.
 - **Attendu** : jamais de `seq` chargé inférieur au `seq` de la dernière libération.
+
+### M-22. Fiche d'arme : accès sur tous les écrans et périphériques
+1. Coffre, Marchand (achat et vente), Armurier, tri d'après-partie, butin au sol, sac en
+   partie : chaque arme a un bouton « Détails » ; un clic sur sa vignette ouvre aussi la fiche.
+2. Fenêtre étroite (Studio : émulateur téléphone) : la vignette disparaît, les actions passent
+   sous le texte, « Détails » reste là ; la fiche s'empile sur une colonne et défile.
+3. Manette : atteindre « Détails » au stick, l'ouvrir avec A ; tactile : toucher.
+4. Fiche : rappel « Barres : comparées aux autres armes… » au-dessus des barres ; « Place dans
+   le sac (moins, c'est mieux) » sans barre ; « EFFET DE L'ÉTAT » : 5 pastilles, celle de
+   l'arme en avant, phrase « … 30 % de dégâts en moins » pour une arme Très abîmée.
+
+### M-23. Inventaire en zones (sac en partie, coffre côté équipement)
+1. Ouvrir le sac (B) : zones Armes (grandes cases), Protections, Gadgets, Sac à dos avec sa
+   jauge et « Ce sac fixe la place : n UP », grille du contenu (quantités ×n, badges UP).
+2. Emplacement vide : silhouette estompée, nom et « Vide » ; le choisir affiche le rappel.
+3. Choisir une case : sa carte et ses actions en bas ; choisir de nouveau une arme : sa fiche.
+4. Souris : glisser une case du sac sur un emplacement (équipe), un emplacement sur la grille
+   (range) ; au coffre, glisser entre la liste du coffre et les zones.
+5. Manette : passer de case en case au stick, A pour choisir, descendre vers les actions ;
+   après « Équiper », la sélection revient sur la case (pas de perte du curseur).
+6. Ramasser plusieurs objets : la grille se met à jour sans clignotement des vignettes.
+
+### M-24. Refus annoncés avant la tentative
+1. Sac presque plein, conteneur ouvert : un objet trop gros est estompé, cadre rouge, « Sac :
+   il manque n UP » ; « Échanger » reste possible. Libérer n UP : il redevient normal.
+2. Coffre presque plein : au Marchand, les achats qui ne rentrent pas sont grisés avec
+   « Coffre : il manque n UP » (à l'unité, une pile entamée peut suffire).
+3. Coffre : « Au sac » grisé quand le sac préparé n'a pas la place ; tri d'après-partie :
+   « Garder » grisé avec l'espace manquant.
+4. Les rouges sont ceux de la jauge pleine ; le serveur refuse toujours si l'état a changé.

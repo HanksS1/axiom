@@ -71,6 +71,25 @@ return Freeze.deep({
 		robotColor = Color3.fromRGB(255, 40, 40),
 	},
 
+	-- Inventaire en zones (Client/UI/LoadoutView) : tailles des cases (px) et
+	-- silhouette montrée dans un emplacement vide (objet représentatif, estompé).
+	inventory = {
+		weaponTile = 112, -- armes principale et secondaire : les plus grandes
+		slotTile = 84, -- casque, gilet, gadgets, sac à dos
+		bagCell = 72, -- contenu du sac (grille)
+		gap = 6,
+		silhouetteTransparency = 0.82,
+		silhouettes = {
+			ranged = "sentinel_rifle",
+			melee = "shock_crowbar",
+			helmet = "helmet",
+			vest = "vest",
+			gadget1 = "jump_boots",
+			gadget2 = "recon_drone",
+			backpack = "backpack_small",
+		},
+	},
+
 	disintegration = {
 		voxelsPerPart = 5,
 		voxelsPerPartMobile = 2,
