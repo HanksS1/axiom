@@ -749,6 +749,23 @@ return function(T, H)
 			expect(table.find(WeaponStats.sheet("needle").traits, "scope") ~= nil).toBe(true)
 		end)
 
+		it("effet de l'état : 70 % (Très abîmé, −30 %) à 115 % (Neuf), référence = bon état", function()
+			local effects = WeaponStats.conditionEffects(1)
+			expect(#effects).toBe(Config.Conditions.MAX)
+			expect(effects[1].percent).toBe(70)
+			expect(effects[1].delta).toBe(-30)
+			expect(effects[1].current).toBe(true)
+			expect(effects[Config.Conditions.GOOD].delta).toBe(0)
+			expect(effects[Config.Conditions.PRISTINE].percent).toBe(115)
+			-- Les dégâts de la fiche suivent bien ce pourcentage.
+			local wrecked = WeaponStats.sheet("sentinel_rifle", 1).lines[1].value
+			local good = WeaponStats.sheet("sentinel_rifle", Config.Conditions.GOOD).lines[1].value
+			expect(wrecked / good).toBeNear(0.70, 0.02)
+			for _, effect in WeaponStats.conditionEffects(nil) do
+				expect(effect.current).toBe(false)
+			end
+		end)
+
 		it("place dans le sac : la valeur de l'arme, sans barre, qualifiée dans sa catégorie", function()
 			local ItemRules = H.require("ReplicatedStorage/Shared/Items/ItemRules")
 			for _, id in all do

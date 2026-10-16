@@ -1,12 +1,15 @@
 --!strict
 --[[
-	WeaponDetail : fiche de détail d'une arme (bouton « i » des cartes d'objets).
+	WeaponDetail : fiche de détail d'une arme (action « Détails » des cartes
+	d'objets, ou clic sur leur vignette ; cases de l'inventaire).
 
 	Vignette 3D qui tourne, nom, rareté, état, puis les caractéristiques avec
-	une barre comparée aux autres armes de la même catégorie (dégâts, dégâts
-	par seconde, cadence, chargeur, précision, portée, munitions), les
+	une barre comparée aux autres armes de la même catégorie (le rappel est
+	écrit EN TÊTE des barres), la place dans le sac (sans barre : moins, c'est
+	mieux), l'effet de l'état sur l'efficacité (70 % à 115 %), les
 	particularités (tête, lunette, explosion…) et une courte description.
 	Les chiffres viennent de Shared/Combat/WeaponStats (calcul pur et testé).
+	Petit écran : les deux colonnes s'empilent dans une seule liste défilante.
 ]]
 
 local Players = game:GetService("Players")
@@ -26,6 +29,12 @@ type Translate = (key: string, params: { [string]: any }?) -> string
 local WeaponDetail = {}
 
 local panel: Panel.Panel? = nil
+
+-- En deçà (px de large), la fiche passe sur une colonne.
+local NARROW = 600
+local ICON_HEIGHT = 200
+local ICON_HEIGHT_NARROW = 140
+local CHIP_HEIGHT = 40
 
 local function rarityColor(rarity: string): Color3
 	return (Config.Monetization.rarityColors :: any)[rarity] or Theme.textDim
@@ -95,6 +104,62 @@ local function statLine(parent: Instance, t: Translate, line: WeaponStats.Line, 
 	end
 end
 
+-- Effet de l'état : une pastille par état (efficacité en %), celui de l'arme en avant.
+local function conditionStrip(parent: Instance, t: Translate, condition: number?, order: number)
+	local title = Panel.label(t("weapon.conditionTitle"), 15, Theme.cyan)
+	title.LayoutOrder = order
+	title.Font = Theme.fontTitle
+	title.Parent = parent
+	local row = Create("Frame", {
+		LayoutOrder = order + 1,
+		Size = UDim2.new(1, -8, 0, CHIP_HEIGHT),
+		BackgroundTransparency = 1,
+		Parent = parent,
+	}, {
+		Layout = Create("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			Padding = UDim.new(0, 4),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
+	local effects = WeaponStats.conditionEffects(condition)
+	for _, effect in effects do
+		local def = Config.Conditions.list[effect.index]
+		Create("TextLabel", {
+			LayoutOrder = effect.index,
+			Size = UDim2.new(1 / #effects, -4, 1, 0),
+			BackgroundColor3 = if effect.current then def.color else Theme.background,
+			BackgroundTransparency = if effect.current then 0.15 else 0.3,
+			Font = Theme.fontNumbers,
+			TextSize = 13,
+			TextColor3 = if effect.current then Theme.background else def.color,
+			TextWrapped = true,
+			Text = t("weapon.conditionChip", { name = t("condition." .. effect.key), percent = effect.percent }),
+			Parent = row,
+		}, {
+			Corner = Create("UICorner", { CornerRadius = UDim.new(0, 4) }),
+			Stroke = Create("UIStroke", { Color = def.color, Transparency = if effect.current then 0 else 0.5 }),
+		})
+	end
+	-- La phrase qui dit l'effet de l'état de CETTE arme.
+	local mine = if condition then effects[condition] else nil
+	if mine then
+		local key = if mine.delta < 0
+			then "weapon.conditionWeaker"
+			elseif mine.delta > 0 then "weapon.conditionStronger"
+			else "weapon.conditionReference"
+		local sentence = Panel.label(
+			t(key, { name = t("condition." .. mine.key), percent = mine.percent, delta = math.abs(mine.delta) }),
+			13,
+			Theme.text
+		)
+		sentence.LayoutOrder = order + 2
+		sentence.AutomaticSize = Enum.AutomaticSize.Y
+		sentence.Size = UDim2.new(1, -8, 0, 0)
+		sentence.Parent = parent
+	end
+end
+
 --[[
 	Ouvre la fiche de `itemId` (une arme), dans l'état `condition` (dégâts
 	selon l'état). Sans effet pour un objet qui n'est pas une arme.
@@ -109,16 +174,34 @@ function WeaponDetail.open(t: Translate, itemId: string, condition: number?)
 	current.title.Text = t("item." .. itemId)
 	local body = current.body
 	Panel.clear(body)
+	local narrow = current.frame.AbsoluteSize.X > 0 and current.frame.AbsoluteSize.X < NARROW
 
-	-- Gauche : l'arme, sa rareté, son état et sa description.
+	-- Une colonne (petit écran) : tout dans une seule liste défilante.
+	local column: Instance? = nil
+	if narrow then
+		local scroll = Panel.list("Detail")
+		scroll.Size = UDim2.fromScale(1, 1)
+		scroll.Parent = body
+		column = scroll
+	end
+
+	-- Gauche (ou haut) : l'arme, sa rareté, son état et sa description.
 	local left = Create("Frame", {
-		Size = UDim2.new(0.42, -10, 1, 0),
+		LayoutOrder = 1,
+		Size = if narrow then UDim2.new(1, -8, 0, 0) else UDim2.new(0.42, -10, 1, 0),
+		AutomaticSize = if narrow then Enum.AutomaticSize.Y else Enum.AutomaticSize.None,
 		BackgroundTransparency = 1,
-		Parent = body,
+		Parent = column or body,
 	}, {
 		Layout = Create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
 	})
-	local icon = ItemIcon.create(itemId, UDim2.new(1, 0, 0, 200), condition, nil, true)
+	local icon = ItemIcon.create(
+		itemId,
+		UDim2.new(1, 0, 0, if narrow then ICON_HEIGHT_NARROW else ICON_HEIGHT),
+		condition,
+		nil,
+		true
+	)
 	icon.LayoutOrder = 1
 	icon.Parent = left
 	local stroke = icon:FindFirstChildOfClass("UIStroke")
@@ -143,14 +226,35 @@ function WeaponDetail.open(t: Translate, itemId: string, condition: number?)
 	description.Size = UDim2.new(1, 0, 0, 0)
 	description.Parent = left
 
-	-- Droite : caractéristiques et particularités.
-	local right = Panel.list("Stats")
-	right.Position = UDim2.new(0.42, 10, 0, 0)
-	right.Size = UDim2.new(0.58, -10, 1, 0)
-	right.Parent = body
+	-- Droite (ou bas) : caractéristiques, effet de l'état, particularités.
+	local right: GuiObject
+	if narrow then
+		right = Create("Frame", {
+			LayoutOrder = 2,
+			Size = UDim2.new(1, -8, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundTransparency = 1,
+			Parent = column,
+		}, {
+			Layout = Create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }),
+		})
+	else
+		local list = Panel.list("Stats")
+		list.Position = UDim2.new(0.42, 10, 0, 0)
+		list.Size = UDim2.new(0.58, -10, 1, 0)
+		list.Parent = body
+		right = list
+	end
+	-- À quoi se comparent les barres : dit avant les barres, pas en note de bas de page.
+	local compare = Panel.label(t("weapon.compare." .. sheet.category), 13, Theme.textDim)
+	compare.LayoutOrder = 0
+	compare.AutomaticSize = Enum.AutomaticSize.Y
+	compare.Size = UDim2.new(1, -8, 0, 0)
+	compare.Parent = right
 	for index, line in sheet.lines do
 		statLine(right, t, line, index, color)
 	end
+	conditionStrip(right, t, condition, 60)
 	if #sheet.traits > 0 then
 		local title = Panel.label(t("weapon.traits"), 15, Theme.cyan)
 		title.LayoutOrder = 100
@@ -168,7 +272,8 @@ function WeaponDetail.open(t: Translate, itemId: string, condition: number?)
 	local note = Panel.label(t("weapon.note"), 12, Theme.textDim)
 	note.LayoutOrder = 200
 	note.TextWrapped = true
-	note.Size = UDim2.new(1, -8, 0, 32)
+	note.AutomaticSize = Enum.AutomaticSize.Y
+	note.Size = UDim2.new(1, -8, 0, 0)
 	note.Parent = right
 
 	current:open()

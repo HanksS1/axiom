@@ -4,7 +4,10 @@
 
 	- Reçoit l'état du sac (InventorySync) et l'expose au HUD.
 	- Panneau du sac (B / Select manette / bouton sac mobile / clic sur la jauge du sac) :
-	  emplacements équipés et contenu, actions Équiper / Ranger / Jeter / Utiliser.
+	  zones (UI/LoadoutView) : armes, protections, gadgets, sac à dos et sa
+	  place, grille du contenu ; la case choisie montre sa carte et ses
+	  actions Équiper / Ranger / Jeter / Utiliser / Détails. Souris : glisser
+	  une case du sac sur un emplacement (équiper) ou l'inverse (ranger).
 	- Consommables rapides : 3 = soins, 4 = batterie, 5 = Surcharge
 	  (manette : croix bas pour choisir, maintenir pour utiliser).
 ]]
@@ -19,9 +22,10 @@ local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
-local CapacityGauge = require(script.Parent.Parent.UI.CapacityGauge)
 local Create = require(script.Parent.Parent.UI.Create)
+local DragDrop = require(script.Parent.Parent.UI.DragDrop)
 local ItemCard = require(script.Parent.Parent.UI.ItemCard)
+local LoadoutView = require(script.Parent.Parent.UI.LoadoutView)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local HUDController = require(script.Parent.HUDController)
@@ -46,10 +50,12 @@ InventoryController.quickItems = table.freeze({ "nanite_injector", "shield_batte
 local t = ProfileController.t
 local state: State = { equipped = {}, bag = {}, capacity = 0, used = 0, bonusUp = 0 }
 local panel: Frame
-local equippedList: ScrollingFrame
-local bagList: ScrollingFrame
-local gauge: CapacityGauge.Gauge -- place du sac
+local view: LoadoutView.View
 local selectedQuick = 1
+
+-- Glisser-déposer (souris) : noms des zones de dépôt de ce panneau.
+local DRAG_SLOT = "inventorySlot"
+local DRAG_BAG = "inventoryBag"
 
 local SLOTS = { "ranged", "melee", "gadget1", "gadget2", "helmet", "vest", "backpack" }
 
@@ -78,129 +84,68 @@ function InventoryController.useQuick(index: number)
 	end
 end
 
-local function clear(list: Instance)
-	for _, child in list:GetChildren() do
-		if child:IsA("Frame") or child:IsA("TextLabel") then
-			child:Destroy()
+-- Emplacement où équiper un objet du sac : un emplacement libre de sa catégorie, sinon le premier.
+local function slotForBagItem(item: Types.ItemInstance): string?
+	local info = ItemCatalog.get(item.itemId)
+	local slot: string? = nil
+	for _, candidate in SLOTS do
+		if info and ItemCatalog.slotCategories[candidate :: any] == info.category then
+			slot = if slot == nil or (state.equipped[candidate] == nil and state.equipped[slot] ~= nil)
+				then candidate
+				else slot
 		end
 	end
+	return slot
 end
 
-local function emptyLabel(parent: Instance)
-	Create("TextLabel", {
-		Size = UDim2.new(1, 0, 0, 30),
-		BackgroundTransparency = 1,
-		Font = Theme.fontText,
-		TextSize = 14,
-		TextColor3 = Theme.textDim,
-		Text = t("inventory.empty"),
-		Parent = parent,
-	})
+local function actionsFor(item: Types.ItemInstance, where: LoadoutView.Where, slot: string?): { ItemCard.Action }
+	local drop: ItemCard.Action = {
+		label = t("inventory.action.drop"),
+		color = Theme.red,
+		callback = function()
+			ClientNet.fire("DropItem", item.uid)
+		end,
+	}
+	if where == "equipped" then
+		return {
+			{
+				label = t("inventory.action.store"),
+				callback = function()
+					ClientNet.fire("UnequipItem", slot)
+				end,
+			},
+			drop,
+		}
+	end
+	local actions: { ItemCard.Action } = {}
+	local info = ItemCatalog.get(item.itemId)
+	if info and info.category == "consumable" then
+		table.insert(actions, {
+			label = t("inventory.action.use"),
+			color = Theme.green,
+			callback = function()
+				ClientNet.fire("UseConsumable", item.itemId)
+			end,
+		})
+	end
+	local target = slotForBagItem(item)
+	if target then
+		table.insert(actions, {
+			label = t("inventory.action.equip"),
+			callback = function()
+				ClientNet.fire("EquipItem", item.uid, target)
+			end,
+		})
+	end
+	table.insert(actions, drop)
+	return actions
 end
 
 local function render()
 	if panel == nil or not panel.Visible then
 		return
 	end
-	clear(equippedList)
-	clear(bagList)
-	-- Place du sac, bien en vue (et un message quand il est plein).
-	gauge.set(state.used, state.capacity)
-
-	for index, slot in SLOTS do
-		local item = state.equipped[slot]
-		if item then
-			local card = ItemCard.create(item, t, {
-				{
-					label = t("inventory.action.store"),
-					callback = function()
-						ClientNet.fire("UnequipItem", slot)
-					end,
-				},
-				{
-					label = t("inventory.action.drop"),
-					color = Theme.red,
-					callback = function()
-						ClientNet.fire("DropItem", item.uid)
-					end,
-				},
-			}, index)
-			card.Parent = equippedList
-		end
-	end
-	if next(state.equipped) == nil then
-		emptyLabel(equippedList)
-	end
-
-	for index, item in state.bag do
-		local actions: { ItemCard.Action } = {}
-		local info = ItemCatalog.get(item.itemId)
-		if info and info.category == "consumable" then
-			table.insert(actions, {
-				label = t("inventory.action.use"),
-				color = Theme.green,
-				callback = function()
-					ClientNet.fire("UseConsumable", item.itemId)
-				end,
-			})
-		end
-		local slot: string? = nil
-		for _, candidate in SLOTS do
-			if info and ItemCatalog.slotCategories[candidate :: any] == info.category then
-				slot = if slot == nil or (state.equipped[candidate] == nil and state.equipped[slot] ~= nil)
-					then candidate
-					else slot
-			end
-		end
-		if slot then
-			local targetSlot = slot
-			table.insert(actions, {
-				label = t("inventory.action.equip"),
-				callback = function()
-					ClientNet.fire("EquipItem", item.uid, targetSlot)
-				end,
-			})
-		end
-		table.insert(actions, {
-			label = t("inventory.action.drop"),
-			color = Theme.red,
-			callback = function()
-				ClientNet.fire("DropItem", item.uid)
-			end,
-		})
-		ItemCard.create(item, t, actions, index).Parent = bagList
-	end
-	if #state.bag == 0 then
-		emptyLabel(bagList)
-	end
-end
-
-local function list(name: string, order: number): ScrollingFrame
-	return Create("ScrollingFrame", {
-		Name = name,
-		LayoutOrder = order,
-		Size = UDim2.new(1, 0, 0.45, -20),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ScrollBarThickness = 6,
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		CanvasSize = UDim2.new(),
-	}, {
-		Layout = Create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }),
-	})
-end
-
-local function header(text: string, order: number): TextLabel
-	return Create("TextLabel", {
-		LayoutOrder = order,
-		Size = UDim2.new(1, 0, 0, 20),
-		BackgroundTransparency = 1,
-		Font = Theme.fontTitle,
-		TextSize = 14,
-		TextColor3 = Theme.cyan,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Text = text,
-	})
+	view.set(state.equipped, state.bag, state.used, state.capacity)
 end
 
 function InventoryController.setOpen(open: boolean)
@@ -209,12 +154,12 @@ function InventoryController.setOpen(open: boolean)
 	if open then
 		-- Les en-têtes suivent la langue courante.
 		(panel:FindFirstChild("Title") :: TextLabel).Text = t("inventory.title")
-		local body = panel:FindFirstChild("Body") :: Frame
-		(body:FindFirstChild("EquippedHeader") :: TextLabel).Text = t("inventory.equipped");
-		(body:FindFirstChild("BagHeader") :: TextLabel).Text = t("inventory.bag")
+		view.refreshTexts()
 		render()
-		if InputController.device() == "gamepad" then
-			GuiService.SelectedObject = panel:FindFirstChildWhichIsA("TextButton", true)
+		-- Manette : la sélection part de l'arme principale, puis de case en case.
+		local first = view.selectFirst()
+		if InputController.device() == "gamepad" and first then
+			GuiService.SelectedObject = first
 		end
 	end
 end
@@ -226,27 +171,21 @@ end
 function InventoryController.init() end
 
 function InventoryController.start()
-	gauge = CapacityGauge.create(t, "bag", true)
-	gauge.frame.Position = UDim2.fromOffset(12, 42)
-	gauge.frame.Size = UDim2.new(1, -24, 0, 38)
-	local body = Create("Frame", {
-		Name = "Body",
-		Position = UDim2.fromOffset(12, 104),
-		Size = UDim2.new(1, -24, 1, -116),
-		BackgroundTransparency = 1,
-	}, {
-		Layout = Create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+	view = LoadoutView.create({
+		t = t,
+		actionsFor = actionsFor,
+		drag = {
+			payload = function(item, where, slot)
+				return { from = "inventory", where = where, uid = item.uid, slot = slot }
+			end,
+			slotTarget = DRAG_SLOT,
+			bagTarget = DRAG_BAG,
+		},
 	})
-	equippedList = list("Equipped", 2)
-	bagList = list("Bag", 4)
-	local equippedHeader = header(t("inventory.equipped"), 1)
-	equippedHeader.Name = "EquippedHeader"
-	equippedHeader.Parent = body
-	equippedList.Parent = body
-	local bagHeader = header(t("inventory.bag"), 3)
-	bagHeader.Name = "BagHeader"
-	bagHeader.Parent = body
-	bagList.Parent = body
+	local body = view.frame
+	body.Name = "Body"
+	body.Position = UDim2.fromOffset(12, 42)
+	body.Size = UDim2.new(1, -24, 1, -54)
 
 	panel = Create("Frame", {
 		Name = "InventoryPanel",
@@ -271,7 +210,6 @@ function InventoryController.start()
 			TextXAlignment = Enum.TextXAlignment.Left,
 			Text = t("inventory.title"),
 		}),
-		Gauge = gauge.frame,
 		Close = Create("TextButton", {
 			AnchorPoint = Vector2.new(1, 0),
 			Position = UDim2.new(1, -8, 0, 6),
@@ -287,6 +225,27 @@ function InventoryController.start()
 	local close = panel:FindFirstChild("Close") :: TextButton
 	close.Activated:Connect(function()
 		InventoryController.setOpen(false)
+	end)
+
+	-- Souris : case du sac → emplacement (équiper), emplacement → grille du sac (ranger).
+	DragDrop.Dropped:Connect(function(payload: any, target: string)
+		if not panel.Visible or type(payload) ~= "table" or payload.from ~= "inventory" or payload.uid == nil then
+			return
+		end
+		if payload.where == "bag" and target == DRAG_SLOT then
+			local item = nil
+			for _, candidate in state.bag do
+				if candidate.uid == payload.uid then
+					item = candidate
+				end
+			end
+			local slot = if item then slotForBagItem(item) else nil
+			if slot then
+				ClientNet.fire("EquipItem", payload.uid, slot)
+			end
+		elseif payload.where == "equipped" and target == DRAG_BAG and payload.slot then
+			ClientNet.fire("UnequipItem", payload.slot)
+		end
 	end)
 
 	ClientNet.on("InventorySync", function(snapshot: State)

@@ -290,4 +290,32 @@ function WeaponStats.sheet(itemId: string, condition: number?): Sheet?
 	}
 end
 
+export type ConditionEffect = {
+	index: number,
+	key: string, -- clé de l'état (condition.<clé>)
+	percent: number, -- efficacité en % (dégâts, bouclier…) : 70 à 115
+	delta: number, -- écart en points par rapport à l'état « Bon » (référence 100 %)
+	current: boolean, -- état de l'arme affichée
+}
+
+--[[
+	Effet de l'état sur l'arme (Config.Conditions : efficacité de 0,70 à 1,15),
+	pour la fiche : un joueur doit voir qu'une arme « Très abîmée » tape 30 %
+	moins fort. `current` : état de l'arme montrée (nil : aucun en avant).
+]]
+function WeaponStats.conditionEffects(current: number?): { ConditionEffect }
+	local list: { ConditionEffect } = {}
+	for index, def in Config.Conditions.list do
+		local percent = math.floor(def.efficiency * 100 + 0.5)
+		table.insert(list, {
+			index = index,
+			key = def.key,
+			percent = percent,
+			delta = percent - 100,
+			current = index == current,
+		})
+	end
+	return list
+end
+
 return WeaponStats

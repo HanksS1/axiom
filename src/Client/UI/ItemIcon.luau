@@ -103,6 +103,15 @@ function ItemIcon.create(itemId: string, size: UDim2, condition: number?, skin: 
 	return frame
 end
 
+-- Vignette estompée en silhouette (emplacement vide : « ici va un casque »).
+function ItemIcon.silhouette(frame: Frame, transparency: number)
+	local view = frame:FindFirstChild("View")
+	if view and view:IsA("ViewportFrame") then
+		view.ImageTransparency = transparency
+		view.ImageColor3 = Theme.textDim
+	end
+end
+
 RunService.RenderStepped:Connect(function(dt: number)
 	for camera, state in spinning do
 		state.angle += dt * 0.9

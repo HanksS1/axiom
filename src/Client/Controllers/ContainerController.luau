@@ -17,6 +17,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local InventoryLogic = require(Shared.Items.InventoryLogic)
+local SpaceCheck = require(Shared.Items.SpaceCheck)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
 local Types = require(Shared.Types)
 
@@ -158,7 +159,10 @@ local function render()
 				end,
 			})
 		end
-		if InventoryLogic.canStore(inventory, item) then
+		-- Ça rentre ? (aide visuelle : le serveur refuse et explique de toute façon)
+		local fit = SpaceCheck.intoBag(inventory, item)
+		local emptySlot = slot ~= nil and info ~= nil and info.hasCondition and (inventory.equipped :: any)[slot] == nil
+		if fit.fits then
 			table.insert(actions, {
 				label = t("inventory.action.take"),
 				color = Theme.green,
@@ -176,7 +180,10 @@ local function render()
 				end,
 			})
 		end
-		local card = ItemCard.create(item, t, actions, index)
+		-- Ne tient pas dans le sac (et pas d'emplacement libre où l'équiper) : estompé,
+		-- avec ce qu'il faut libérer ; l'échange reste possible.
+		local blocked = if fit.fits or emptySlot then nil else t("fit.bag", { up = fit.missing })
+		local card = ItemCard.create(item, t, actions, index, if blocked then { blocked = blocked } else nil)
 		card.Parent = list
 		if revealNext then
 			ItemCard.reveal(card, index)

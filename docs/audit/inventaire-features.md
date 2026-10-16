@@ -29,7 +29,7 @@ est celle de la part qui porte le risque, l'autre est précisée entre parenthè
 | Renvoi laser (Sabre Neuf), repoussement (Gantelet) | `CombatService` ; `Knockback` (client) | T (M pour le repoussement) | sérieuse — renvoi ; tolérance de déplacement du repoussement (`MovementCheck`) | fonctionnelle (à confirmer en Studio pour le repoussement) | P1 |
 | Postures, vitesses, sprint | `Shared/Combat/Movement` ; `Client/Controllers/MovementController` ; `CombatService.onSetMovement` | T | sérieuse — « Movement » | fonctionnelle | P1 |
 | Tir imprécis en sautant, lunette de l'Aiguille | `Movement.spread` (`airborne`) ; `CameraController` (`setScope`) ; `HUDController` (voile) | T (M pour la lunette) | sérieuse pour la dispersion — « Saut et lunette » | fonctionnelle ; dispersion maximale imposée par le serveur (BUG-01 ✅) | P1 |
-| Fiche de détail d'arme (dont place dans le sac) | `Shared/Combat/WeaponStats` (`sheet`) ; `Client/UI/WeaponDetail` | T | sérieuse — « Fiche de détail des armes » | fonctionnelle | P1 |
+| Fiche de détail d'arme (accès « Détails » et vignette, place dans le sac, effet de l'état) | `Shared/Combat/WeaponStats` (`sheet`, `conditionEffects`) ; `Client/UI/WeaponDetail` ; `Client/UI/ItemCard` (action « Détails ») | T | sérieuse — « Fiche de détail des armes » (dont effet de l'état) | fonctionnelle ; accès visible partout où une arme est affichée (branche `fiches-inventaire`, M-22) | P1 |
 | Tenue des armes, recul, coups de mêlée animés | `Shared/Visuals/WeaponPose` (`compute`, `meleeSwing`, `solveArm`) ; `Client/Controllers/WeaponPoseController` | T (M pour le rendu) | sérieuse pour le calcul — `weaponpose.spec` (volumes, mains) | fonctionnelle par le calcul, à confirmer en Studio (M-02) | P1 (retours) |
 | PV, bouclier, mort, désintégration | `CombatService` (`applyDamage`, `heal`) ; `EffectsController` (désintégration) | T (M pour l'effet) | partielle — absorption du bouclier testée | fonctionnelle | P1 |
 | Contrôle anti-triche des déplacements | `Server/Combat/MovementCheck` (`step`, `grant`, `speedChanged`) ; `Server/Services/MovementGuardService` | T | sérieuse — `combat.spec` « Contrôle des déplacements » | fonctionnelle ; une téléportation unique est désormais recalée (BUG-09 ✅) ; ressenti à confirmer (M-05) | P1 |
@@ -80,8 +80,9 @@ est celle de la part qui porte le risque, l'autre est précisée entre parenthè
 | Feature | Fichiers | Test. | Couverture | État observé | Phase |
 |---|---|---|---|---|---|
 | Génération du butin par mode et par caisse | `LootGenerator` | T | sérieuse — `loot.spec` « LootGenerator » | fonctionnelle | P2 |
-| Conteneurs : ouverture maintenue, prises validées, « Tout prendre » | `Server/Services/LootService`, `Client/Controllers/ContainerController`, `InventoryLogic.takeAll` | TE (T pour `takeAll`) | partielle — `takeAll` testé (`items.spec`) | fonctionnelle | P2 |
-| Inventaire en partie (équiper, ranger, jeter, utiliser) | `Shared/Items/InventoryLogic`, `Server/Services/InventoryService`, `Client/Controllers/InventoryController` | T | sérieuse — `loot.spec` « InventoryLogic » | fonctionnelle | P2 |
+| Conteneurs : ouverture maintenue, prises validées, « Tout prendre » | `Server/Services/LootService`, `Client/Controllers/ContainerController`, `InventoryLogic.takeAll` | TE (T pour `takeAll`) | partielle — `takeAll` testé (`items.spec`) | fonctionnelle ; objet qui ne tient pas : estompé, espace manquant écrit (`SpaceCheck`, M-24) | P2 |
+| Ça rentre ? Espace manquant avant toute tentative | `Shared/Items/SpaceCheck` (`intoBag`, `intoVault`, `keepInVault`, `vaultToBag`) ; `ItemCard` (`blocked`, `warning`, actions grisées) | T | sérieuse — `items.spec` « SpaceCheck » (verdicts comparés aux règles du serveur) | nouvelle (branche `fiches-inventaire`) ; le serveur garde ses refus | retours |
+| Inventaire en partie (zones, grille du sac, équiper, ranger, jeter, utiliser) | `Shared/Items/InventoryLogic`, `Server/Services/InventoryService`, `Client/Controllers/InventoryController`, `Client/UI/LoadoutView` | T (M pour l'affichage) | sérieuse — `loot.spec` « InventoryLogic » | fonctionnelle ; présentation en zones et grille (branche `fiches-inventaire`, M-23) | P2 |
 | Capacités et jauges (presque plein, plein) | `Shared/Items/ItemRules` (`bagCapacity`, `fillLevel`), `Client/UI/CapacityGauge` | T | sérieuse — `items.spec` | fonctionnelle | P2 (retours) |
 | Consommables (soins, batterie, Surcharge, exo-harnais) | `Shared/Items/ConsumableRules`, `CombatService.useConsumable` | T | sérieuse pour les refus — `items.spec` « Exo-harnais » | fonctionnelle | P2 |
 | Barre rapide (touches 3 à 6) | `Client/Controllers/QuickBarController`, `InventoryController` | M | aucune | fonctionnelle (M-08) | P8 |
@@ -94,8 +95,8 @@ est celle de la part qui porte le risque, l'autre est précisée entre parenthè
 
 | Feature | Fichiers | Test. | Couverture | État observé | Phase |
 |---|---|---|---|---|---|
-| Coffre et équipement préparé | `EconomyRules` (`equipFromVault`, `toBag`…), `Client/Screens/VaultScreen` | T | sérieuse — `economy.spec` « Coffre et équipement » | fonctionnelle | P5 |
-| Marchand : achat (dont section Survie, à l'unité), vente | `EconomyRules` (`buy`, `sell`), `Shared/Economy/Pricing`, `Client/Screens/MerchantScreen` | T | sérieuse — `economy.spec`, `loot.spec` « Pricing » | fonctionnelle | P5 |
+| Coffre et équipement préparé | `EconomyRules` (`equipFromVault`, `toBag`…), `Client/Screens/VaultScreen` | T | sérieuse — `economy.spec` « Coffre et équipement » | fonctionnelle ; équipement en zones (LoadoutView), « Au sac » grisé avec l'espace manquant | P5 |
+| Marchand : achat (dont section Survie, à l'unité), vente | `EconomyRules` (`buy`, `sell`), `Shared/Economy/Pricing`, `Client/Screens/MerchantScreen` | T | sérieuse — `economy.spec`, `loot.spec` « Pricing » | fonctionnelle ; achat qui ne tient pas dans le coffre : grisé, espace manquant écrit | P5 |
 | Armurier (réparation, Module de calibration, aide) | `EconomyRules.repair`, `Pricing.repairCost`, `Client/Screens/ArmorerScreen` | T (M pour l'aide) | sérieuse pour la logique — `economy.spec`, `loot.spec` | fonctionnelle | P5 |
 | Assurance (prix, restitution dégradée, livraison) | `Pricing.insuredValue`, `Pricing.insuranceCost`, `MatchLoadout.insuranceCost`, `EconomyRules` (`insuranceClaim`, `deliverInsurance`), `Client/Screens/InsurerScreen` | T | sérieuse — `economy.spec`, `loot.spec`, `matchloadout.spec` | fonctionnelle ; prix sur la valeur assurée, rien de facturé sans objet assurable (BUG-03 ✅) | P5 |
 | Caisse gratuite (accumulation, ouverture, déroulé client) | `EconomyRules.openFreeCrate`, `Shared/Economy/FreeCrateFlow`, `TerminusController` | T | sérieuse — `economy.spec`, `freecrate.spec` | fonctionnelle | P5 (retours) |
@@ -217,7 +218,7 @@ rappelés entre parenthèses.
 | 2. Déplacement & caméra | 4 | 1 | 1 | 2 |
 | 3. Robots & IA | 9 | 5 | 3 | 1 |
 | 4. Boucle de partie & extraction | 12 | 8 | 2 | 2 |
-| 5. Butin & inventaire | 10 | 7 | 2 | 1 |
+| 5. Butin & inventaire | 11 | 8 | 2 | 1 |
 | 6. Économie & marchands | 8 | 6 | 1 | 1 |
 | 7. Hub / Terminus & stations | 10 | 6 | 0 | 4 |
 | 8. Cartes & rendu | 5 | 3 | 0 | 2 |
@@ -228,17 +229,17 @@ rappelés entre parenthèses.
 | 13. Entrées & mobile | 3 | 2 | 0 | 1 |
 | 14. Données & persistance | 5 | 5 | 0 | 0 |
 | 15. Administration & outils de dev | 2 | 1 | 0 | 1 |
-| **Total** | **115** | **76** | **13** | **26** |
+| **Total** | **116** | **77** | **13** | **26** |
 
 Couverture (comptée sur les tableaux ci-dessus ; mise à jour avec la branche
-`arene-ffa`, qui ajoute la feature « Règles de zone ») :
-- 76 features **T** : 69 sérieuse, 5 partielle, 2 effleurée, 0 aucune. « Sérieuse » porte souvent sur la seule
+`fiches-inventaire`, qui ajoute la feature « Ça rentre ? ») :
+- 77 features **T** : 70 sérieuse, 5 partielle, 2 effleurée, 0 aucune. « Sérieuse » porte souvent sur la seule
   part logique d'une feature qui a aussi un rendu : le rendu reste à vérifier en Studio.
 - 13 features **TE** : 0 sérieuse, 7 partielle, 1 effleurée, 5 aucune.
 - 26 features **M** : 0 sérieuse, 0 partielle, 1 effleurée, 25 aucune.
 
-Soit 81 / 115 features (70 %) avec une couverture sérieuse ou partielle de
-leur logique (66 / 114, 58 % en phase 1), et 30 / 115 (26 %) sans aucun test
+Soit 82 / 116 features (71 %) avec une couverture sérieuse ou partielle de
+leur logique (66 / 114, 58 % en phase 1), et 30 / 116 (26 %) sans aucun test
 (44 / 114, 39 % en phase 1).
 
 ## Features sans aucune couverture
