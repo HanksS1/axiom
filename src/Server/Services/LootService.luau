@@ -668,7 +668,7 @@ function LootService.takeAll(player: Player, container: Container): number
 	return #taken
 end
 
--- Bac à sable (hors partie : arène d'entraînement, Terminus) : aucun butin ne
+-- Bac à sable (hors partie : Arène FFA, Terminus) : aucun butin ne
 -- peut apparaître, donc rien ne peut être ramassé. Activé par ArenaService,
 -- désactivé au début d'une partie (MatchService → ArenaService.setSandbox).
 local sandbox = true

@@ -38,7 +38,7 @@ Sommaire par gravité :
 | Gravité | Constats |
 |---|---|
 | Critique | — |
-| Élevée | BUG-01 |
+| Élevée | BUG-01, BUG-10 (enquête « retours en arrière ») |
 | Moyenne | BUG-02, BUG-03, BUG-09 (phase 2), OPT-01, OPT-02, TST-01 |
 | Faible | BUG-04, BUG-05, BUG-06, BUG-07, BUG-08, OPT-03, OPT-04, OPT-05, OPT-06, OPT-07, OPT-08, OPT-09 |
 | Invalide | INV-01 (exemple « skins jamais rendus » du cahier des charges) |
@@ -220,6 +220,32 @@ aucune différence ; `rojo build` → OK.
   correction fait échouer 2 tests ; retirer le crédit de latence en fait échouer 1.
 - **Limite connue** : avec les tolérances actuelles (× 1,3 + 2 studs par contrôle), une
   triche de vitesse inférieure à environ × 1,6 au sprint passe ; inchangé (réglage).
+
+### [BUG-10] Arrêt du serveur : l'écriture du dernier joueur parti pouvait être coupée (enquête « retours en arrière »)
+- **Gravité** : élevée (perte de progression)
+- **Statut** : ✅ corrigé (branche `arene-ffa`)
+- **Domaine** : Données & persistance
+- **Emplacement** : `src/Server/Services/DataService.luau` (`onClose`), `src/Server/Data/SessionStore.luau`
+- **Constat** : quand le dernier joueur quitte le serveur, `PlayerRemoving` lance sa
+  sauvegarde de libération (requête DataStore en cours), puis le serveur s'arrête.
+  `onClose` (BindToClose) ne parcourait que les sessions encore ouvertes : celle du
+  joueur venait d'en sortir, il rendait donc la main tout de suite et le serveur se
+  fermait pendant l'écriture.
+- **Conséquence** : retour à la sauvegarde précédente (autosave, jusqu'à 60 s, ou dernier
+  `saveNow`) — à CHAQUE fin de session en test solo, et en ligne quand le dernier joueur
+  d'un serveur part. Si l'écriture n'aboutissait pas, le verrou restait posé : nouvelle
+  connexion refusée pendant 16 s (puis expulsion « profil non chargé ») tant que
+  `lockTimeout` (10 min) n'était pas écoulé.
+- **Correction** : `SessionStore:waitForSaves(timeout)` compte les écritures en cours (y
+  compris celles qui attendent leur tour) ; `onClose` l'attend dans le délai de 25 s, puis
+  vide le journal des transactions.
+- **Vérification** : `sessionstore.spec` « arrêt du serveur » (une libération suspendue en
+  plein UpdateAsync est attendue ; délai dépassé signalé). Mutation : neutraliser l'attente
+  ou le compteur fait échouer 2 tests.
+- **Instrumentation ajoutée** : chaque chargement, sauvegarde, échec, reprise et perte de
+  verrou est journalisé (sortie `[Data] …` : joueur, serveur, heure, résultat, numéro
+  d'écriture `seq` gardé dans l'enregistrement) ; les événements rares sont aussi conservés
+  dans le journal des transactions (DataStore) pour une enquête après coup.
 
 ### [BUG-04] Trois définitions différentes de « en partie » côté client
 - **Gravité** : faible

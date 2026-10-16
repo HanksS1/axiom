@@ -45,6 +45,7 @@ export type Action =
 	| "map"
 	| "gadget1"
 	| "gadget2"
+	| "scoreboard"
 export type Device = "keyboard" | "gamepad" | "touch"
 
 local InputController = {}

@@ -7,21 +7,28 @@
 	tant que le vrai Terminus n'est pas modélisé (Config.Dev.greyboxOnline).
 	Le vrai Terminus portera les mêmes attributs `Station`.
 
-	Zone sans combat : hors partie, les joueurs ne peuvent se blesser que
-	dans l'arène d'entraînement.
+	Zones (Shared/Match/Zone, Config.Zones) : le Terminus est sans combat et sans
+	gadget, on y tire sans consommer de munitions ; hors partie, les joueurs ne
+	peuvent se blesser que dans l'Arène FFA. La zone est fournie à CombatService
+	(qui la donne à GadgetService) et publiée au client (attribut « Zone »).
 
 	Stations (ProximityPrompt, attribut Station → panneau côté client) :
 	merchant, armorer, insurer, vault, bazaar, deploy, range, legends.
-	Le pavé « training » téléporte vers l'arène d'entraînement (bac à sable).
+	Le pavé « training » (texte affiché : « Arène FFA ») téléporte vers l'Arène
+	FFA, l'ancienne arène d'entraînement (bac à sable). La clé technique reste
+	`training` : elle n'est stockée nulle part (attribut Station des invites).
 	Les cibles du stand de tir suivent leurs propres règles (RangeService).
 ]]
 
+local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-local Config = require(ReplicatedStorage:WaitForChild("Shared").Config)
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
+local Zone = require(Shared.Match.Zone)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
 local HubNpcs = require(script.Parent.Parent.Hub.HubNpcs)
@@ -52,17 +59,44 @@ end
 
 function HubService.init() end
 
--- Un combattant peut-il se battre ici ? (en partie, ou dans l'arène d'entraînement)
-local function inCombatArea(fighter: Fighter.Fighter): boolean
+-- Zone d'un joueur (Shared/Match/Zone) : partie, tutoriel, Arène FFA ou Terminus.
+local function zoneOf(fighter: Fighter.Fighter): Zone.Zone
 	local player = fighter.player
 	if player == nil then
-		return true -- robots, mercenaires, mannequins, objets
+		return "match" -- robots, mercenaires, mannequins, objets
 	end
 	local participant = MatchService.participant(player)
-	if participant and not participant.finished then
-		return true
+	return Zone.classify({
+		inMatch = participant ~= nil and not participant.finished,
+		inTutorial = TutorialService.isInTutorial(player),
+		inArena = ArenaService.contains(fighter.root.Position),
+	})
+end
+
+-- Un combattant peut-il se battre ici ? (en partie, ou dans l'Arène FFA)
+local function inCombatArea(fighter: Fighter.Fighter): boolean
+	local zone = zoneOf(fighter)
+	return zone == "match" or zone == "arena"
+end
+
+-- Zone publiée au client (affichage : gadgets indisponibles, munitions « ∞ »,
+-- tableau FFA). Le serveur, lui, recalcule la zone à chaque action.
+local function publishZones()
+	for _, player in Players:GetPlayers() do
+		local fighter = CombatService.getFighter(player)
+		local zone = if fighter then zoneOf(fighter) else "hub"
+		if player:GetAttribute("Zone") ~= zone then
+			player:SetAttribute("Zone", zone)
+			if fighter and zone ~= "arena" then
+				-- Le bouclier de réapparition n'existe que dans l'arène.
+				CombatService.dropSpawnShield(fighter)
+			end
+			if fighter then
+				-- Réserve prêtée ou réelle : l'état d'arme du joueur change avec la zone.
+				CombatService.publish(fighter)
+			end
+		end
 	end
-	return ArenaService.contains(fighter.root.Position)
 end
 
 function HubService.start()
@@ -84,6 +118,16 @@ function HubService.start()
 		end
 	end
 
+	CombatService.setZoneResolver(zoneOf)
+	local sinceZones = 0
+	RunService.Heartbeat:Connect(function(dt)
+		sinceZones += dt
+		if sinceZones >= Config.Zones.publishInterval then
+			sinceZones = 0
+			publishZones()
+		end
+	end)
+
 	CombatService.setDamageFilter(function(attacker, target)
 		-- Cibles du stand de tir : règles propres (joueur au stand, propriétaire du défi).
 		local range = RangeService.damageVerdict(attacker, target)
@@ -101,7 +145,7 @@ function HubService.start()
 		return attacker == nil or inCombatArea(attacker)
 	end)
 
-	-- Pavés « arène d'entraînement » ↔ « retour au Terminus » (bac à sable de Studio).
+	-- Pavés « Arène FFA » ↔ « retour au Terminus » (bac à sable).
 	ProximityPromptService.PromptTriggered:Connect(function(prompt, player)
 		local key = prompt:GetAttribute("Station")
 		if MatchService.isRunning() then
@@ -111,6 +155,8 @@ function HubService.start()
 			local spawns = MapService.deploySpawns()
 			if #spawns > 0 then
 				teleport(player, spawns[math.random(1, #spawns)].cframe)
+				-- Arrivée dans l'Arène FFA : bouclier de réapparition (anti-campeur).
+				ArenaService.protect(player)
 			end
 		elseif key == "hub" then
 			teleport(player, HubService.spawnCFrame())

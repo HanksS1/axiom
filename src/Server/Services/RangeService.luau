@@ -8,8 +8,9 @@
 	  local, RangeController) ; les autres joueurs continuent de s'en servir.
 	- Essai d'une arme du coffre : le joueur reçoit une COPIE de son arme
 	  (même modèle, même état, marquée « kit » : sans valeur, jamais
-	  conservée) et une réserve de cellules prêtée. Tout est rendu en
-	  quittant le stand : l'équipement réel n'est jamais touché.
+	  conservée). Les munitions sont celles du Terminus : prêtées, jamais
+	  décomptées (Config.Zones, CombatService). L'arme réelle est rendue en
+	  quittant le stand : l'équipement n'est jamais touché.
 	- Défi quotidien : arme imposée et suite de cibles identiques pour tous
 	  (RangeRules, selon le jour UTC), 30 s, score = dégâts infligés (une
 	  touche abat la cible). Les cibles d'un défi n'appartiennent qu'à son
@@ -76,7 +77,6 @@ type Session = {
 	mode: "test" | "challenge",
 	itemId: string,
 	kitUid: string, -- copie prêtée : la seule arme qui compte pendant la séance
-	savedInventory: Fighter.FighterInventory,
 	-- Défi
 	day: number,
 	startsAt: number,
@@ -270,7 +270,6 @@ local function endSession(player: Player, reason: string)
 	Fighter.forgetWeaponState(session.kitUid)
 	local fighter = session.fighter
 	if CombatService.getFighter(player) == fighter and Fighter.isAlive(fighter) then
-		fighter.inventory = session.savedInventory
 		Fighter.setWeapon(fighter, "ranged", nil)
 		CombatService.equipmentChanged(fighter)
 		CombatService.publish(fighter)
@@ -291,10 +290,8 @@ local function endSession(player: Player, reason: string)
 	end
 end
 
+-- Arme prêtée en main. Munitions : celles du Terminus (prêtées, jamais décomptées).
 local function lend(fighter: Fighter, item: ItemInstance)
-	local info = ItemCatalog.get(item.itemId)
-	local def = if info then info.def else nil
-	fighter.inventory = Fighter.simpleInventory({ [def.cell] = R.reserveCells })
 	Fighter.setWeapon(fighter, "ranged", item)
 	fighter.activeSlot = "ranged"
 	CombatService.publish(fighter)
@@ -354,7 +351,6 @@ local function newSession(player: Player, fighter: Fighter, mode: "test" | "chal
 		mode = mode,
 		itemId = item.itemId,
 		kitUid = item.uid,
-		savedInventory = fighter.inventory,
 		day = 0,
 		startsAt = 0,
 		endsAt = 0,

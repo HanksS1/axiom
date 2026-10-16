@@ -33,6 +33,8 @@ local Movement = require(Shared.Combat.Movement)
 local Projectiles = require(Shared.Combat.Projectiles)
 local Signal = require(Shared.Util.Signal)
 local WeaponLogic = require(Shared.Combat.WeaponLogic)
+local SpawnShield = require(Shared.Combat.SpawnShield)
+local Zone = require(Shared.Match.Zone)
 local ConsumableRules = require(Shared.Items.ConsumableRules)
 
 local Fighter = require(script.Parent.Parent.Combat.Fighter)
@@ -69,6 +71,72 @@ local ownerStateQueued: { [Fighter]: boolean } = {}
 -- Gestion de la mort (remplaçable par le déroulé de partie en P3).
 -- Par défaut (arène, stand de tir) : réapparition après `respawnTime`.
 local deathHandler: ((fighter: Fighter, killer: Fighter?) -> ())? = nil
+
+-- Zone d'un joueur (Shared/Match/Zone), fournie par HubService sur un serveur qui
+-- accueille le Terminus. Sans fournisseur (serveur de partie dédié) : « match ».
+local zoneResolver: ((fighter: Fighter) -> string)? = nil
+
+function CombatService.setZoneResolver(resolver: ((fighter: Fighter) -> string)?)
+	zoneResolver = resolver
+end
+
+-- Zone actuelle d'un combattant (recalculée à chaque appel : position, partie).
+function CombatService.zoneOf(fighter: Fighter): string
+	if zoneResolver == nil or fighter.player == nil then
+		return "match"
+	end
+	return zoneResolver(fighter)
+end
+
+-- Bouclier de réapparition (Arène FFA) : un ForceField visible de tous, retiré à
+-- l'expiration, à la première attaque ou hors de l'arène.
+local SHIELD_EFFECT = "SpawnShield"
+
+function CombatService.dropSpawnShield(fighter: Fighter)
+	if fighter.spawnShieldUntil == nil then
+		return
+	end
+	fighter.spawnShieldUntil = nil
+	local effect = fighter.character:FindFirstChild(SHIELD_EFFECT)
+	if effect then
+		effect:Destroy()
+	end
+	fighter.character:SetAttribute("SpawnShieldUntil", nil)
+end
+
+-- Accorde le bouclier (seulement dans l'Arène FFA). Retourne true s'il a été posé.
+function CombatService.grantSpawnShield(fighter: Fighter): boolean
+	local untilTime = SpawnShield.grant(Workspace:GetServerTimeNow(), CombatService.zoneOf(fighter))
+	if untilTime == nil or not Fighter.isAlive(fighter) then
+		return false
+	end
+	CombatService.dropSpawnShield(fighter)
+	fighter.spawnShieldUntil = untilTime
+	local effect = Instance.new("ForceField")
+	effect.Name = SHIELD_EFFECT
+	effect.Visible = true
+	effect.Parent = fighter.character
+	-- Heure de fin (heure serveur) : indication à l'écran du joueur protégé.
+	fighter.character:SetAttribute("SpawnShieldUntil", untilTime)
+	task.delay(untilTime - Workspace:GetServerTimeNow(), function()
+		if fighter.spawnShieldUntil == untilTime then
+			CombatService.dropSpawnShield(fighter)
+		end
+	end)
+	return true
+end
+
+-- Une action du joueur : une attaque fait tomber son bouclier de réapparition.
+function CombatService.noteAction(fighter: Fighter, action: SpawnShield.Action)
+	if fighter.spawnShieldUntil ~= nil and SpawnShield.dropsOn(action) then
+		CombatService.dropSpawnShield(fighter)
+	end
+end
+
+-- Munitions prêtées ici (Terminus) : rien n'est décompté.
+local function ammoLent(fighter: Fighter): boolean
+	return Zone.allows(CombatService.zoneOf(fighter), "freeAmmo")
+end
 
 local worldRayParams = RaycastParams.new()
 worldRayParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -192,13 +260,16 @@ local function buildOwnerState(fighter: Fighter): { [string]: any }
 	local ranged = fighter.ranged
 	if ranged then
 		local def = ranged.def
+		local lent = ammoLent(fighter)
 		WeaponLogic.updateHeat(ranged.state, now())
 		state.ranged = {
 			itemId = ranged.item.itemId,
 			condition = ranged.item.condition,
 			ammo = ranged.state.ammo,
 			capacity = def.capacity,
-			reserve = fighter.inventory:countCells(def.cell),
+			reserve = Fighter.reserve(fighter, def.cell, lent),
+			-- Munitions prêtées : le client affiche « ∞ » et ne décompte pas la réserve.
+			reserveLent = lent,
 			heat = ranged.state.heat,
 			overheatedUntil = ranged.state.overheatedUntil,
 			reloadEndsAt = ranged.state.reloadEndsAt,
@@ -375,6 +446,13 @@ function CombatService.applyDamage(
 	-- Zones sans combat (Terminus).
 	local filter = damageFilter
 	if filter and not filter(attacker, target) then
+		return 0, false
+	end
+	-- Bouclier de réapparition (Arène FFA uniquement).
+	if
+		target.spawnShieldUntil ~= nil
+		and SpawnShield.protects(target.spawnShieldUntil, now(), CombatService.zoneOf(target))
+	then
 		return 0, false
 	end
 	local opts: DamageOptions = options or {}
@@ -650,8 +728,9 @@ local function finishReloadIfDue(fighter: Fighter, time: number)
 	local ranged = fighter.ranged
 	if ranged and ranged.state.reloadEndsAt ~= nil and time >= ranged.state.reloadEndsAt then
 		local def = ranged.def
-		local used = WeaponLogic.finishReload(def, ranged.state, time, fighter.inventory:countCells(def.cell))
-		fighter.inventory:takeCells(def.cell, used)
+		local lent = ammoLent(fighter)
+		local used = WeaponLogic.finishReload(def, ranged.state, time, Fighter.reserve(fighter, def.cell, lent))
+		Fighter.spendCells(fighter, def.cell, used, lent)
 		queueOwnerState(fighter)
 		-- Fin de recharge : l'attribut public ReloadUntil est effacé.
 		publishPublic(fighter)
@@ -963,7 +1042,8 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 	local def = ranged.def
 	local state = ranged.state
 	finishReloadIfDue(fighter, shot.t)
-	local cells = fighter.inventory:countCells(def.cell)
+	local lent = ammoLent(fighter)
+	local cells = Fighter.reserve(fighter, def.cell, lent)
 	local canFire, block = WeaponLogic.canFire(def, state, shot.t, cells, V.fireRateTolerance)
 	if not canFire then
 		if block == "cooldown" then
@@ -976,9 +1056,9 @@ local function onFireWeapon(player: Player, shot: HitValidator.Shot)
 
 	local fired = WeaponLogic.fire(def, state, shot.t)
 	fighter.lastShotTime = shot.t
-	if fired.cellsConsumed > 0 then
-		fighter.inventory:takeCells(def.cell, fired.cellsConsumed)
-	end
+	CombatService.noteAction(fighter, "fire")
+	-- Armes à énergie : cellules par tir (prêtées au Terminus, comme pour le chargeur).
+	Fighter.spendCells(fighter, def.cell, fired.cellsConsumed, lent)
 
 	-- Projectile lent : aucun impact n'est accepté du client, le serveur le fait voler.
 	local isProjectile = def.projectileSpeed ~= nil
@@ -1071,7 +1151,7 @@ local function onReload(player: Player)
 		return
 	end
 	local def = ranged.def
-	if not WeaponLogic.canReload(def, ranged.state, fighter.inventory:countCells(def.cell)) then
+	if not WeaponLogic.canReload(def, ranged.state, Fighter.reserve(fighter, def.cell, ammoLent(fighter))) then
 		queueOwnerState(fighter)
 		return
 	end
@@ -1130,6 +1210,7 @@ local function onMeleeAttack(player: Player, targetPart: BasePart?)
 		return
 	end
 	melee.lastAttackAt = time
+	CombatService.noteAction(fighter, "melee")
 	ServerNet.fireNear("MeleeSwing", fighter.root.Position, nil, player, player, melee.item.itemId)
 
 	if targetPart == nil then

@@ -37,6 +37,7 @@ local order = {
 	"RangeService",
 	"TutorialService",
 	"HubService",
+	"FfaService",
 	"MatchServerService",
 	"DevService",
 }

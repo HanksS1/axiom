@@ -42,7 +42,7 @@ est celle de la part qui porte le risque, l'autre est précisée entre parenthè
 | Caméra à l'épaule scriptée (anti-traversée, visée, posture) | `Client/Controllers/CameraController` | M | aucune | fonctionnelle | P1 |
 | Visée assistée (manette, mobile) | `Shared/Combat/AimAssist` (`pick`, `slowdown`, `pull`) ; `CameraController` | T (M pour le ressenti) | sérieuse — `combat.spec` « Visée assistée » | fonctionnelle (ressenti à confirmer, M-06) | P8 |
 | Personnage orienté vers la caméra | `CameraController` (`AutoRotate = false`) | M | aucune | fonctionnelle | P1 |
-| Gadgets de déplacement (bottes de saut, grappin) | `Server/Services/GadgetService`, `Client/Controllers/GadgetController` | TE | partielle — tolérances de déplacement accordées (`MovementCheck.grant`) | fonctionnelle | P3 |
+| Gadgets de déplacement (bottes de saut, grappin) | `Server/Services/GadgetService`, `Client/Controllers/GadgetController` | TE | partielle — tolérances de déplacement accordées (`MovementCheck.grant`) | fonctionnelle ; refusés au Terminus ; l'Arène FFA est fermée jusqu'au plafond (`arena.spec`) | P3 |
 
 ## 3. Robots & IA (P4)
 
@@ -85,7 +85,7 @@ est celle de la part qui porte le risque, l'autre est précisée entre parenthè
 | Capacités et jauges (presque plein, plein) | `Shared/Items/ItemRules` (`bagCapacity`, `fillLevel`), `Client/UI/CapacityGauge` | T | sérieuse — `items.spec` | fonctionnelle | P2 (retours) |
 | Consommables (soins, batterie, Surcharge, exo-harnais) | `Shared/Items/ConsumableRules`, `CombatService.useConsumable` | T | sérieuse pour les refus — `items.spec` « Exo-harnais » | fonctionnelle | P2 |
 | Barre rapide (touches 3 à 6) | `Client/Controllers/QuickBarController`, `InventoryController` | M | aucune | fonctionnelle (M-08) | P8 |
-| Gadgets (drone, mur, fumigène) | `GadgetService`, `GadgetController` | TE | aucune | fonctionnelle | P3 |
+| Gadgets (drone, mur, fumigène) | `GadgetService`, `GadgetController` | TE | partielle — interdiction par zone (`zones.spec`) | fonctionnelle ; refusés au Terminus, permis en partie et dans l'Arène FFA | P3 |
 | Écran de tri, « Tout garder » | `Server/Economy/EconomyRules` (`keep`, `keepAll`), `Client/Screens/SortScreen` | T | sérieuse — `economy.spec` | fonctionnelle | P5 |
 | Objet temporaire (caisse gratuite) | `EconomyRules.ageTempItem` | T | sérieuse — `economy.spec` | fonctionnelle | P5 |
 | Validation des objets (uid, états, champs) | `ItemRules.validate`, `Server/Inventory/ItemFactory` | T | sérieuse — `items.spec` (« ItemRules.validate », « ItemFactory ») | fonctionnelle | P0 |
@@ -111,10 +111,11 @@ est celle de la part qui porte le risque, l'autre est précisée entre parenthè
 | Textes localisés du décor (enseignes, fresques, plaques des PNJ) | `Client/UI/TextKeys`, `HubAmbienceController`, `TutorialController` | T (M pour l'affichage) | sérieuse pour les clés — `hub.spec` | fonctionnelle depuis le correctif TextKeys (M-01) | P10 (retours) |
 | Ambiance (néons, drones, PNJ qui saluent) | `Client/Controllers/HubAmbienceController` | M | aucune | fonctionnelle | P10 |
 | PNJ marchands | `Server/Hub/HubNpcs` | T (textes) | effleurée — noms et répliques | fonctionnelle | P10 |
-| Stand de tir (essai d'arme, défi quotidien) | `Server/Services/RangeService`, `Shared/Progression/RangeRules`, `Client/Controllers/RangeController` | T (TE pour la séance) | sérieuse pour les règles — `range.spec` | fonctionnelle | P10 |
+| Stand de tir (essai d'arme, défi quotidien) | `Server/Services/RangeService`, `Shared/Progression/RangeRules`, `Client/Controllers/RangeController` | T (TE pour la séance) | sérieuse pour les règles — `range.spec` | fonctionnelle ; munitions : règle du Terminus (le prêt d'inventaire propre au stand est supprimé) | P10 |
 | Mur des Légendes (hologrammes) | `Server/Services/LeaderboardService` | M | aucune | fonctionnelle (DataStore réel) | P10 |
 | Barre du haut, menu rapide, stations | `Client/Controllers/TerminusController` | M | aucune | fonctionnelle ; « sur le terrain » et « partie en cours » distingués (BUG-04 ✅) | P5 |
-| Arène d'entraînement (Studio) | `Server/Services/ArenaService` | M | aucune | fonctionnelle | P1 |
+| Arène FFA (décor, éclairage local, bouclier de réapparition, tableau des scores) | `Server/Maps/ArenaLayout`, `Server/Services/ArenaService`, `Server/Services/FfaService`, `Shared/Match/FfaBoard`, `Shared/Combat/SpawnShield`, `Shared/Visuals/LightingOverlay`, `Client/Controllers/ArenaLightingController`, `ArenaHUDController` | T (M pour le rendu) | sérieuse — `arena.spec` (plan et enceinte, éclairage, bouclier, classement) | nouvelle (branche `arene-ffa`) ; décor et lumière à juger en Studio (M-18), tableau à plusieurs (M-19) | retours |
+| Règles de zone : pas de gadget au Terminus, munitions prêtées | `Shared/Match/Zone`, `Config/Zones`, `HubService` (`zoneOf`), `CombatService` (`zoneOf`, réserve), `GadgetService`, `Fighter.reserve` / `spendCells` | T | sérieuse — `zones.spec` | nouvelle (branche `arene-ffa`) ; M-20 | retours |
 | Plaques de nom au hub | `Client/Controllers/NameplateController` | M | aucune | fonctionnelle ; rayon du Terminus dans `Config.Maps.hub` (OPT-07 ✅) | P10 |
 
 ## 8. Cartes & rendu (P7)
@@ -190,7 +191,7 @@ est celle de la part qui porte le risque, l'autre est précisée entre parenthè
 
 | Feature | Fichiers | Test. | Couverture | État observé | Phase |
 |---|---|---|---|---|---|
-| Profils, verrou de session, sauvegardes | `Server/Data/SessionStore`, `Server/Services/DataService` | T (TE pour le service) | sérieuse — `sessionstore.spec` | fonctionnelle | P0 |
+| Profils, verrou de session, sauvegardes | `Server/Data/SessionStore`, `Server/Services/DataService` | T (TE pour le service) | sérieuse — `sessionstore.spec` (dont journal, numéro d'écriture, arrêt pendant une écriture, tentatives épuisées) | fonctionnelle ; écriture du dernier joueur attendue à l'arrêt (BUG-10 ✅) ; journal de persistance (sortie + journal des transactions) | P0 |
 | Migrations et assainissement (v1 → v5) | `Server/Data/Migrations`, `ProfileTemplate` | T | sérieuse — `migrations.spec` | fonctionnelle | P0 |
 | Vue publique du profil et synchronisation regroupée | `Server/Data/ProfileView` (`build`) ; `DataService` (`syncQueued`) | T | sérieuse — `profileview.spec` | fonctionnelle | P0 |
 | DataStore simulé (Studio) | `Server/Data/MockDataStore` | T | sérieuse — `sessionstore.spec` | fonctionnelle | P0 |
@@ -218,7 +219,7 @@ rappelés entre parenthèses.
 | 4. Boucle de partie & extraction | 12 | 8 | 2 | 2 |
 | 5. Butin & inventaire | 10 | 7 | 2 | 1 |
 | 6. Économie & marchands | 8 | 6 | 1 | 1 |
-| 7. Hub / Terminus & stations | 9 | 4 | 0 | 5 |
+| 7. Hub / Terminus & stations | 10 | 6 | 0 | 4 |
 | 8. Cartes & rendu | 5 | 3 | 0 | 2 |
 | 9. Matchmaking & parties | 8 | 4 | 3 | 1 |
 | 10. Progression & tutoriel | 7 | 4 | 1 | 2 |
@@ -227,21 +228,18 @@ rappelés entre parenthèses.
 | 13. Entrées & mobile | 3 | 2 | 0 | 1 |
 | 14. Données & persistance | 5 | 5 | 0 | 0 |
 | 15. Administration & outils de dev | 2 | 1 | 0 | 1 |
-| **Total** | **114** | **74** | **13** | **27** |
+| **Total** | **115** | **76** | **13** | **26** |
 
-Couverture (comptée sur les tableaux ci-dessus) :
-- 74 features **T** (64) : 67 sérieuse, 5 partielle, 2 effleurée, 0 aucune. « Sérieuse »
-  porte souvent sur la seule part logique d'une feature qui a aussi un rendu (tenue des
-  armes, détecteur, carte…) : le rendu reste à vérifier en Studio.
-- 13 features **TE** (22) : 0 sérieuse, 6 partielle, 1 effleurée, 6 aucune. Neuf sont passées en **T** grâce aux
-  extractions de la phase 2 (`MatchLoadout` pour trois d'entre elles, `MovementCheck`,
-  `AimAssist`, `ReviveRules`, `HazardRules`, `ProfileView`, `EconomyRules.lockReason`).
-  Les tourelles passent de **M** à **T** (`Shared/Robots/Turning`).
-- 27 features **M** (28) : 0 sérieuse, 0 partielle, 1 effleurée, 26 aucune.
+Couverture (comptée sur les tableaux ci-dessus ; mise à jour avec la branche
+`arene-ffa`, qui ajoute la feature « Règles de zone ») :
+- 76 features **T** : 69 sérieuse, 5 partielle, 2 effleurée, 0 aucune. « Sérieuse » porte souvent sur la seule
+  part logique d'une feature qui a aussi un rendu : le rendu reste à vérifier en Studio.
+- 13 features **TE** : 0 sérieuse, 7 partielle, 1 effleurée, 5 aucune.
+- 26 features **M** : 0 sérieuse, 0 partielle, 1 effleurée, 25 aucune.
 
-Soit 78 / 114 features (68 %) avec une couverture sérieuse ou partielle de
-leur logique (66 / 114, 58 % en phase 1), et 32 / 114 (28 %) sans aucun test
-(44 / 114, 39 %).
+Soit 81 / 115 features (70 %) avec une couverture sérieuse ou partielle de
+leur logique (66 / 114, 58 % en phase 1), et 30 / 115 (26 %) sans aucun test
+(44 / 114, 39 % en phase 1).
 
 ## Features sans aucune couverture
 
@@ -249,9 +247,9 @@ leur logique (66 / 114, 58 % en phase 1), et 32 / 114 (28 %) sans aucun test
 - Déplacement & caméra : Caméra à l'épaule scriptée (anti-traversée, visée, posture) ; Personnage orienté vers la caméra.
 - Robots & IA : Déplacement lissé (marche, mouches) ; Comportements des Gardiens (s'enfouir, phase).
 - Boucle de partie & extraction : Bilan de fin de partie ; Pings et repères de carte ; Vue spectateur.
-- Butin & inventaire : Barre rapide (touches 3 à 6) ; Gadgets (drone, mur, fumigène).
+- Butin & inventaire : Barre rapide (touches 3 à 6).
 - Économie & marchands : Journal des transactions ; Confirmation au-delà de 1 000 crédits.
-- Hub / Terminus & stations : Ambiance (néons, drones, PNJ qui saluent) ; Mur des Légendes (hologrammes) ; Barre du haut, menu rapide, stations ; Arène d'entraînement (Studio) ; Plaques de nom au hub.
+- Hub / Terminus & stations : Ambiance (néons, drones, PNJ qui saluent) ; Mur des Légendes (hologrammes) ; Barre du haut, menu rapide, stations ; Plaques de nom au hub.
 - Cartes & rendu : Éclairage par carte et du hub ; Effets de carte côté client (coupures, radiation, grondements).
 - Matchmaking & parties : Groupes duo et invitations ; File locale et verrou d'équipement ; Porte de déploiement (écran).
 - Progression & tutoriel : Aide de station à la première visite (Armurier) ; Profil et statistiques (écran).

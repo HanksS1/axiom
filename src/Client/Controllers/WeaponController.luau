@@ -51,6 +51,7 @@ export type Snapshot = {
 	ammo: number,
 	capacity: number?,
 	reserve: number,
+	reserveLent: boolean, -- munitions prêtées (Terminus) : réserve affichée « ∞ »
 	heat: number,
 	overheated: boolean,
 	reloadProgress: number?, -- 0..1 pendant une recharge
@@ -72,6 +73,8 @@ local rangedCondition: number? = nil
 local rangedDef: any = nil
 local rangedState: WeaponLogic.RangedState? = nil
 local reserve = 0
+-- Munitions prêtées par le serveur (Terminus) : la réserve n'est pas décomptée.
+local reserveLent = false
 local meleeId: string? = nil
 local meleeCondition: number? = nil
 local meleeDef: any = nil
@@ -134,6 +137,7 @@ local function onCombatState(state: { [string]: any })
 				local_.lastFireAt = math.max(local_.lastFireAt, ranged.lastFireAt)
 			end
 			reserve = ranged.reserve or 0
+			reserveLent = ranged.reserveLent == true
 		end
 	else
 		rangedId, rangedDef, rangedState, rangedCondition = nil, nil, nil, nil
@@ -258,7 +262,7 @@ local function fireRanged()
 
 	local ammoBefore = state.ammo
 	local fired = WeaponLogic.fire(def, state, now)
-	if fired.cellsConsumed > 0 then
+	if fired.cellsConsumed > 0 and not reserveLent then
 		reserve = math.max(0, reserve - fired.cellsConsumed)
 	end
 	local bullets = if def.capacity then math.min(def.burstCount, ammoBefore) else def.burstCount
@@ -376,7 +380,9 @@ local function update()
 		-- Fin de recharge prédite localement (le serveur confirmera).
 		if state.reloadEndsAt ~= nil and now >= state.reloadEndsAt then
 			local used = WeaponLogic.finishReload(rangedDef, state, now, reserve)
-			reserve -= used
+			if not reserveLent then
+				reserve -= used
+			end
 		end
 		WeaponLogic.updateHeat(state, now)
 	end
@@ -473,6 +479,7 @@ function WeaponController.snapshot(): Snapshot
 		ammo = if state then state.ammo else 0,
 		capacity = if rangedDef then rangedDef.capacity else nil,
 		reserve = reserve,
+		reserveLent = reserveLent,
 		heat = if state then state.heat else 0,
 		overheated = state ~= nil and now < state.overheatedUntil,
 		reloadProgress = reloadProgress,
