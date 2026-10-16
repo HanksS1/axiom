@@ -352,3 +352,26 @@ Pour plusieurs joueurs : Test → Clients et serveurs (2 joueurs).
 3. Coffre : « Au sac » grisé quand le sac préparé n'a pas la place ; tri d'après-partie :
    « Garder » grisé avec l'espace manquant.
 4. Les rouges sont ceux de la jauge pleine ; le serveur refuse toujours si l'état a changé.
+
+### M-25. Deux joueurs, une seule partie locale à la fois (BUG-11)
+1. Studio, Test → Clients et serveurs, 2 joueurs (places de partie à 0).
+2. Joueur A lance une recherche Facile Solo : sa partie démarre (8 s, mercenaires).
+3. Pendant la partie de A, joueur B lance une recherche : le bandeau de file affiche
+   « Une partie est déjà en cours sur ce serveur… (au plus ≈ m:ss) », qui décroît.
+4. A s'extrait (ou meurt) et la partie se termine : A voit son bilan pendant 20 s
+   (`returnDelay`). Pendant ces 20 s, la partie de B NE démarre PAS (le bandeau indique
+   l'attente restante).
+5. À 20 s : A est ramené au Terminus (bilan et écran de tri fermés, personnage au
+   Terminus) ; quelques secondes plus tard, la partie de B démarre.
+6. Variante : A quitte le jeu pendant les 20 s ; B démarre normalement ensuite.
+7. Filet de sécurité : DEV → lancer une partie, puis (outil « endMatch » pendant le
+   retour) vérifier qu'aucun joueur ne reste sur une carte plus de 3 s hors partie.
+
+### M-26. Marchand en sections, menus non cliquables à travers
+1. Marchand, Achat : Survie, Munitions de vos armes, puis Armes (À distance, Mêlée, de la
+   moins chère à la plus chère), Gadgets, Protections (Casques, Gilets), Sacs à dos,
+   Consommables, Munitions ; aucune cellule en double avec « Munitions de vos armes ».
+2. Revente : mêmes sections ; à objet égal, le meilleur état d'abord.
+3. Panneau étroit / tactile : les en-têtes ne se coupent pas, la liste défile.
+4. Chaque menu ouvert (Terminus, sac, conteneur, carte, confirmation, bilan, caisse
+   gratuite) : cliquer à côté ne déclenche rien de ce qui est dessous.

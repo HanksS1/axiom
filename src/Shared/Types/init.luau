@@ -161,6 +161,9 @@ export type QueueView = {
 	suggestCrossplay: boolean?,
 	maps: { string }?, -- cartes acceptées par le groupe
 	mapCounts: { [string]: number }?, -- joueurs en file par carte (même file)
+	-- Partie locale déjà en cours (ou retour de ses joueurs) : attente estimée en
+	-- secondes avant que la vôtre puisse démarrer. nil : le serveur est libre.
+	serverBusy: number?,
 }
 
 return {}

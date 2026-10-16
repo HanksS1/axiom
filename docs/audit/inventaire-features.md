@@ -96,7 +96,7 @@ est celle de la part qui porte le risque, l'autre est précisée entre parenthè
 | Feature | Fichiers | Test. | Couverture | État observé | Phase |
 |---|---|---|---|---|---|
 | Coffre et équipement préparé | `EconomyRules` (`equipFromVault`, `toBag`…), `Client/Screens/VaultScreen` | T | sérieuse — `economy.spec` « Coffre et équipement » | fonctionnelle ; équipement en zones (LoadoutView), « Au sac » grisé avec l'espace manquant | P5 |
-| Marchand : achat (dont section Survie, à l'unité), vente | `EconomyRules` (`buy`, `sell`), `Shared/Economy/Pricing`, `Client/Screens/MerchantScreen` | T | sérieuse — `economy.spec`, `loot.spec` « Pricing » | fonctionnelle ; achat qui ne tient pas dans le coffre : grisé, espace manquant écrit | P5 |
+| Marchand : achat (dont section Survie, à l'unité), vente | `EconomyRules` (`buy`, `sell`), `Shared/Economy/Pricing`, `Client/Screens/MerchantScreen` | T | sérieuse — `economy.spec`, `loot.spec` « Pricing » | fonctionnelle ; catalogue et revente en sections (`Shared/Economy/MerchantSort`, testé) ; achat qui ne tient pas : grisé | P5 |
 | Armurier (réparation, Module de calibration, aide) | `EconomyRules.repair`, `Pricing.repairCost`, `Client/Screens/ArmorerScreen` | T (M pour l'aide) | sérieuse pour la logique — `economy.spec`, `loot.spec` | fonctionnelle | P5 |
 | Assurance (prix, restitution dégradée, livraison) | `Pricing.insuredValue`, `Pricing.insuranceCost`, `MatchLoadout.insuranceCost`, `EconomyRules` (`insuranceClaim`, `deliverInsurance`), `Client/Screens/InsurerScreen` | T | sérieuse — `economy.spec`, `loot.spec`, `matchloadout.spec` | fonctionnelle ; prix sur la valeur assurée, rien de facturé sans objet assurable (BUG-03 ✅) | P5 |
 | Caisse gratuite (accumulation, ouverture, déroulé client) | `EconomyRules.openFreeCrate`, `Shared/Economy/FreeCrateFlow`, `TerminusController` | T | sérieuse — `economy.spec`, `freecrate.spec` | fonctionnelle | P5 (retours) |
@@ -138,7 +138,7 @@ est celle de la part qui porte le risque, l'autre est précisée entre parenthè
 | Sélection des cartes | `Matchmaking` (`cleanMaps`, `accepts`, `mapCounts`) | T | sérieuse — « Sélection de cartes » | fonctionnelle | P6 (retours) |
 | Plateformes et crossplay | `Matchmaking` (plateformes) | T | sérieuse — « Plateformes » | fonctionnelle | P6 |
 | Groupes duo et invitations | `Server/Services/PartyService`, `Client/Controllers/DeployController` | TE | aucune | fonctionnelle | P6 |
-| File locale et verrou d'équipement | `Server/Services/QueueService` | TE | aucune | fonctionnelle | P6 |
+| File locale et verrou d'équipement | `Server/Services/QueueService` | TE | aucune | fonctionnelle ; une partie locale à la fois (`MatchLifecycle`), attente annoncée quand le serveur est occupé (BUG-11 ✅) | P6 |
 | Chemin en ligne (MemoryStore, téléportation, serveur de partie) | `Server/Matchmaking/Teleporter`, `MatchStore`, `PlaceRole`, `Server/Services/MatchServerService` | TE (M en ligne) | partielle — `matchstore.spec` (file partagée) ; téléportation non testable hors ligne | inactif tant que les places valent 0 ; file partagée testée (TST-01 ✅), recette en ligne M-15 | P6 |
 | Porte de déploiement (écran) | `Client/Screens/DeployScreen` | M | aucune | fonctionnelle (modes proportionnels, niveau expliqué) | P6 (retours) |
 
@@ -177,7 +177,7 @@ est celle de la part qui porte le risque, l'autre est précisée entre parenthè
 | Paramètres (commandes, audio, affichage) | `Client/Screens/SettingsScreen`, `SettingsController`, `Shared/Settings/SettingRules` | T (M pour l'écran) | sérieuse pour la validation — `settings.spec` | fonctionnelle | P8 |
 | Audio dynamique (musique, voix, effets) | `Client/Controllers/AudioController` | M | effleurée — `audio.spec` (configuration) | partielle : effets non branchés, identifiants vides (OPT-09) | P10 |
 | Icônes 3D et cartes d'objets | `Client/UI/ItemIcon`, `ItemCard`, `ItemModels` | T (M pour le rendu) | sérieuse pour les modèles — `itemmodels.spec` | fonctionnelle | P8 |
-| Panneaux et blocage du combat (`PanelState`) | `Client/UI/PanelState`, `Panel`, `ConfirmDialog` | M | aucune | fonctionnelle | P8 |
+| Panneaux et blocage du combat (`PanelState`) | `Client/UI/PanelState`, `Panel`, `ConfirmDialog` | M | aucune | fonctionnelle ; menus non cliquables à travers (`UI/ClickShield`, UX-02 ✅) | P8 |
 | Écran de chargement | `ReplicatedFirst/LoadingScreen` | M | aucune | fonctionnelle | P8 |
 
 ## 13. Entrées & mobile (P8)

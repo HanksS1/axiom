@@ -22,6 +22,7 @@ local Signal = require(Shared.Util.Signal)
 local Types = require(Shared.Types)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
+local ClickShield = require(script.Parent.Parent.UI.ClickShield)
 local Create = require(script.Parent.Parent.UI.Create)
 local DragDrop = require(script.Parent.Parent.UI.DragDrop)
 local ItemCard = require(script.Parent.Parent.UI.ItemCard)
@@ -222,6 +223,8 @@ function InventoryController.start()
 		}),
 		Body = body,
 	})
+	-- Sac ouvert : rien n'est cliquable à travers (le conteneur, au même niveau, reste utilisable).
+	ClickShield.attach(panel, 1)
 	local close = panel:FindFirstChild("Close") :: TextButton
 	close.Activated:Connect(function()
 		InventoryController.setOpen(false)

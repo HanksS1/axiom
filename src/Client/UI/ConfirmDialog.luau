@@ -4,6 +4,7 @@
 	1 000 crédits, objet jeté définitivement…).
 ]]
 
+local ClickShield = require(script.Parent.ClickShield)
 local Create = require(script.Parent.Create)
 local Panel = require(script.Parent.Panel)
 local PanelState = require(script.Parent.PanelState)
@@ -64,6 +65,8 @@ function ConfirmDialog.ask(
 		}),
 	})
 	dialog = frame
+	-- Rien n'est cliquable à travers la question (le bouclier disparaît avec elle).
+	ClickShield.attach(frame)
 	PanelState.set("confirm", true)
 	local function close()
 		frame:Destroy()

@@ -26,6 +26,7 @@ local Config = require(Shared.Config)
 local MapPlan = require(Shared.Match.MapPlan)
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
+local ClickShield = require(script.Parent.Parent.UI.ClickShield)
 local Create = require(script.Parent.Parent.UI.Create)
 local PanelState = require(script.Parent.Parent.UI.PanelState)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -529,6 +530,8 @@ local function build(root: Instance)
 		Canvas = canvas,
 		Legend = legend,
 	})
+	-- Carte ouverte : rien n'est cliquable à travers (UI/ClickShield).
+	ClickShield.attach(panel, 1) -- invisible : la carte s'ouvre aussi en plein combat
 
 	close.Activated:Connect(MapController.close)
 	canvas.InputBegan:Connect(function(input: InputObject)

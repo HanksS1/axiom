@@ -16,6 +16,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local ItemCatalog = require(Shared.Items.ItemCatalog)
 local ItemRules = require(Shared.Items.ItemRules)
+local MerchantSort = require(Shared.Economy.MerchantSort)
 local Pricing = require(Shared.Economy.Pricing)
 local SpaceCheck = require(Shared.Items.SpaceCheck)
 local Types = require(Shared.Types)
@@ -31,7 +32,11 @@ type Translate = (key: string, params: { [string]: any }?) -> string
 
 local MerchantScreen = {}
 
-local CATEGORY_ORDER = { "ranged", "melee", "gadget", "helmet", "vest", "backpack", "consumable", "cell" }
+-- En-têtes : même traitement que le Holo-Bazar (section en grand, sous-groupe plus petit).
+local SECTION_SIZE = 20
+local SECTION_HEIGHT = 32
+local SUBGROUP_SIZE = 16
+local SUBGROUP_HEIGHT = 24
 
 export type Screen = {
 	panel: Panel.Panel,
@@ -171,15 +176,50 @@ function MerchantScreen.create(parent: Instance, t: Translate): Screen
 	local function sectionTitle(order: number, key: string)
 		Create("TextLabel", {
 			LayoutOrder = order,
-			Size = UDim2.new(1, 0, 0, 26),
+			Size = UDim2.new(1, -8, 0, SECTION_HEIGHT),
 			BackgroundTransparency = 1,
 			Font = Theme.fontTitle,
-			TextSize = 15,
+			TextSize = SECTION_SIZE,
 			TextColor3 = Theme.orange,
 			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd,
 			Text = t(key),
 			Parent = list,
 		})
+	end
+
+	-- Sous-groupe d'une section (À distance / Mêlée, Casques / Gilets).
+	local function subgroupTitle(order: number, key: string)
+		Create("TextLabel", {
+			LayoutOrder = order,
+			Size = UDim2.new(1, -8, 0, SUBGROUP_HEIGHT),
+			BackgroundTransparency = 1,
+			Font = Theme.fontTitle,
+			TextSize = SUBGROUP_SIZE,
+			TextColor3 = Theme.text,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Text = t(key),
+			Parent = list,
+		})
+	end
+
+	-- En-têtes d'un groupe de MerchantSort : la section à son premier groupe, puis
+	-- le sous-groupe si la section en a plusieurs. Retourne le prochain rang.
+	local function groupHeaders(
+		order: number,
+		group: MerchantSort.Group<any>,
+		previous: MerchantSort.Group<any>?
+	): number
+		if previous == nil or previous.section ~= group.section then
+			order += 1
+			sectionTitle(order, "merchant.section." .. group.section)
+		end
+		if MerchantSort.hasSubgroups(group.section) then
+			order += 1
+			subgroupTitle(order, "merchant.category." .. group.category)
+		end
+		return order
 	end
 
 	local function renderBuy(view: Types.ProfileView)
@@ -270,65 +310,76 @@ function MerchantScreen.create(parent: Instance, t: Translate): Screen
 				end
 			end
 		end
+		-- Le reste du catalogue, en sections (Shared/Economy/MerchantSort) : sans les
+		-- objets lâchés seulement par les élites, ni ceux déjà en tête (Survie, Vos munitions).
 		local ids = {}
-		for id in ItemCatalog.all() do
+		for id, info in ItemCatalog.all() do
+			if info.def.dropOnlyFromElites or table.find(survival, id) or table.find(cells, id) then
+				continue
+			end
 			table.insert(ids, id)
 		end
-		table.sort(ids, function(a, b)
-			local infoA, infoB = ItemCatalog.get(a) :: any, ItemCatalog.get(b) :: any
-			local rankA = table.find(CATEGORY_ORDER, infoA.category) or 99
-			local rankB = table.find(CATEGORY_ORDER, infoB.category) or 99
-			if rankA ~= rankB then
-				return rankA < rankB
-			end
-			return a < b
-		end)
-		order += 1
-		sectionTitle(order, "merchant.catalog")
-		for _, itemId in ids do
-			local info = ItemCatalog.get(itemId) :: ItemCatalog.ItemInfo
-			if info.def.dropOnlyFromElites then
-				continue -- Lame vibrante : lâchée uniquement par les élites
-			end
-			if table.find(survival, itemId) then
-				continue -- déjà en tête (Survie)
-			end
-			local conditions: { number? } = if info.hasCondition
-				then Config.Economy.merchant.sellsConditions :: any
-				else { nil }
-			for _, condition in conditions do
-				local price = Pricing.merchantPrice(itemId, condition)
-				if price == nil then
-					continue
+		local previous: MerchantSort.Group<string>? = nil
+		for _, group in MerchantSort.groupIds(ids) do
+			local headed = false
+			for _, itemId in group.entries do
+				local info = ItemCatalog.get(itemId) :: ItemCatalog.ItemInfo
+				local conditions: { number? } = if info.hasCondition
+					then Config.Economy.merchant.sellsConditions :: any
+					else { nil }
+				for _, condition in conditions do
+					local price = Pricing.merchantPrice(itemId, condition)
+					if price == nil then
+						continue
+					end
+					if not headed then
+						-- En-têtes seulement pour un groupe qui a au moins une offre.
+						order = groupHeaders(order, group, previous)
+						previous = group
+						headed = true
+					end
+					order += 1
+					local preview: Types.ItemInstance = {
+						uid = `offer_{itemId}_{condition or 0}`,
+						itemId = itemId,
+						condition = condition,
+						stack = info.stackSize,
+					}
+					local fit = vaultFit(itemId, nil)
+					ItemCard.create(preview, t, {
+						{
+							label = t("merchant.buy", { credits = price }),
+							color = if view.credits >= price then Theme.green else Theme.textDim,
+							disabled = not fit.fits,
+							callback = function()
+								confirmIfNeeded(price, "merchant.confirmBuy", function(confirmed)
+									ClientNet.fire("MerchantBuy", itemId, condition, nil, confirmed)
+								end)
+							end,
+						},
+					}, order, blockedBy(fit)).Parent =
+						list
 				end
-				order += 1
-				local preview: Types.ItemInstance = {
-					uid = `offer_{itemId}_{condition or 0}`,
-					itemId = itemId,
-					condition = condition,
-					stack = info.stackSize,
-				}
-				local fit = vaultFit(itemId, nil)
-				ItemCard.create(preview, t, {
-					{
-						label = t("merchant.buy", { credits = price }),
-						color = if view.credits >= price then Theme.green else Theme.textDim,
-						disabled = not fit.fits,
-						callback = function()
-							confirmIfNeeded(price, "merchant.confirmBuy", function(confirmed)
-								ClientNet.fire("MerchantBuy", itemId, condition, nil, confirmed)
-							end)
-						end,
-					},
-				}, order, blockedBy(fit)).Parent =
-					list
 			end
 		end
 	end
 
 	local function renderSell(view: Types.ProfileView)
 		local total = 0
-		for index, item in sellable(view) do
+		-- Même découpage qu'à l'achat : avec un coffre plein, on s'y retrouve.
+		local order = 0
+		local previous: MerchantSort.Group<Types.ItemInstance>? = nil
+		local rows: { { item: Types.ItemInstance, order: number } } = {}
+		for _, group in MerchantSort.groupItems(sellable(view)) do
+			order = groupHeaders(order, group, previous)
+			previous = group
+			for _, entry in group.entries do
+				order += 1
+				table.insert(rows, { item = entry, order = order })
+			end
+		end
+		for _, row in rows do
+			local item, index = row.item, row.order
 			local isSelected = selected[item.uid] == true
 			if isSelected then
 				total += Pricing.sellPrice(item)

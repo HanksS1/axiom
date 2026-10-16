@@ -44,6 +44,14 @@ function Zone.inArena(position: Vector3): boolean
 		and position.Y < Config.Arena.ceiling + 4
 end
 
+-- Position sur une carte de partie (elles sont construites autour de Config.Maps.origin,
+-- loin du Terminus et de l'Arène FFA). Hauteur large : toits, chutes.
+function Zone.onMatchMap(position: Vector3): boolean
+	local offset = position - Config.Maps.origin
+	local half = Config.Maps.size / 2 + Config.Match.strandedMargin
+	return math.abs(offset.X) <= half and math.abs(offset.Z) <= half
+end
+
 -- Règle permise dans cette zone ? Une zone inconnue (attribut absent côté client,
 -- serveur de partie dédié) suit les règles d'une partie.
 function Zone.allows(zone: string?, rule: Rule): boolean
